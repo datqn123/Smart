@@ -42,7 +42,7 @@ export function LedgerToolbar({
         <div className="relative flex-1 w-full max-w-md group">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
           <Input
-            placeholder="Tìm theo diễn giải (mô tả dòng sổ)…"
+            placeholder="Tìm theo diễn giải hoặc mã hiển thị (FL-…, mã đơn, mã phiếu trong mô tả)…"
             className="pl-10 h-11 bg-slate-50/50 border-slate-200 focus:bg-white focus:border-blue-400 focus:ring-4 focus:ring-blue-50 transition-all rounded-lg"
             value={searchStr}
             onChange={(e) => onSearch(e.target.value)}

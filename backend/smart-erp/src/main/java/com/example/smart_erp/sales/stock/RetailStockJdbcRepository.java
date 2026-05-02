@@ -149,6 +149,19 @@ public class RetailStockJdbcRepository {
 				.addValue("to_loc", toLocationId).addValue("note", referenceNote, Types.VARCHAR));
 	}
 
+	/** Tổng SL đơn vị cơ sở xuất theo sản phẩm (POS / log), dùng khi phiếu không có stockdispatch_lines. */
+	public List<ProductOutboundBaseQtyRow> sumOutboundBaseQtyByProduct(long dispatchId) {
+		String sql = """
+				SELECT product_id, SUM(ABS(quantity_change))::int AS base_qty
+				FROM inventorylogs
+				WHERE dispatch_id = :did AND action_type = 'OUTBOUND'
+				GROUP BY product_id
+				ORDER BY product_id
+				""";
+		return namedJdbc.query(sql, Map.of("did", dispatchId), (rs, rn) -> new ProductOutboundBaseQtyRow(rs.getInt("product_id"),
+				rs.getInt("base_qty")));
+	}
+
 	public List<OutboundLogRow> loadOutboundLogsByDispatch(long dispatchId) {
 		String sql = """
 				SELECT id, product_id, quantity_change, unit_id, from_location_id, reference_note
@@ -185,6 +198,9 @@ public class RetailStockJdbcRepository {
 
 	public record OutboundLogRow(long logId, int productId, int quantityChange, int unitId, Integer fromLocationId,
 			String referenceNote) {
+	}
+
+	public record ProductOutboundBaseQtyRow(int productId, int baseQty) {
 	}
 }
 

@@ -324,6 +324,23 @@ public class ProductJdbcRepository {
 		return rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst());
 	}
 
+	/** Giá vốn hiện hành theo đơn vị (bảng giá), null nếu không có bản ghi. */
+	public Optional<BigDecimal> findCurrentCostPrice(int productId, int unitId) {
+		String sql = """
+				SELECT (
+				  SELECT ph.cost_price FROM productpricehistory ph
+				  WHERE ph.product_id = :pid AND ph.unit_id = :uid AND ph.effective_date <= CURRENT_DATE
+				  ORDER BY ph.effective_date DESC, ph.id DESC LIMIT 1
+				) AS cur_cost
+				""";
+		return namedJdbc.query(sql, Map.of("pid", productId, "uid", unitId), rs -> {
+			if (!rs.next()) {
+				return Optional.empty();
+			}
+			return Optional.ofNullable(rs.getBigDecimal("cur_cost"));
+		});
+	}
+
 	public List<ProductUnitRow> listUnitsWithCurrentPrices(int productId) {
 		String sql = """
 				SELECT u.id, u.unit_name, u.conversion_rate, u.is_base_unit,

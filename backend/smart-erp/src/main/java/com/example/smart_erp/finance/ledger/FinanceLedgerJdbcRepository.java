@@ -132,7 +132,17 @@ public class FinanceLedgerJdbcRepository {
 			src.addValue("_rt", referenceType);
 		}
 		if (searchPattern != null) {
-			sb.append(" AND fl.description ILIKE :_sp");
+			sb.append("""
+					 AND (
+					   fl.description ILIKE :_sp
+					   OR (
+					     CASE
+					       WHEN fl.reference_type = 'SalesOrder' AND so.order_code IS NOT NULL THEN so.order_code
+					       ELSE 'FL-' || fl.id::text
+					     END
+					   ) ILIKE :_sp
+					 )
+					""");
 			src.addValue("_sp", searchPattern);
 		}
 		return new Filter(sb.toString(), src);

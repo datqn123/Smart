@@ -11,6 +11,7 @@ const REFERENCE_TYPE_LABELS: Record<string, string> = {
   SalesOrder: "Đơn bán",
   CashTransaction: "Phiếu thu chi",
   StockReceipt: "Phiếu nhập kho",
+  StockDispatch: "Phiếu xuất kho",
 }
 
 export function ledgerTransactionTypeLabel(raw: string | null | undefined): string {
@@ -36,4 +37,5 @@ export const LEDGER_REFERENCE_TYPE_FILTER_OPTIONS = [
   { value: "SalesOrder", label: REFERENCE_TYPE_LABELS.SalesOrder },
   { value: "CashTransaction", label: REFERENCE_TYPE_LABELS.CashTransaction },
   { value: "StockReceipt", label: REFERENCE_TYPE_LABELS.StockReceipt },
+  { value: "StockDispatch", label: REFERENCE_TYPE_LABELS.StockDispatch },
 ] as const

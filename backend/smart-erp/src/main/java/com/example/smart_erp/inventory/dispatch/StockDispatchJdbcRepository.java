@@ -144,7 +144,49 @@ public class StockDispatchJdbcRepository {
 				(rs, rn) -> new ManualLineRow(rs.getLong("inventory_id"), rs.getInt("quantity")));
 	}
 
+	/** Dòng phiếu xuất tay + snapshot / product để tính COGS. */
+	public List<DispatchCogsLineRow> loadDispatchLinesForCogs(long dispatchId) {
+		String sql = """
+				SELECT sdl.inventory_id,
+				       sdl.quantity,
+				       sdl.unit_price_snapshot,
+				       i.product_id,
+				       COALESCE(i.unit_id, pub.id) AS line_unit_id,
+				       p.sku_code
+				FROM stockdispatch_lines sdl
+				INNER JOIN inventory i ON i.id = sdl.inventory_id
+				INNER JOIN products p ON p.id = i.product_id
+				INNER JOIN productunits pub ON pub.product_id = i.product_id AND pub.is_base_unit = TRUE
+				WHERE sdl.dispatch_id = :did
+				ORDER BY sdl.inventory_id
+				""";
+		return namedJdbc.query(sql, Map.of("did", dispatchId), (rs, rn) -> new DispatchCogsLineRow(rs.getLong("inventory_id"),
+				rs.getInt("quantity"), (BigDecimal) rs.getObject("unit_price_snapshot"), rs.getInt("product_id"),
+				rs.getInt("line_unit_id"), rs.getString("sku_code")));
+	}
+
+	public Optional<DispatchLedgerMetaRow> loadDispatchLedgerMeta(long dispatchId) {
+		String sql = """
+				SELECT dispatch_code, dispatch_date, status
+				FROM stockdispatches WHERE id = :id
+				""";
+		return namedJdbc.query(sql, Map.of("id", dispatchId), rs -> {
+			if (!rs.next()) {
+				return Optional.empty();
+			}
+			return Optional.of(new DispatchLedgerMetaRow(rs.getString("dispatch_code"),
+					rs.getObject("dispatch_date", LocalDate.class), rs.getString("status")));
+		});
+	}
+
 	public record ManualLineRow(long inventoryId, int quantity) {
+	}
+
+	public record DispatchCogsLineRow(long inventoryId, int quantity, BigDecimal unitPriceSnapshot, int productId,
+			int lineUnitId, String skuCode) {
+	}
+
+	public record DispatchLedgerMetaRow(String dispatchCode, LocalDate dispatchDate, String status) {
 	}
 
 	public void updateDispatchCode(long dispatchId, String dispatchCode) {

@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.example.smart_erp.common.api.ApiErrorCode;
 import com.example.smart_erp.common.exception.BusinessException;
+import com.example.smart_erp.finance.ledger.dispatch.DispatchLedgerPostingService;
 import com.example.smart_erp.sales.dto.SalesOrderLineRequest;
 
 @Service
@@ -24,9 +25,11 @@ public class RetailStockService {
 	private static final Pattern INV_ID_PATTERN = Pattern.compile("\\binvId=(\\d+)\\b");
 
 	private final RetailStockJdbcRepository repo;
+	private final DispatchLedgerPostingService dispatchLedgerPostingService;
 
-	public RetailStockService(RetailStockJdbcRepository repo) {
+	public RetailStockService(RetailStockJdbcRepository repo, DispatchLedgerPostingService dispatchLedgerPostingService) {
 		this.repo = repo;
+		this.dispatchLedgerPostingService = dispatchLedgerPostingService;
 	}
 
 	@Transactional(readOnly = true)
@@ -93,6 +96,7 @@ public class RetailStockService {
 		}
 
 		repo.markOrderLinesDispatchedAll(orderId);
+		dispatchLedgerPostingService.postPrimaryCogsIfAbsent(dispatchId, userId);
 		return dispatchId;
 	}
 
@@ -119,6 +123,7 @@ public class RetailStockService {
 				String note = "POS_CANCEL orderId=" + orderId + " fromLogId=" + l.logId();
 				repo.insertInventoryLogInbound(l.productId(), delta, l.unitId(), userId, did, l.fromLocationId(), note);
 			}
+			dispatchLedgerPostingService.reverseNetCogsIfNonZero(did, userId, "POS hủy đơn");
 			repo.cancelDispatch(did, "Cancelled via SalesOrder cancel (POS reverse)");
 		}
 		repo.resetOrderLinesDispatched(orderId);

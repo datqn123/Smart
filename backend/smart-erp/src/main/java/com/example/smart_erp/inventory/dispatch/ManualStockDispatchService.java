@@ -23,6 +23,7 @@ import com.example.smart_erp.inventory.dispatch.response.StockDispatchDetailData
 import com.example.smart_erp.inventory.dispatch.response.StockDispatchDetailLineData;
 import com.example.smart_erp.inventory.dispatch.response.StockDispatchListItemData;
 import com.example.smart_erp.inventory.dispatch.response.StockDispatchListPageData;
+import com.example.smart_erp.finance.ledger.dispatch.DispatchLedgerPostingService;
 import com.example.smart_erp.inventory.receipts.lifecycle.StockReceiptAccessPolicy;
 import com.example.smart_erp.sales.stock.RetailStockJdbcRepository;
 
@@ -32,12 +33,14 @@ public class ManualStockDispatchService {
 	private final StockDispatchJdbcRepository dispatchRepo;
 	private final RetailStockJdbcRepository retailStockRepo;
 	private final StockDispatchNotifier dispatchNotifier;
+	private final DispatchLedgerPostingService dispatchLedgerPostingService;
 
 	public ManualStockDispatchService(StockDispatchJdbcRepository dispatchRepo, RetailStockJdbcRepository retailStockRepo,
-			StockDispatchNotifier dispatchNotifier) {
+			StockDispatchNotifier dispatchNotifier, DispatchLedgerPostingService dispatchLedgerPostingService) {
 		this.dispatchRepo = dispatchRepo;
 		this.retailStockRepo = retailStockRepo;
 		this.dispatchNotifier = dispatchNotifier;
+		this.dispatchLedgerPostingService = dispatchLedgerPostingService;
 	}
 
 	@Transactional(readOnly = true)
@@ -401,6 +404,7 @@ public class ManualStockDispatchService {
 					dispatchId, locked.locationId(), logNote);
 		}
 		dispatchRepo.updateDispatchStatus(dispatchId, ManualDispatchStatuses.DELIVERED);
+		dispatchLedgerPostingService.postPrimaryCogsIfAbsent(dispatchId, userId);
 	}
 
 	private static boolean isManualForwardAllowed(String curr, String next) {
