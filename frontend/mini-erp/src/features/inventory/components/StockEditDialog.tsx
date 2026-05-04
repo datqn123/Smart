@@ -65,21 +65,21 @@ export function StockEditDialog({ isOpen, onClose, onConfirm, items }: StockEdit
           </div>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-8 custom-scrollbar bg-white text-left">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 sm:p-8 custom-scrollbar bg-white text-left min-w-0">
           <Table
-            containerClassName="text-left"
-            className="w-full table-fixed border-collapse text-base text-left [&_th]:!text-left [&_td]:!text-left [&_input]:!text-left"
+            containerClassName="w-full min-w-0 max-w-full overflow-x-hidden text-left"
+            className="w-full table-fixed border-collapse text-sm text-left [&_th]:!text-left [&_td]:!text-left [&_input]:!text-left"
           >
             <TableHeader className="bg-slate-50 sticky top-0 z-10 border-b border-slate-200 text-left">
               <TableRow className="hover:bg-transparent text-left">
-                <TableHead className={cn(TABLE_HEAD_CLASS, "w-[8%] px-4 text-sm !text-left")}>Mã SP</TableHead>
-                <TableHead className={cn(TABLE_HEAD_CLASS, "w-[16%] px-4 text-sm !text-left")}>Tên sản phẩm</TableHead>
-                <TableHead className={cn(TABLE_HEAD_CLASS, "w-[14%] px-4 text-sm !text-left")}>Vị trí kho</TableHead>
-                <TableHead className={cn(TABLE_HEAD_CLASS, "w-[9%] px-4 text-sm !text-left")}>Định mức</TableHead>
-                <TableHead className={cn(TABLE_HEAD_CLASS, "w-[12%] px-4 text-sm !text-left")}>Đơn vị tính</TableHead>
-                <TableHead className={cn(TABLE_HEAD_CLASS, "w-[10%] px-4 text-sm !text-left")}>Giá vốn</TableHead>
-                <TableHead className={cn(TABLE_HEAD_CLASS, "w-[14%] px-4 text-sm !text-left")}>Số lô</TableHead>
-                <TableHead className={cn(TABLE_HEAD_CLASS, "w-[11%] px-4 text-sm !text-left")}>Hạn SD</TableHead>
+                <TableHead className={cn(TABLE_HEAD_CLASS, "w-[10%] min-w-0 px-2 text-xs !text-left")}>Mã SP</TableHead>
+                <TableHead className={cn(TABLE_HEAD_CLASS, "w-[18%] min-w-0 px-2 text-xs !text-left")}>Tên sản phẩm</TableHead>
+                <TableHead className={cn(TABLE_HEAD_CLASS, "w-[14%] min-w-0 px-2 text-xs !text-left")}>Vị trí kho</TableHead>
+                <TableHead className={cn(TABLE_HEAD_CLASS, "w-[8%] min-w-0 px-2 text-xs !text-left")}>Định mức</TableHead>
+                <TableHead className={cn(TABLE_HEAD_CLASS, "w-[12%] min-w-0 px-2 text-xs !text-left")}>Đơn vị tính</TableHead>
+                <TableHead className={cn(TABLE_HEAD_CLASS, "w-[10%] min-w-0 px-2 text-xs !text-left")}>Giá vốn</TableHead>
+                <TableHead className={cn(TABLE_HEAD_CLASS, "w-[14%] min-w-0 px-2 text-xs !text-left")}>Số lô</TableHead>
+                <TableHead className={cn(TABLE_HEAD_CLASS, "w-[14%] min-w-0 px-2 text-xs !text-left")}>Hạn SD</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody className="text-left [&_td]:text-left">
@@ -89,20 +89,20 @@ export function StockEditDialog({ isOpen, onClose, onConfirm, items }: StockEdit
                   className="hover:bg-slate-50/50 transition-colors border-b border-slate-100 last:border-0 text-left"
                 >
                   {/* Mã SP */}
-                  <TableCell className="px-4 py-4 align-middle text-left">
-                    <div className={cn(TABLE_CELL_MONO_CLASS, "text-base bg-slate-50 px-2.5 py-1 rounded border border-slate-100 w-fit text-left")}>{item.skuCode}</div>
+                  <TableCell className="min-w-0 px-2 py-3 align-middle text-left">
+                    <div className={cn(TABLE_CELL_MONO_CLASS, "text-xs bg-slate-50 px-2 py-1 rounded border border-slate-100 max-w-full truncate text-left")} title={item.skuCode}>{item.skuCode}</div>
                   </TableCell>
                   
                   {/* Tên sản phẩm */}
-                  <TableCell className="px-4 py-4 align-middle text-left">
-                    <div className={cn(TABLE_CELL_PRIMARY_CLASS, "text-base leading-snug truncate text-left")} title={item.productName}>{item.productName}</div>
+                  <TableCell className="min-w-0 px-2 py-3 align-middle text-left">
+                    <div className={cn(TABLE_CELL_PRIMARY_CLASS, "text-sm leading-snug truncate text-left")} title={item.productName}>{item.productName}</div>
                   </TableCell>
 
                   {/* Vị trí: mã kệ + input cùng một hàng */}
-                  <TableCell className="px-4 py-4 align-middle text-left">
-                    <div className="flex flex-row flex-wrap items-center justify-start gap-2 min-w-0">
+                  <TableCell className="min-w-0 px-2 py-3 align-middle text-left">
+                    <div className="flex flex-col gap-1.5 min-w-0 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
                       <span
-                        className={cn(TABLE_CELL_SECONDARY_CLASS, "text-sm font-mono whitespace-nowrap truncate max-w-[min(100%,9rem)] text-left")}
+                        className={cn(TABLE_CELL_SECONDARY_CLASS, "text-xs font-mono truncate text-left min-w-0")}
                         title={`${item.warehouseCode}-${item.shelfCode}`}
                       >
                         {item.warehouseCode}-{item.shelfCode}
@@ -116,27 +116,27 @@ export function StockEditDialog({ isOpen, onClose, onConfirm, items }: StockEdit
                         }
                         title="Mã vị trí kho trong hệ thống"
                         aria-label="Mã vị trí kho"
-                        className={cn(FORM_INPUT_CLASS, "min-h-11 w-[7.5rem] shrink-0 font-semibold text-left text-sm px-2")}
+                        className={cn(FORM_INPUT_CLASS, "min-h-10 w-full max-w-[5.5rem] font-semibold text-left text-xs px-2")}
                       />
                     </div>
                   </TableCell>
 
                   {/* Định mức */}
-                  <TableCell className="px-4 py-4 align-middle text-left">
+                  <TableCell className="min-w-0 px-2 py-3 align-middle text-left">
                     <Input 
                       type="number"
                       min="0"
                       value={item.minQuantity} 
                       onChange={(e) => handleChange(item.id, 'minQuantity', parseInt(e.target.value) || 0)}
-                      className={cn(FORM_INPUT_CLASS, "min-h-11 w-[7.5rem] font-semibold text-left text-sm px-2")}
+                      className={cn(FORM_INPUT_CLASS, "min-h-10 w-full max-w-[5.5rem] font-semibold text-left text-xs px-2")}
                     />
                   </TableCell>
 
                   {/* Đơn vị: tên + mã đơn vị cùng một hàng */}
-                  <TableCell className="px-4 py-4 align-middle text-left">
-                    <div className="flex flex-row flex-wrap items-center justify-start gap-2 min-w-0">
+                  <TableCell className="min-w-0 px-2 py-3 align-middle text-left">
+                    <div className="flex flex-col gap-1.5 min-w-0 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
                       <span
-                        className={cn(TABLE_CELL_SECONDARY_CLASS, "text-sm max-w-[min(100%,7rem)] truncate shrink text-left")}
+                        className={cn(TABLE_CELL_SECONDARY_CLASS, "text-xs truncate min-w-0 text-left")}
                         title={item.unitName}
                       >
                         {item.unitName}
@@ -152,35 +152,35 @@ export function StockEditDialog({ isOpen, onClose, onConfirm, items }: StockEdit
                         }}
                         title="Mã đơn vị tính trong hệ thống"
                         aria-label="Mã đơn vị tính"
-                        className={cn(FORM_INPUT_CLASS, "min-h-11 w-[7.5rem] shrink-0 font-semibold text-left text-sm px-2")}
+                        className={cn(FORM_INPUT_CLASS, "min-h-10 w-full max-w-[5.5rem] font-semibold text-left text-xs px-2")}
                       />
                     </div>
                   </TableCell>
 
                   {/* Giá vốn — read-only */}
-                  <TableCell className="px-4 py-4 align-middle text-left">
-                    <span className={cn(TABLE_CELL_PRIMARY_CLASS, "text-base font-semibold inline-flex items-center justify-start min-h-11 tabular-nums text-left")}>
+                  <TableCell className="min-w-0 px-2 py-3 align-middle text-left">
+                    <span className={cn(TABLE_CELL_PRIMARY_CLASS, "text-sm font-semibold inline-flex items-center justify-start min-h-10 tabular-nums text-left truncate max-w-full")} title={formatCurrency(item.costPrice)}>
                       {formatCurrency(item.costPrice)}
                     </span>
                   </TableCell>
 
                   {/* Số lô */}
-                  <TableCell className="px-4 py-4 align-middle text-left">
+                  <TableCell className="min-w-0 px-2 py-3 align-middle text-left">
                     <Input 
                       value={item.batchNumber || ""} 
                       onChange={(e) => handleChange(item.id, 'batchNumber', e.target.value)}
                       placeholder="Số lô"
-                      className={cn(FORM_INPUT_CLASS, "min-h-11 w-full max-w-[min(100%,14rem)] font-semibold text-sm text-left px-2")}
+                      className={cn(FORM_INPUT_CLASS, "min-h-10 w-full min-w-0 max-w-full font-semibold text-xs text-left px-2")}
                     />
                   </TableCell>
 
                   {/* Hạn SD */}
-                  <TableCell className="px-4 py-4 align-middle text-left">
+                  <TableCell className="min-w-0 px-2 py-3 align-middle text-left">
                     <Input 
                       type="date"
                       value={item.expiryDate ? item.expiryDate.split('T')[0] : ""} 
                       onChange={(e) => handleChange(item.id, 'expiryDate', e.target.value)}
-                      className={cn(FORM_INPUT_CLASS, "min-h-11 w-full max-w-[min(100%,13.5rem)] min-w-[11.5rem] font-semibold text-sm text-left px-2")}
+                      className={cn(FORM_INPUT_CLASS, "min-h-10 w-full min-w-0 max-w-full font-semibold text-xs text-left px-2")}
                     />
                   </TableCell>
                 </TableRow>

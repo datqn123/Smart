@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { useEffect, useMemo } from "react"
 import { Routes, Route, Navigate } from "react-router-dom"
 import { Toaster } from "sonner"
 import { useAuthStore } from "@/features/auth/store/useAuthStore"
@@ -40,6 +40,7 @@ import { WarehouseLocationsPage } from "./features/inventory/pages/WarehouseLoca
 import { ChatBotPage } from "./features/ai/pages/ChatBotPage"
 
 import { PageTitleProvider } from "./context/PageTitleContext"
+import { hasResumeSessionInSessionStorage } from "@/features/auth/lib/clientSessionResume"
 
 // Placeholder pages - TODO: Implement these
 const PlaceholderPage = ({ title }: { title: string }) => (
@@ -56,6 +57,12 @@ function AuthSessionHydration() {
     hydrate()
   }, [hydrate])
   return null
+}
+
+/** `/` → dashboard nếu sessionStorage còn phiên hợp lệ, không ép qua màn login. */
+function RootEntryRedirect() {
+  const to = useMemo(() => (hasResumeSessionInSessionStorage() ? "/dashboard" : "/login"), [])
+  return <Navigate to={to} replace />
 }
 
 function App() {
@@ -115,7 +122,7 @@ function App() {
         </Route>
 
         {/* Default and 404 Routes */}
-        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/" element={<RootEntryRedirect />} />
         <Route path="*" element={
           <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-500 font-medium">
             404 - Trang không tồn tại

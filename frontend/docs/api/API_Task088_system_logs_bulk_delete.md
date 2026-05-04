@@ -25,9 +25,9 @@
 
 ## 3. RBAC
 
-Giống Task087 (**Admin**) và tuân theo policy tuân thủ (có thể cấm xóa log).
+Giống Task086 / Task087: chỉ **Admin** (`role` + `mp.can_view_system_logs`); policy hiện tại **cấm xóa** → **403**.
 
-> **GAP (đồng bộ codebase):** Chưa có key `can_view_system_logs` trong JWT claim `mp` (xem Task086).
+> **Đồng bộ:** [`SRS_PRD_system-audit-unified-admin-view.md`](../../../backend/docs/srs/SRS_PRD_system-audit-unified-admin-view.md).
 
 ---
 

@@ -8,11 +8,21 @@
 
 ---
 
+## 0.1 Điều chỉnh đã chốt (02/05/2026) — xem log **Admin-only**
+
+**Supersede phần persona “Admin/Owner xem log”** trong §1, §2 (C1–C3), §6, §7 của SRS này:
+
+- **Chỉ Admin** (`JWT role` = `Admin` **và** `mp.can_view_system_logs` = `true`) được `GET /api/v1/system-logs` và `GET /api/v1/system-logs/{id}`. **Owner** và **Staff** → **403**.
+- **Nguồn chân lý:** [`SRS_PRD_system-audit-unified-admin-view.md`](SRS_PRD_system-audit-unified-admin-view.md) (**Approved** 02/05/2026); Flyway **`V43__prd_system_logs_view_admin_only.sql`**; BE `SystemLogsService.requireCanView`; API [`API_Task086`](../../../frontend/docs/api/API_Task086_system_logs_get_list.md) §2.
+
+---
+
 ## 0. Đầu vào & traceability
 
 
 | Nguồn                 | Đường dẫn / ghi chú                                                                                                                                                                                            |
 | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PRD amend RBAC xem log | [`SRS_PRD_system-audit-unified-admin-view.md`](SRS_PRD_system-audit-unified-admin-view.md) — Admin-only, **Approved** 02/05/2026                                                                                                                                                 |
 | API spec              | `frontend/docs/api/API_Task086_system_logs_get_list.md` · `frontend/docs/api/API_Task087_system_logs_delete.md` · `frontend/docs/api/API_Task088_system_logs_bulk_delete.md`                                   |
 | Flyway thực tế        | `backend/smart-erp/src/main/resources/db/migration/V1__baseline_smart_inventory.sql` (bảng `SystemLogs`)                                                                                                       |
 | Mã ghi log hiện có    | `backend/smart-erp/src/main/java/com/example/smart_erp/auth/repository/SystemLogJdbcRepository.java`                                                                                                           |
@@ -24,9 +34,9 @@
 
 ## 1. Tóm tắt điều hành
 
-- **Vấn đề:** Admin/Owner cần xem và (tuỳ policy) purge nhật ký hệ thống để tra cứu vận hành/đối soát sự kiện.
+- **Vấn đề:** Admin cần xem nhật ký hệ thống để tra cứu vận hành/đối soát sự kiện (xóa log bị cấm theo policy).
 - **Mục tiêu nghiệp vụ:** cung cấp danh sách log có lọc/tìm kiếm; thao tác xóa được mô tả trong hợp đồng API nhưng **bị cấm theo policy** (trả 403, UI ẩn nút).
-- **Đối tượng / persona:** Admin, Owner.
+- **Đối tượng / persona (sau §0.1):** **Admin** (xem list/detail). Owner/Staff **không** xem.
 
 ### 1.1 Giao diện Mini-ERP (bắt buộc khi API được gọi từ `mini-erp`)
 
@@ -43,9 +53,9 @@
 
 | #   | Capability                      | Kích hoạt bởi                                 | Kết quả mong đợi                                          | Ghi chú                                               |
 | --- | ------------------------------- | --------------------------------------------- | --------------------------------------------------------- | ----------------------------------------------------- |
-| C1  | Xem danh sách system logs       | Admin/Owner mở màn “Nhật ký hệ thống”         | Trả về danh sách phân trang, sort mới nhất trước          | Có lọc theo `logLevel/module/date range`, có `search` |
-| C2  | Xóa 1 log theo id               | Admin/Owner thao tác “xóa” trên 1 dòng        | **Bị chặn theo policy** (403)                             | UI ẩn nút xóa                                         |
-| C3  | Xóa nhiều log theo danh sách id | Admin/Owner chọn nhiều dòng → “xóa hàng loạt” | **Bị chặn theo policy** (403)                             | UI ẩn nút xóa hàng loạt                               |
+| C1  | Xem danh sách system logs       | **Admin** mở màn “Nhật ký hệ thống”            | Trả về danh sách phân trang, sort mới nhất trước          | Có lọc theo `logLevel/module/date range`, có `search` |
+| C2  | Xóa 1 log theo id               | Admin thao tác “xóa” trên 1 dòng (nếu UI hiện) | **Bị chặn theo policy** (403)                             | UI ẩn nút xóa                                         |
+| C3  | Xóa nhiều log theo danh sách id | Admin chọn nhiều dòng → “xóa hàng loạt”       | **Bị chặn theo policy** (403)                             | UI ẩn nút xóa hàng loạt                               |
 
 
 ---
@@ -127,13 +137,14 @@
 ## 6. Persona & RBAC
 
 
-| Vai trò     | Quyền / điều kiện                         | HTTP khi từ chối |
-| ----------- | ----------------------------------------- | ---------------- |
-| Admin/Owner | Có quyền xem nhật ký hệ thống (theo OQ-2) | 403              |
-| Staff       | Không có quyền                            | 403              |
+| Vai trò     | Quyền / điều kiện                                                                 | HTTP khi từ chối |
+| ----------- | ---------------------------------------------------------------------------------- | ---------------- |
+| **Admin** | `JWT role` = **`Admin`** **và** `mp.can_view_system_logs` = **true** (seed + V43) | — (được xem)     |
+| **Owner** | Không đủ điều kiện xem (thu hồi quyền so V30)                                      | **403**          |
+| **Staff** | Không có quyền xem                                                                | **403**          |
 
 
-> **Ghi chú kỹ thuật:** hiện hệ thống dùng `@PreAuthorize("hasAuthority('can_...')")` dựa trên claim `mp` trong JWT. Nếu PO chọn “key mới” thì cần mở rộng `MenuPermissionClaims.MENU_KEYS`.
+> **Ghi chú kỹ thuật:** `SystemLogsService` kiểm **`role`** rồi **`mp`** — xem §0.1. Key `can_view_system_logs` đã có trong `MenuPermissionClaims.MENU_KEYS` và seed (V30 + điều chỉnh V43).
 
 ---
 
@@ -144,7 +155,7 @@
 
 | Actor             | Mô tả ngắn                                         |
 | ----------------- | -------------------------------------------------- |
-| End user          | Admin/Owner thao tác trong Mini-ERP                |
+| End user          | **Admin** thao tác trong Mini-ERP (xem log)          |
 | Client (Mini-ERP) | `LogsPage` gọi API, hiển thị bảng, chọn nhiều dòng |
 | API (`smart-erp`) | Validate/RBAC → query DB → trả envelope            |
 | Database          | Bảng `systemlogs` + join `users`                   |
@@ -152,8 +163,8 @@
 
 ### 7.2 Luồng chính (narrative)
 
-1. Admin/Owner mở màn “Nhật ký hệ thống”, client gọi `GET /api/v1/system-logs` với filter/pagination.
-2. API kiểm tra quyền, chạy query list + count, trả danh sách `items` + `total`.
+1. **Admin** mở màn “Nhật ký hệ thống”, client gọi `GET /api/v1/system-logs` với filter/pagination.
+2. API kiểm tra **`role` = Admin** và **`mp.can_view_system_logs`**, chạy query list + count, trả danh sách `items` + `total`.
 3. Nếu người dùng xóa: client gọi `DELETE /api/v1/system-logs/{id}` hoặc `POST /api/v1/system-logs/bulk-delete`.
 4. API kiểm tra quyền + policy tuân thủ, thực hiện delete và trả kết quả.
 
@@ -161,14 +172,14 @@
 
 ```mermaid
 sequenceDiagram
-  participant U as Admin/Owner
+  participant U as Admin
   participant C as Mini-ERP
   participant A as smart-erp API
   participant D as Postgres
 
   U->>C: Mở "Nhật ký hệ thống"
   C->>A: GET /api/v1/system-logs?...
-  A->>A: RBAC (mp/authority)
+  A->>A: RBAC (role=Admin + mp.can_view_system_logs)
   A->>D: SELECT list + SELECT count
   D-->>A: rows + total
   A-->>C: 200 (items,page,limit,total)

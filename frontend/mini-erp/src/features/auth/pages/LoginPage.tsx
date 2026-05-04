@@ -1,6 +1,17 @@
+import { useEffect } from "react"
+import { useNavigate } from "react-router-dom"
 import { LoginForm } from "../components/LoginForm"
+import { hasResumeSessionInSessionStorage } from "@/features/auth/lib/clientSessionResume"
 
 export function LoginPage() {
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (hasResumeSessionInSessionStorage()) {
+      navigate("/dashboard", { replace: true })
+    }
+  }, [navigate])
+
   return (
     <main className="min-h-screen w-full flex items-center justify-center bg-[#f8f9fa] p-4 sm:p-6 antialiased">
       <div className="w-full flex flex-col items-center max-w-lg">

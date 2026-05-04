@@ -78,7 +78,7 @@ describe("StockBatchDetailsDialog", () => {
     expect(screen.getByText(/8930001/)).toBeInTheDocument()
     expect(screen.getByText(/25\.000/)).toBeInTheDocument()
     expect(screen.getByText(/3\.750\.000/)).toBeInTheDocument()
-    expect(screen.getByText("An toàn")).toBeInTheDocument()
+    expect(screen.getByText("Bình thường")).toBeInTheDocument()
     expect(screen.getByText(/Định mức: 50/)).toBeInTheDocument()
     expect(screen.getByText("LOT-1")).toBeInTheDocument()
   })

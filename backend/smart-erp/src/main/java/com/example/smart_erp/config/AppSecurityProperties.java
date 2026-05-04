@@ -53,10 +53,12 @@ public class AppSecurityProperties {
 		private String audience = "";
 
 		/**
-		 * Thời gian sống access JWT (phút), tối thiểu 1. Dev/Postman: tăng qua property hoặc env
-		 * {@code JWT_ACCESS_TTL_MINUTES}; prod có thể giữ thấp.
+		 * Thời gian sống access JWT (phút), tối thiểu 1. Mặc định 5 — cùng cửa sổ với
+		 * {@link com.example.smart_erp.auth.session.RefreshAccessThrottle} (SRS §7.2) để một phiên hợp lệ
+		 * có thể refresh khi access hết hạn mà vẫn giới hạn tần suất gọi {@code /auth/refresh}. Env
+		 * {@code JWT_ACCESS_TTL_MINUTES} / property ghi đè khi deploy.
 		 */
-		private int accessTtlMinutes = 1;
+		private int accessTtlMinutes = 5;
 
 		public String getSecret() {
 			return secret;

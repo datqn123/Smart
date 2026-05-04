@@ -1,6 +1,6 @@
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Search, Edit2, ArrowDownToLine, ArrowUpFromLine, CheckCircle2 } from "lucide-react"
+import { Search, Edit2, ArrowDownToLine, ArrowUpFromLine } from "lucide-react"
 import {
   Select,
   SelectContent,
@@ -22,7 +22,7 @@ export function StockToolbar({ searchStr, onSearch, status, onStatusChange, sele
   const hasSelection = selectedIds.length > 0;
 
   return (
-    <div className="bg-white p-4 space-y-3 border-b md:border border-slate-200 md:rounded-t-md">
+    <div className="space-y-3">
       <div className="flex flex-col xl:flex-row gap-4 justify-between items-start xl:items-center">
         {/* Search & Filter */}
         <div className="flex flex-col sm:flex-row gap-3 w-full xl:max-w-xl">
@@ -53,14 +53,6 @@ export function StockToolbar({ searchStr, onSearch, status, onStatusChange, sele
           <span className="text-sm font-medium text-slate-700 mr-2 min-w-[100px] xl:min-w-0">
             Đã chọn: {selectedIds.length}
           </span>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => hasSelection ? onAction("approve") : null}
-            className="min-h-[44px] xl:min-h-[36px]"
-          >
-            <CheckCircle2 className="mr-1.5 h-4 w-4 text-green-600" />Phê duyệt
-          </Button>
           <Button 
             variant="outline" 
             size="sm" 

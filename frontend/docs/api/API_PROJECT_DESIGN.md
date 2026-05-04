@@ -243,8 +243,8 @@ _(Endpoint Owner xử lý yêu cầu reset mật khẩu nhân viên nằm trong 
 | POST | `/debts` | Tạo khoản nợ | [`API_Task070_debts_post.md`](API_Task070_debts_post.md) |
 | GET | `/debts/{id}` | Chi tiết nợ | [`API_Task071_debts_get_by_id.md`](API_Task071_debts_get_by_id.md) |
 | PATCH | `/debts/{id}` | Cập nhật / ghi nhận trả nợ | [`API_Task072_debts_patch.md`](API_Task072_debts_patch.md) |
-| GET | `/system-logs` | `SystemLogs` — màn **Nhật ký hệ thống** | [`API_Task086_system_logs_get_list.md`](API_Task086_system_logs_get_list.md) |
-| DELETE | `/system-logs/{id}` | Xóa một bản ghi (Admin / audit policy) | [`API_Task087_system_logs_delete.md`](API_Task087_system_logs_delete.md) |
+| GET | `/system-logs` | `SystemLogs` — **Admin-only** (JWT `role` + `mp.can_view_system_logs`); màn **Nhật ký hệ thống** | [`API_Task086_system_logs_get_list.md`](API_Task086_system_logs_get_list.md) |
+| DELETE | `/system-logs/{id}` | Policy **cấm xóa** (403); gọi chỉ khi có quyền Admin | [`API_Task087_system_logs_delete.md`](API_Task087_system_logs_delete.md) |
 | POST | `/system-logs/bulk-delete` | Xóa nhiều id | [`API_Task088_system_logs_bulk_delete.md`](API_Task088_system_logs_bulk_delete.md) |
 | GET | `/notifications` | `Notifications` (optional table) | _(Task sau)_ |
 

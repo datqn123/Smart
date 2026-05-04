@@ -3,13 +3,14 @@
 > **File**: `backend/docs/srs/SRS_Task101_role-based-side-menu-visibility.md`  
 > **Người viết**: Agent BA (+ phần SQL tham chiếu theo `SQL_AGENT_INSTRUCTIONS.md`)  
 > **Ngày cập nhật**: 25/04/2026  
-> **Trạng thái**: Approved (đã tích hợp trả lời Open Questions — 25/04/2026)
+> **Trạng thái**: Approved (đã tích hợp trả lời Open Questions — 25/04/2026)  
+> **Bổ sung 02/05/2026:** *Nhật ký hệ thống* — chuẩn [`SRS_PRD_system-audit-unified-admin-view.md`](SRS_PRD_system-audit-unified-admin-view.md): menu + route chỉ **Admin** + `mp.can_view_system_logs`; Flyway **V43** (Owner không còn quyền xem).
 
 **Traceability:**  
 - Code UI: `frontend/mini-erp/src/components/shared/layout/Sidebar.tsx`, `frontend/mini-erp/src/store/sidebarStore.ts`, `frontend/mini-erp/src/features/auth/store/useAuthStore.ts`  
 - DB (Flyway): `backend/smart-erp/src/main/resources/db/migration/V1__baseline_smart_inventory.sql` — bảng `Roles`, cột `permissions` (JSONB)  
 - Auth hiện tại: `LoginUserDto` chỉ có `role` (tên); **mục tiêu** Task101: bổ sung **subset permission cho menu** trong **JWT** (mục 7.1) — có thể đồng thời mở rộng DTO login (tuỳ Dev) — [`LoginResult.java`](../../smart-erp/src/main/java/com/example/smart_erp/auth/service/LoginResult.java)  
-- API: `can_view_system_logs` — [`API_Task086`](../../../frontend/docs/api/API_Task086_system_logs_get_list.md); **menu** tạm hiện mục *Nhật ký* (mục 6.1) dù chưa có key trong seed V1.  
+- API: `can_view_system_logs` — [`API_Task086`](../../../frontend/docs/api/API_Task086_system_logs_get_list.md); **menu *Nhật ký*** theo **Admin** + `can_view_system_logs` (không còn “luôn hiện”) — SRS PRD **Approved** 02/05/2026.  
 - `RolePermissionReader` (Java): có ngoại lệ **Owner** cho `canManageStaff` — **side menu** (Task101) **không** dùng bypass theo tên role; nếu sau này cần thống nhất toàn hệ, ghi việc trong task RBAC tổng thể.
 
 ---
@@ -94,7 +95,7 @@ Các khóa boolean dùng tên **theo cột** `Roles.permissions` (JSONB) trong F
 | → *Thông tin cửa hàng* | **Luôn hiển thị** (với mọi user đã đăng nhập, trong nhóm *Cài đặt*) — không cần key JSON | Mọi user nội bộ **xem** được; **chỉ Owner sửa** thông tin — nghiệp vụ ở trang/API (Task073/074). |
 | → *Quản lý nhân viên* | `can_manage_staff` | Cùng Task078. |
 | → *Cấu hình cảnh báo* | `can_configure_alerts` | |
-| → *Nhật ký hệ thống* | **Tạm: luôn hiện** khi *Cài đặt* hiện; sau khi có `can_view_system_logs` đầy đủ trong DB + BE gating, chuyển sang `can_view_system_logs` === true | Bổ sung key + gating: migration/seed + đồng bộ API Task086. |
+| → *Nhật ký hệ thống* | **`role` = Admin** **và** `can_view_system_logs` === true (JWT `mp`; seed V30 + **V43**); route guard | [`SRS_PRD_system-audit-unified-admin-view.md`](SRS_PRD_system-audit-unified-admin-view.md); `API_Task086` §2. |
 
 **Quy ước boolean (đã chốt)**: thiếu key trong JSON `permissions` → `false`.
 
@@ -213,7 +214,7 @@ Then API trả 403 theo từng module; ưu tiên route guard đồng bộ cùng 
 | 1 | Cách đưa quyền xuống FE; kiểm tra từng request | Chỉ đưa **subset permission cần cho side menu** vào **JWT** tại bước đăng nhập thành công; **mỗi request** BE vẫn phải kiểm tra Role/Permission. Phần phức tạp **tách Task101_1** (và tùy tách thêm) — không bắt buộc gom hết một PR. |
 | 2 | Owner có bypass quyền ở menu? | **Không** — chỉ dựa trên nội dung JSON `permissions` (cùng cách bảo toàn: Owner trong DB vẫn thường `true` hết cờ cần thiết). |
 | 3 | *Thông tin cửa hàng* / key JSON | Mọi user nội bộ **xem** được; **chỉ Owner sửa**; menu không dùng flag tách *xem*; chi tiết sửa ở trang/API. |
-| 4 | *Nhật ký hệ thống* / `can_view_system_logs` | **Tạm hiện** mục menu; chuẩn hóa theo `can_view_system_logs` + seed/migration + gating sau. |
+| 4 | *Nhật ký hệ thống* / `can_view_system_logs` | **Đã chốt bổ sung 02/05/2026:** Admin + `can_view_system_logs`; Owner thu hồi (V43) — xem SRS PRD. |
 | 5 | `Manager` / `Warehouse` trên FE | **Task101_2** — migration/seed + đồng bộ type và mapping. |
 | 6 | *Dashboard* vs *AI Insights* | Cả hai đều có thể dùng được theo từng `can_view_dashboard` / `can_use_ai`; nội dung hiển thị theo **khác** role xử lý ở **task sau** (không chặn Task101 layout cơ bản). |
 
@@ -227,7 +228,7 @@ Then API trả 403 theo từng module; ưu tiên route guard đồng bộ cùng 
 | :--- | :--- | :--- |
 | UI | Lọc theo tên `role` (cứng) | Lọc theo quyền từ session (sau parse JWT) + bảng 6.1. |
 | JWT / Login | Chỉ `role` (tên) | Bổ sung **subset** boolean cho menu + vẫn mỗi request kiểm tra server. |
-| DB / menu *Nhật ký* | Key `can_view_system_logs` chưa trong seed V1 | Tạm **hiện** mục menu; sau bổ sung key + gating theo 6.1. |
+| DB / menu *Nhật ký* | Key đã có (V30 + V43); FE có thể còn `always: true` tạm | **Chuẩn hóa UI** theo §6.1 + SRS PRD (Admin + perm + guard). |
 | docs / Flyway | `roles.md` ví dụ rút gọn | **Flyway** là nguồn sự thật. |
 | FE type `UserRole` | Có `Manager` / `Warehouse` | **Task101_2** (migration/seed + đồng bộ). |
 
@@ -236,7 +237,7 @@ Then API trả 403 theo từng module; ưu tiên route guard đồng bộ cùng 
 ## 12. Hướng dẫn Agent SQL (khi triển khai BE/DB)
 
 - Mọi thay đổi keys `permissions` mới → **Flyway mới** + cập nhật seed/ALTER policy (không sửa trực tiếp production ad-hoc).  
-- **Ưu tiên** bổ sung `can_view_system_logs` (khớp API Task086) khi chuẩn hóa gating *Nhật ký* (thay cho rule tạm “luôn hiện” ở 6.1).  
+- **Nhật ký hệ thống:** đã có `can_view_system_logs` + V43; FE bỏ “luôn hiện”, thêm **Admin** + guard — [`SRS_PRD_system-audit-unified-admin-view.md`](SRS_PRD_system-audit-unified-admin-view.md).  
 - Đối chiếu `frontend/docs/database/tables/roles.md` với migration sau mỗi thay đổi JSON role.
 - **Task101_2:** `INSERT`/`UPDATE` bảng `Roles` nếu thêm `Manager` / `Warehouse` (cùng `permissions` mặc định tối thiểu theo nghiệp vụ).
 

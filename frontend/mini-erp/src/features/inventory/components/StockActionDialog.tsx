@@ -403,7 +403,7 @@ export function StockActionDialog({
 
                   return (
                     <TableRow key={item.id}>
-                      <TableCell className="max-w-0 min-w-0 p-2 align-top whitespace-normal">
+                      <TableCell className="max-w-0 min-w-0 p-2 align-middle whitespace-normal">
                         <div className="truncate font-bold text-slate-900" title={item.productName}>
                           {item.productName}
                         </div>
@@ -411,10 +411,10 @@ export function StockActionDialog({
                           {item.skuCode}
                         </div>
                       </TableCell>
-                      <TableCell className="p-2 text-slate-600 font-medium whitespace-normal">
+                      <TableCell className="p-2 text-slate-600 font-medium whitespace-normal align-middle">
                         {item.quantity} {item.unitName}
                       </TableCell>
-                      <TableCell className="p-2 align-top">
+                      <TableCell className="p-2 align-middle">
                         <Input
                           type="number"
                           min={0}
@@ -432,7 +432,7 @@ export function StockActionDialog({
                       </TableCell>
                       {type === "import" && (
                         <>
-                          <TableCell className="p-2 align-top">
+                          <TableCell className="p-2 align-middle">
                             <Input
                               type="number"
                               min={0}
@@ -446,7 +446,7 @@ export function StockActionDialog({
                               className={tableInputClass("border-slate-200")}
                             />
                           </TableCell>
-                          <TableCell className="p-2 align-top">
+                          <TableCell className="p-2 align-middle">
                             <Input
                               value={batchNumbers[item.id] ?? ""}
                               onChange={(e) =>
@@ -456,7 +456,7 @@ export function StockActionDialog({
                               placeholder="Lô"
                             />
                           </TableCell>
-                          <TableCell className="p-2 align-top">
+                          <TableCell className="p-2 align-middle">
                             <Input
                               type="date"
                               value={expiryDates[item.id] ?? ""}
@@ -470,7 +470,7 @@ export function StockActionDialog({
                       )}
                       <TableCell
                         className={cn(
-                          "p-2 text-right font-bold align-top",
+                          "p-2 text-right font-bold align-middle tabular-nums",
                           expected < 0 ? "text-red-600" : "text-slate-900",
                         )}
                       >

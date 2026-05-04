@@ -20,8 +20,8 @@
 		{
 			"name": "app.security.jwt.access-ttl-minutes",
 			"type": "java.lang.Integer",
-			"description": "Access JWT TTL in minutes (min 1). Issued at login/refresh. Env JWT_ACCESS_TTL_MINUTES overrides in application-postgres.",
-			"defaultValue": 1
+			"description": "Access JWT TTL in minutes (min 1). Issued at login/refresh. Default 5 aligns with refresh throttle (max one new access per 5 min per user). Env JWT_ACCESS_TTL_MINUTES overrides.",
+			"defaultValue": 5
 		},
 		{
 			"name": "app.cloudinary.enabled",

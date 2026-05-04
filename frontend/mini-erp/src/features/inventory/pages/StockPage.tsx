@@ -85,7 +85,7 @@ export function StockPage() {
     return () => clearTimeout(t)
   }, [filters.search])
 
-  const { data, isPending, isError, error, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } =
+  const { data, isPending, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage, isFetching } =
     useInfiniteQuery({
       queryKey: ["inventory", "v1", "list", debouncedSearch, filters.status, PAGE_SIZE],
       initialPageParam: 1,
@@ -215,15 +215,8 @@ export function StockPage() {
     setIsDialogOpen(true)
   }
 
-  const notImplementedBulk = useCallback((label: string) => {
-    toast.info(`${label} — tính năng đang được hoàn thiện.`)
-  }, [])
-
   const handleToolbarAction = (action: string) => {
     switch (action) {
-    case "approve":
-      notImplementedBulk("Phê duyệt điều chỉnh tồn")
-      break
     case "edit":
       setItemsToEdit(listItems.filter((i) => selectedIds.includes(i.id)))
       setIsEditDialogOpen(true)
@@ -375,10 +368,10 @@ export function StockPage() {
           variant="outline"
           size="sm"
           onClick={() => {
-            void refetch()
-            void summaryQuery.refetch()
+            void queryClient.resetQueries({ queryKey: ["inventory", "v1", "list"] })
+            void queryClient.resetQueries({ queryKey: ["inventory", "v1", "summary"] })
           }}
-          disabled={isPending}
+          disabled={isPending || isFetching || summaryQuery.isFetching}
         >
           Tải lại
         </Button>
@@ -456,7 +449,7 @@ export function StockPage() {
         {data && total > 0 && !isError && (
           <div className="flex items-center justify-between flex-wrap gap-2 px-3 py-2 border-t border-slate-200 bg-slate-50/80 text-sm text-slate-600 min-h-11">
             <span>
-              Đang hiển thị {listItems.length} / {total} dòng
+              Đang hiển thị {listItems.length} / {total} bản ghi
             </span>
             {isFetchingNextPage && (
               <span className="text-slate-500">Đang tải thêm…</span>

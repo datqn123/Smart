@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Eye, Package } from "lucide-react"
 import type { InventoryItem } from "../types"
+import { getInventoryRowStatusDisplay } from "../lib/inventoryRowStatus"
 import { cn } from "@/lib/utils"
 import {
   DATA_TABLE_ROOT_CLASS,
@@ -36,14 +37,6 @@ export function StockTable({
   someSelected,
   onSelectAll,
 }: StockTableProps) {
-  const getStatusInfo = (item: InventoryItem) => {
-    if (item.status === "Draft") return { label: "Nháp", bg: "bg-slate-100 text-slate-700" }
-    if (item.quantity === 0) return { label: "Hết hàng", bg: "bg-red-100 text-red-800" }
-    if (item.isLowStock) return { label: "Sắp hết", bg: "bg-red-50 text-red-700 hover:bg-red-100" }
-    if (item.isExpiringSoon) return { label: "Cận date", bg: "bg-amber-50 text-amber-700 hover:bg-amber-100" }
-    return { label: "Bình thường", bg: "bg-green-50 text-green-700 hover:bg-green-100" }
-  }
-
   return (
     <Table data-testid="stock-table" className={DATA_TABLE_ROOT_CLASS}>
       <TableHeader className="sticky top-0 z-20 bg-slate-50 shadow-sm border-b">
@@ -92,7 +85,7 @@ export function StockTable({
           </TableRow>
         ) : (
           data.map((item) => {
-            const status = getStatusInfo(item)
+            const status = getInventoryRowStatusDisplay(item)
             const isSelected = selectedIds.includes(item.id)
             return (
               <TableRow
@@ -138,7 +131,7 @@ export function StockTable({
                   {item.expiryDate ? new Date(item.expiryDate).toLocaleDateString("vi-VN") : "—"}
                 </TableCell>
                 <TableCell className={cn(STOCK_TABLE_COL.status, "px-4 text-left")}>
-                  <Badge variant="secondary" className={`${status.bg} text-xs font-normal border-none`}>
+                  <Badge variant="secondary" className={`${status.badgeClass} text-xs font-normal border-none`}>
                     {status.label}
                   </Badge>
                 </TableCell>

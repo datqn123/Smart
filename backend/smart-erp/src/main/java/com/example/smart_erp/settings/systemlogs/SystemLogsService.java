@@ -25,6 +25,11 @@ public class SystemLogsService {
 
 	private static final String MP_KEY_CAN_VIEW_SYSTEM_LOGS = "can_view_system_logs";
 
+	/** JWT claim {@code role} — chỉ Admin được xem system logs (SRS_PRD_system-audit-unified-admin-view). */
+	private static final String JWT_CLAIM_ROLE = "role";
+
+	private static final String ROLE_ADMIN = "Admin";
+
 	private static final int DEFAULT_PAGE = 1;
 	private static final int DEFAULT_LIMIT = 20;
 	private static final int MAX_LIMIT = 100;
@@ -115,6 +120,10 @@ public class SystemLogsService {
 	private void requireCanView(org.springframework.security.oauth2.jwt.Jwt jwt) {
 		if (jwt == null) {
 			throw new BusinessException(ApiErrorCode.UNAUTHORIZED, "Phiên đăng nhập không hợp lệ");
+		}
+		String role = jwt.getClaimAsString(JWT_CLAIM_ROLE);
+		if (!ROLE_ADMIN.equals(role)) {
+			throw new BusinessException(ApiErrorCode.FORBIDDEN, MSG_FORBIDDEN_VIEW);
 		}
 		Object mp = jwt.getClaim("mp");
 		if (!(mp instanceof Map<?, ?> map)) {

@@ -64,13 +64,6 @@ public class JwtTokenService {
 		return builder.compact();
 	}
 
-	/**
-	 * Task100: access JWT còn hiệu lực cho {@code LoginSessionRegistry} (ký đúng, iss/aud khớp, {@code exp} &gt; now).
-	 */
-	public boolean isAccessTokenActiveForSessionMap(String compactJwt) {
-		return tryParseActiveAccessClaims(compactJwt).isPresent();
-	}
-
 	/** TTL access token (giây) theo cấu hình, dùng cho Redis login registry. */
 	public long getAccessTtlSeconds() {
 		return accessTtlMinutes * 60L;

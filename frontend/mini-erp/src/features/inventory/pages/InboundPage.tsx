@@ -364,7 +364,7 @@ export function InboundPage() {
             {statusOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
           </select>
         </div>
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
           <div className="flex items-center gap-2">
             <Calendar className="h-4 w-4 text-slate-400 shrink-0" />
             <span className="text-xs text-slate-500 whitespace-nowrap">Từ ngày:</span>
@@ -377,27 +377,22 @@ export function InboundPage() {
               className="h-9 px-2 border border-slate-200 rounded text-sm" />
           </div>
           <Input placeholder="NCC: nhập ID số hoặc lọc tên (đã tải)…" value={supplierFilter}
-            onChange={(e) => setSupplierFilter(e.target.value)} className="h-9 sm:w-[280px]" />
+            onChange={(e) => setSupplierFilter(e.target.value)}
+            className="h-9 min-w-[200px] w-[min(100%,280px)] shrink-0" />
+          <div className="flex items-center gap-2 shrink-0 min-h-11">
+            <Checkbox
+              id="inbound-only-mine"
+              checked={onlyMine}
+              onCheckedChange={(v) => setOnlyMine(v === true)}
+              disabled={user == null || user.id <= 0}
+              className="size-5 shrink-0"
+              aria-label="Chỉ hiển thị phiếu do tôi tạo"
+            />
+            <label htmlFor="inbound-only-mine" className="text-sm text-slate-700 cursor-pointer select-none leading-snug whitespace-nowrap">
+              Chỉ phiếu của tôi
+            </label>
+          </div>
         </div>
-        <div className="flex items-center gap-2 min-h-[44px]">
-          <Checkbox
-            id="inbound-only-mine"
-            checked={onlyMine}
-            onCheckedChange={(v) => setOnlyMine(v === true)}
-            disabled={user == null || user.id <= 0}
-            className="size-5 shrink-0"
-            aria-label="Chỉ hiển thị phiếu do tôi tạo"
-          />
-          <label htmlFor="inbound-only-mine" className="text-sm text-slate-700 cursor-pointer select-none leading-snug">
-            Chỉ phiếu của tôi
-          </label>
-        </div>
-        <p className="text-xs text-slate-500">
-          Hiển thị <span className="font-medium text-slate-700">{displayRows.length}</span>
-          {supplierIdParam == null && supplierTrim ? " (lọc tên trên dữ liệu đã tải)" : ""}
-          {" · "}
-          Tổng server: <span className="font-medium text-slate-700">{serverTotal}</span> phiếu
-        </p>
       </div>
 
       <div className="flex-1 flex flex-col min-h-0 bg-white border border-slate-200/60 rounded-xl overflow-hidden shadow-md">
@@ -440,15 +435,23 @@ export function InboundPage() {
               {hasNextPage && !isFetchingNextPage && (
                 <div ref={loadMoreSentinelRef} className="h-4" />
               )}
-
-              {!hasNextPage && displayRows.length > 0 && (
-                <p className="text-center text-xs text-slate-400 py-6">
-                  — Đã tải {mergedRows.length} / {serverTotal} phiếu —
-                </p>
-              )}
             </>
           )}
         </div>
+
+        {data && serverTotal > 0 && !isError && (
+          <div className="flex items-center justify-between flex-wrap gap-2 px-3 py-2 border-t border-slate-200 bg-slate-50/80 text-sm text-slate-600 min-h-11 shrink-0">
+            <span>
+              Đang hiển thị {displayRows.length} / {serverTotal} bản ghi
+            </span>
+            {isFetchingNextPage && (
+              <span className="text-slate-500">Đang tải thêm…</span>
+            )}
+            {hasNextPage && !isFetchingNextPage && (
+              <span className="text-slate-400 text-xs hidden sm:inline">Cuộn xuống để tải thêm</span>
+            )}
+          </div>
+        )}
 
         <ReceiptDetailDialog
           receipt={receiptForDialog}

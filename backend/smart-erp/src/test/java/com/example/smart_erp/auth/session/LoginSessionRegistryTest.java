@@ -1,8 +1,11 @@
 package com.example.smart_erp.auth.session;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import java.time.Duration;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,7 +16,6 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
 import com.example.smart_erp.auth.support.JwtTokenService;
-import com.example.smart_erp.common.exception.BusinessException;
 
 @ExtendWith(MockitoExtension.class)
 class LoginSessionRegistryTest {
@@ -31,24 +33,27 @@ class LoginSessionRegistryTest {
 
 	@BeforeEach
 	void setUp() {
-		when(redis.opsForValue()).thenReturn(values);
-		when(jwtTokenService.getAccessTtlSeconds()).thenReturn(60L);
+		lenient().when(redis.opsForValue()).thenReturn(values);
+		lenient().when(jwtTokenService.getAccessTtlSeconds()).thenReturn(120L);
 		registry = new LoginSessionRegistry(jwtTokenService, redis);
 	}
 
 	@Test
-	void assertNoConcurrentSession_prunesStaleTokenAndAllowsSecondLogin() {
-		when(jwtTokenService.isAccessTokenActiveForSessionMap("old.jwt")).thenReturn(false);
-		when(values.get("auth:session:1")).thenReturn("old.jwt");
-		registry.register(1, "old.jwt");
-		assertDoesNotThrow(() -> registry.assertNoConcurrentSession(1));
+	void register_overwritesSessionKeyWithConfiguredTtl() {
+		registry.register(5, "access.jwt.here");
+		verify(values).set(eq("auth:session:5"), eq("access.jwt.here"), eq(Duration.ofSeconds(120L)));
 	}
 
 	@Test
-	void assertNoConcurrentSession_blocksWhenTokenStillActive() {
-		when(jwtTokenService.isAccessTokenActiveForSessionMap("live.jwt")).thenReturn(true);
-		when(values.get("auth:session:2")).thenReturn("live.jwt");
-		registry.register(2, "live.jwt");
-		assertThrows(BusinessException.class, () -> registry.assertNoConcurrentSession(2));
+	void register_usesMinimumSixtySecondTtlWhenJwtTtlVeryLow() {
+		when(jwtTokenService.getAccessTtlSeconds()).thenReturn(30L);
+		registry.register(1, "t");
+		verify(values).set(eq("auth:session:1"), eq("t"), eq(Duration.ofSeconds(60L)));
+	}
+
+	@Test
+	void clear_removesSessionKey() {
+		registry.clear(9);
+		verify(redis).delete("auth:session:9");
 	}
 }

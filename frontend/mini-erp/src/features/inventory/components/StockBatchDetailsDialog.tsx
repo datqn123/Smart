@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator"
 import { formatCurrency } from "../utils"
 import type { InventoryItem } from "../types"
 import type { InventoryDetailResponse } from "../api/inventoryApi"
+import { getInventoryRowStatusDisplay } from "../lib/inventoryRowStatus"
 import { DollarSign, MapPin, Box, ShieldCheck, Tag, Loader2 } from "lucide-react"
 
 interface StockBatchDetailsDialogProps {
@@ -98,20 +99,13 @@ export function StockBatchDetailsDialog({
   const minQuantity = d?.minQuantity ?? listItem.minQuantity
   const quantity = d?.quantity ?? listItem.quantity
   const totalValue = d?.totalValue ?? listItem.totalValue
-  const isLowStock = d?.isLowStock ?? listItem.isLowStock
   const updatedAt = d?.updatedAt ?? listItem.updatedAt
 
   const lotRows: LotRow[] = d ? rowsFromDetail(d) : []
   const totalQuantity = d ? lotRows.reduce((sum, b) => sum + b.quantity, 0) : quantity
 
-  const statusLabel = quantity === 0 ? "Hết hàng" : isLowStock ? "Sắp hết" : "An toàn"
-  const statusVariant = quantity === 0 ? ("destructive" as const) : ("outline" as const)
-  const statusBadgeClass =
-    quantity === 0
-      ? ""
-      : isLowStock
-        ? "border-amber-300 bg-amber-50 text-amber-900 font-bold"
-        : "border-emerald-300 bg-emerald-50 text-emerald-900 font-bold"
+  /** Luôn khớp cột Trạng thái của bảng (theo dòng đang chọn). */
+  const rowStatus = getInventoryRowStatusDisplay(listItem)
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -127,11 +121,8 @@ export function StockBatchDetailsDialog({
                   SKU: {sku}
                 </span>
               </DialogDescription>
-              <Badge
-                variant={statusVariant}
-                className={`h-7 shrink-0 px-3 text-xs uppercase tracking-widest leading-none ${statusBadgeClass}`}
-              >
-                {statusLabel}
+              <Badge variant="secondary" className={`h-7 shrink-0 px-3 text-xs font-normal border-none ${rowStatus.badgeClass}`}>
+                {rowStatus.label}
               </Badge>
             </div>
           </div>

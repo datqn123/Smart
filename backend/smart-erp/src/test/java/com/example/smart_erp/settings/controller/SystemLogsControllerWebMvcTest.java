@@ -55,7 +55,8 @@ class SystemLogsControllerWebMvcTest {
 				.thenReturn(new SystemLogsListData(List.of(item), 1, 20, 1));
 
 		mockMvc.perform(get("/api/v1/system-logs").param("search", "abc").param("page", "1").param("limit", "20")
-				.with(Objects.requireNonNull(jwt().jwt(j -> j.subject("1").claim("mp", Map.of("can_view_system_logs", true))))))
+				.with(Objects.requireNonNull(jwt().jwt(j -> j.subject("1").claim("role", "Admin")
+						.claim("mp", Map.of("can_view_system_logs", true))))))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.success").value(true))
 				.andExpect(jsonPath("$.data.items.length()").value(1))
@@ -69,7 +70,8 @@ class SystemLogsControllerWebMvcTest {
 				.when(service).deleteById(eq(10L), any(org.springframework.security.oauth2.jwt.Jwt.class));
 
 		mockMvc.perform(delete("/api/v1/system-logs/10")
-				.with(Objects.requireNonNull(jwt().jwt(j -> j.subject("1").claim("mp", Map.of("can_view_system_logs", true))))))
+				.with(Objects.requireNonNull(jwt().jwt(j -> j.subject("1").claim("role", "Admin")
+						.claim("mp", Map.of("can_view_system_logs", true))))))
 				.andExpect(status().isForbidden())
 				.andExpect(jsonPath("$.success").value(false))
 				.andExpect(jsonPath("$.error").value("FORBIDDEN"))
@@ -85,7 +87,8 @@ class SystemLogsControllerWebMvcTest {
 
 		mockMvc.perform(post("/api/v1/system-logs/bulk-delete").contentType(MediaType.APPLICATION_JSON_VALUE)
 				.content("{\"ids\":[1,2,3]}")
-				.with(Objects.requireNonNull(jwt().jwt(j -> j.subject("1").claim("mp", Map.of("can_view_system_logs", true))))))
+				.with(Objects.requireNonNull(jwt().jwt(j -> j.subject("1").claim("role", "Admin")
+						.claim("mp", Map.of("can_view_system_logs", true))))))
 				.andExpect(status().isForbidden())
 				.andExpect(jsonPath("$.success").value(false))
 				.andExpect(jsonPath("$.error").value("FORBIDDEN"));

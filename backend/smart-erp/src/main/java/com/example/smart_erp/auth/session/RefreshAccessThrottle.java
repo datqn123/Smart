@@ -10,7 +10,9 @@ import com.example.smart_erp.common.api.ApiErrorCode;
 import com.example.smart_erp.common.exception.BusinessException;
 
 /**
- * Task003 / SRS §7.2: tối đa một access mới qua {@code /auth/refresh} mỗi 5 phút / user (in-memory).
+ * Task003 / SRS §7.2: tối đa một access mới qua {@code /auth/refresh} mỗi {@value MIN_GAP_MINUTES} phút / user (in-memory),
+ * giảm tải server và hạn chế thử refresh token hàng loạt. Nên giữ khoảng cách này ≥ chu kỳ làm mới access hợp lệ
+ * (TTL access JWT mặc định cùng thứ tự phút) để người dùng hợp lệ vẫn refresh được sau khi JWT hết hạn.
  * Được xóa khi {@link com.example.smart_erp.auth.service.AuthService#login(String, String)} thành công hoặc sau {@code logout}.
  */
 @Component

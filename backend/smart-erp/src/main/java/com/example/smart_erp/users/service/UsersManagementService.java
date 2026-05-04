@@ -86,7 +86,7 @@ public class UsersManagementService {
 			if (!OWNER_ROLE_NAME.equalsIgnoreCase(actorRoleName)) {
 				throw new BusinessException(ApiErrorCode.FORBIDDEN, "Chỉ Owner được phép thay đổi vai trò");
 			}
-			Role newRole = roleRepository.findById(body.roleId())
+			Role newRole = roleRepository.findById(Objects.requireNonNull(body.roleId(), "roleId"))
 					.orElseThrow(() -> new BusinessException(ApiErrorCode.BAD_REQUEST, "Vai trò không hợp lệ",
 							Map.of("roleId", "Không tồn tại")));
 			if (OWNER_ROLE_NAME.equalsIgnoreCase(newRole.getName())) {
@@ -115,7 +115,8 @@ public class UsersManagementService {
 		}
 
 		try {
-			User saved = userRepository.save(target);
+			User saved = Objects.requireNonNull(userRepository.save(Objects.requireNonNull(target, "target")),
+					"saved user");
 			User withRole = userRepository.findWithRoleById(Objects.requireNonNull(saved.getId(), "id"))
 					.orElse(saved);
 			return toDetail(withRole);
@@ -137,7 +138,7 @@ public class UsersManagementService {
 
 	@Transactional
 	public void softDelete(int actorUserId, int userId) {
-		User actor = requireActorCanManageStaff(actorUserId);
+		requireActorCanManageStaff(actorUserId);
 		if (actorUserId == userId) {
 			throw new BusinessException(ApiErrorCode.CONFLICT, "Không thể vô hiệu hóa tài khoản của chính bạn");
 		}

@@ -19,9 +19,9 @@ Nhiều hệ thống **cấm xóa** log bảo mật — nếu policy vậy, endp
 
 ## 3. RBAC
 
-**Admin** (hoặc Owner có flag đặc biệt) và tuân theo policy tuân thủ (có thể cấm xóa log).
+Chỉ **Admin** (`role` = `Admin` và `mp.can_view_system_logs`) được gọi endpoint; policy hiện tại **cấm xóa** log → **403** (không thực hiện DELETE).
 
-> **GAP (đồng bộ codebase):** Backend hiện chưa có key quyền cho “xem/xóa system logs” trong JWT claim `mp` (`MenuPermissionClaims.MENU_KEYS`).
+> **Đồng bộ:** [`SRS_PRD_system-audit-unified-admin-view.md`](../../../backend/docs/srs/SRS_PRD_system-audit-unified-admin-view.md) · Task086 RBAC xem log.
 
 ---
 

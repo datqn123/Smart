@@ -81,7 +81,7 @@ public class AuthController {
 	}
 
 	@PostMapping("/logout")
-	public ResponseEntity<ApiSuccessResponse<java.util.Map<String, Object>>> logout(
+	public ResponseEntity<ApiSuccessResponse<Map<String, Object>>> logout(
 			@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
 			@Valid @RequestBody LogoutRequest request) {
 		String compactAccess = extractBearerAccessToken(authorization);

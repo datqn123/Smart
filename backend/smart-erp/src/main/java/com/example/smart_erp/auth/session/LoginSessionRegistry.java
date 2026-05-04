@@ -6,15 +6,12 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 import com.example.smart_erp.auth.support.JwtTokenService;
-import com.example.smart_erp.common.api.ApiErrorCode;
-import com.example.smart_erp.common.exception.BusinessException;
 
 /**
  * Phiên đăng nhập tại thời điểm (Task001): lưu trong Redis để dùng chung giữa nhiều instance.
- * Chính sách: <strong>chặn</strong> đăng nhập thứ hai (403), không ghi đè phiên.
  * <p>
- * Task100: nếu entry Redis trỏ tới access JWT <strong>đã hết hạn</strong> hoặc không còn verify được →
- * <strong>gỡ entry</strong> (stale), không 403 oán.
+ * {@link #register} luôn ghi đè theo userId — đăng nhập lại sau khi client mất {@code sessionStorage}
+ * (tab đóng, chưa logout) vẫn được vì chỉ cập nhật Redis <strong>sau</strong> khi mật khẩu đúng.
  */
 @Component
 @SuppressWarnings("null")
@@ -28,18 +25,6 @@ public class LoginSessionRegistry {
 	public LoginSessionRegistry(JwtTokenService jwtTokenService, StringRedisTemplate redis) {
 		this.jwtTokenService = jwtTokenService;
 		this.redis = redis;
-	}
-
-	public void assertNoConcurrentSession(Integer userId) {
-		String existing = redis.opsForValue().get(key(userId));
-		if (existing == null) {
-			return;
-		}
-		if (!jwtTokenService.isAccessTokenActiveForSessionMap(existing)) {
-			redis.delete(key(userId));
-			return;
-		}
-		throw new BusinessException(ApiErrorCode.FORBIDDEN, "Tài khoản đã đăng nhập");
 	}
 
 	public void register(Integer userId, String accessToken) {

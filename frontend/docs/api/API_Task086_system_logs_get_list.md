@@ -13,11 +13,9 @@
 
 ## 2. RBAC
 
-**Admin** / **Owner** có **quyền xem nhật ký hệ thống**.
+Chỉ **Admin** được xem nhật ký hệ thống: JWT claim **`role`** phải là **`Admin`** **và** claim **`mp.can_view_system_logs`** phải là **`true`** (seed `roles.permissions`; Flyway **V43** thu hồi quyền **Owner**). **Staff** và **Owner** nhận **403**.
 
-> **GAP (đồng bộ codebase):** Backend hiện chỉ map quyền menu từ JWT claim `mp` theo `MenuPermissionClaims.MENU_KEYS` và **chưa có** key `can_view_system_logs`.  
-> - Đề xuất: thêm key `can_view_system_logs` (và seed Roles.permissions)  
-> - Hoặc PO chốt reuse một key hiện có trong `mp` (vd. `can_manage_staff` / `can_configure_alerts`).
+> **Đồng bộ:** [`backend/docs/srs/SRS_PRD_system-audit-unified-admin-view.md`](../../../backend/docs/srs/SRS_PRD_system-audit-unified-admin-view.md) (Approved 02/05/2026); amend [`SRS_Task086_system-logs.md`](../../../backend/docs/srs/SRS_Task086_system-logs.md).
 
 ---
 
