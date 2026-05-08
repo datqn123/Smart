@@ -1,7 +1,7 @@
 # Code Review — Task003
 - Reviewer: AI_CODE_REVIEWER (driver resume)
 - Branch: `feature/ai-task003`
-- HEAD code: `b63fce1` · gate docs: `f4cfd83`
+- Implementation commit: `b63fce1` · Branch tip (incl. this review bundle): `feature/ai-task003` (`git rev-parse HEAD`)
 - Iteration: 1
 
 ## Summary
