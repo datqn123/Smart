@@ -6,14 +6,14 @@
 - DoD overall: AC-1..AC-8 SRS Approved
 
 ## Unit
-- [ ] Unit-T001-1 — SSE helper tests (PRD U1) | DoD: AC-4 | depends: -
-- [ ] Unit-T001-2 — Config loader tests (PRD U2) | DoD: AC-4 | depends: -
-- [ ] Unit-T001-3 — MKP streaming wrapper unit (PRD U3) | DoD: AC-2 | depends: -
+- [x] Unit-T001-1 — SSE helper tests (PRD U1) | DoD: AC-4 | depends: -
+- [x] Unit-T001-2 — Config loader tests (PRD U2) | DoD: AC-4 | depends: -
+- [x] Unit-T001-3 — MKP streaming wrapper unit (PRD U3) | DoD: AC-2 | depends: -
 
 ## Feature
-- [ ] Feature-T001-1 — Layout Option B + move code (PRD F1) | DoD: AC-3,AC-5 | depends: Unit-T001-3
-- [ ] Feature-T001-2 — Wire main + routers (PRD F2) | DoD: AC-3 | depends: Feature-T001-1
-- [ ] Feature-T001-3 — tools/stream_chat + thin router (PRD F3) | DoD: AC-2 | depends: Feature-T001-2
+- [x] Feature-T001-1 — Layout Option B + move code (PRD F1) | DoD: AC-3,AC-5 | depends: Unit-T001-3
+- [x] Feature-T001-2 — Wire main + routers (PRD F2) | DoD: AC-3 | depends: Feature-T001-1
+- [x] Feature-T001-3 — tools/stream_chat + thin router (PRD F3) | DoD: AC-2 | depends: Feature-T001-2
 
 ## Eval
 - [ ] Eval-T001-1 — Smoke API health + stream (PRD E1) | DoD: AC-1,AC-2 | depends: Feature-T001-3
