@@ -39,32 +39,32 @@ export function ChatBotPage() {
     }
   }, [])
 
-  const appendDeltaSmart = (current: string, delta: string) => {
+  // Smart delta concat for streamed Vietnamese text from gemma-4.
+  // Model often emits sub-word chunks (e.g. "R" + "ất", "Th" + "ân") and may omit
+  // leading-space tokens for word boundaries — so we reconstruct spaces ourselves
+  // unless we detect a sub-word continuation (Vietnamese diacritic vowel boundary).
+  const appendDelta = (current: string, delta: string): string => {
     if (!current) return delta
     if (!delta) return current
+    if (/^\s/.test(delta)) return current + delta
+
     const last = current.slice(-1)
-    const first = delta.slice(0, 1)
-
-    // Punctuation rules: no space before closing punctuations, and no space after opening punctuations.
-    const noSpaceBefore = /[,\.\!\?\:\;\)\]\}]/.test(first)
-    const noSpaceAfter = /[\(\[\{]/.test(last)
-    if (noSpaceBefore || noSpaceAfter) return `${current}${delta}`
-
+    const first = delta[0]
+    const VIET_VOWEL_DIACRITIC = /[àáảãạằắẳẵặầấẩẫậăâèéẻẽẹềếểễệêìíỉĩịòóỏõọồốổỗộờớởỡợôơùúủũụừứửữựưỳýỷỹỵ]/i
     const isLetter = (c: string) => /[A-Za-zÀ-ỹ]/.test(c)
     const isDigit = (c: string) => /[0-9]/.test(c)
     const isWordish = (c: string) => isLetter(c) || isDigit(c)
 
-    // Add a space after punctuation when the next chunk starts a word.
-    // Example: "Xin chào!" + "Rất vui..." => "Xin chào! Rất vui..."
-    const spaceAfterPunct = /[,\.\!\?\:\;]/.test(last) && isWordish(first)
-    if (spaceAfterPunct) return `${current} ${delta}`
-
-    // Do not insert spaces inside numbers like 2024.
-    if (isDigit(last) && isDigit(first)) return `${current}${delta}`
-
-    // Insert space only between word-ish boundaries (e.g. "Hello" + "world", "Năm" + "2024").
-    const needsSpace = isWordish(last) && isWordish(first) && !/\s/.test(last) && !/\s/.test(first)
-    return needsSpace ? `${current} ${delta}` : `${current}${delta}`
+    // Sub-word merge: Latin chunk + vowel-with-tone chunk ("R" + "ất", "Th" + "ân").
+    if (VIET_VOWEL_DIACRITIC.test(first)) return current + delta
+    // Do NOT merge on last-char vowel — syllables often end in toned vowels ("có", "thể", "gì")
+    // and the next word starts with a consonant; merging caused "cóthểgiúp", "gìcho".
+    // Exception: complete /uy/ ("Tù" + "y" → "Tùy").
+    if (VIET_VOWEL_DIACRITIC.test(last) && delta === "y") return current + delta
+    if (isDigit(last) && isDigit(first)) return current + delta
+    if (/[.,!?:;)\]}]/.test(last) && isWordish(first)) return current + " " + delta
+    if (isWordish(last) && isWordish(first)) return current + " " + delta
+    return current + delta
   }
 
   const handleSend = (text?: string, type: "text" | "image" | "voice" = "text", metadata?: any) => {
@@ -115,7 +115,7 @@ export function ChatBotPage() {
       onDelta: (delta) => {
         setMessages(prev =>
           prev.map(m =>
-            m.id === assistantId ? { ...m, content: appendDeltaSmart(m.content ?? "", delta) } : m
+            m.id === assistantId ? { ...m, content: appendDelta(m.content ?? "", delta) } : m
           )
         )
       },

@@ -15,8 +15,10 @@ description: Auto-run AI agent chain (BA → PM → TECH_LEAD → DEV → CODE_R
 
 - `Task` (optional): nếu rỗng → AI_PM tự cấp ID Task tiếp theo.
 - `Brief`: mô tả tính năng cho AI_PLANNER (bắt buộc nếu `SkipPlanner=false`).
-- `Mode`: `run` (mặc định, launch subagent thật) | `dry-run` (in plan từng bước, không launch).
-- `Budget`: trần số lần invoke subagent. Mặc định 20. Vượt → escalate.
+- `Mode`: chế độ thực thi pipeline:
+    - `run` (mặc định): tiến hành thực sự, lần lượt gọi từng subagent thực hiện từng bước của pipeline, ghi nhận kết quả, cập nhật trạng thái.
+    - `dry-run`: **chỉ mô phỏng** quy trình, liệt kê các bước sẽ chạy cùng dự kiến artifact từng bước (kế hoạch), **không khởi động bất kỳ subagent nào**, dùng để kiểm tra lộ trình và kiểm chứng cấu hình trước khi thực thi thật.
+- `Budget`: số lần tối đa được phép gọi (invoke) các subagent trong toàn bộ pipeline của 1 phiên `/orchestrate`. Mỗi khi driver launch 1 subagent (tương ứng với 1 bước của chuỗi role), `budget_used` sẽ tăng thêm 1. Mặc định giới hạn là 20; nếu tổng số lần gọi subagent vượt quá giá trị `Budget` thì quy trình sẽ dừng lại (STOP), escalates về Owner để xử lý tiếp (tránh lặp/treo vô hạn hoặc vượt quota).
 - `SkipPlanner`: nếu PRD đã có sẵn cho task → bỏ qua planner.
 
 ## Driver state (giữ trong message history của driver)
