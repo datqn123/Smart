@@ -62,6 +62,8 @@ public class JwtResourceServerWebSecurityConfiguration {
 			Converter<Jwt, AbstractAuthenticationToken> accessTokenConverter) throws Exception {
 		http.cors(Customizer.withDefaults()).csrf(csrf -> csrf.disable())
 				.authorizeHttpRequests(auth -> auth
+						// SSE chat: MVP permitAll (EventSource cannot attach Authorization header)
+						.requestMatchers("/api/v1/ai/chat/stream").permitAll()
 						.requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
 						.anyRequest().authenticated())
 				.oauth2ResourceServer(oauth2 -> oauth2.jwt(

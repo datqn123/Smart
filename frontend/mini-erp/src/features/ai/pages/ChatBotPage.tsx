@@ -4,6 +4,7 @@ import { Send, Image as ImageIcon, Mic, X, Paperclip, MessageSquare, Bot, User, 
 import type { ChatMessage } from "../types"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { openAiChatStream } from "../api/aiChatSse"
 
 export function ChatBotPage() {
   const { setTitle } = usePageTitle()
@@ -23,12 +24,48 @@ export function ChatBotPage() {
   const [isRecording, setIsRecording] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const streamRef = useRef<EventSource | null>(null)
 
   const scrollToBottom = () => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }
 
   useEffect(() => { scrollToBottom() }, [messages])
+
+  useEffect(() => {
+    return () => {
+      streamRef.current?.close()
+      streamRef.current = null
+    }
+  }, [])
+
+  const appendDeltaSmart = (current: string, delta: string) => {
+    if (!current) return delta
+    if (!delta) return current
+    const last = current.slice(-1)
+    const first = delta.slice(0, 1)
+
+    // Punctuation rules: no space before closing punctuations, and no space after opening punctuations.
+    const noSpaceBefore = /[,\.\!\?\:\;\)\]\}]/.test(first)
+    const noSpaceAfter = /[\(\[\{]/.test(last)
+    if (noSpaceBefore || noSpaceAfter) return `${current}${delta}`
+
+    const isLetter = (c: string) => /[A-Za-zÀ-ỹ]/.test(c)
+    const isDigit = (c: string) => /[0-9]/.test(c)
+    const isWordish = (c: string) => isLetter(c) || isDigit(c)
+
+    // Add a space after punctuation when the next chunk starts a word.
+    // Example: "Xin chào!" + "Rất vui..." => "Xin chào! Rất vui..."
+    const spaceAfterPunct = /[,\.\!\?\:\;]/.test(last) && isWordish(first)
+    if (spaceAfterPunct) return `${current} ${delta}`
+
+    // Do not insert spaces inside numbers like 2024.
+    if (isDigit(last) && isDigit(first)) return `${current}${delta}`
+
+    // Insert space only between word-ish boundaries (e.g. "Hello" + "world", "Năm" + "2024").
+    const needsSpace = isWordish(last) && isWordish(first) && !/\s/.test(last) && !/\s/.test(first)
+    return needsSpace ? `${current} ${delta}` : `${current}${delta}`
+  }
 
   const handleSend = (text?: string, type: "text" | "image" | "voice" = "text", metadata?: any) => {
     const content = text || inputValue
@@ -46,27 +83,54 @@ export function ChatBotPage() {
     setMessages(prev => [...prev, newMessage])
     if (type === "text") setInputValue("")
     
-    // Simulate AI response
-    setIsTyping(true)
-    setTimeout(() => {
-      let aiResponse = "Tôi đã ghi nhận yêu cầu của bạn. Tôi đang xử lý dữ liệu..."
-      
-      if (type === "image") {
-        aiResponse = "Tôi đã nhận được hình ảnh hóa đơn. Đang tiến hành quét OCR và bóc tách dữ liệu sản phẩm..."
-      } else if (type === "voice") {
-        aiResponse = `Bạn vừa nói: "${content}". Tôi đang thực hiện lệnh này trong kho hàng.`
-      }
-
+    if (type !== "text") {
       const assistantMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: aiResponse,
+        content: "Phiên bản hiện tại chỉ hỗ trợ chat text.",
         timestamp: new Date().toISOString(),
-        type: "text"
+        type: "text",
       }
       setMessages(prev => [...prev, assistantMsg])
-      setIsTyping(false)
-    }, 1500)
+      return
+    }
+
+    streamRef.current?.close()
+    streamRef.current = null
+
+    const assistantId = (Date.now() + 1).toString()
+    const assistantMsg: ChatMessage = {
+      id: assistantId,
+      role: "assistant",
+      content: "",
+      timestamp: new Date().toISOString(),
+      type: "text",
+    }
+
+    setMessages(prev => [...prev, assistantMsg])
+    setIsTyping(true)
+
+    streamRef.current = openAiChatStream({
+      query: content,
+      onDelta: (delta) => {
+        setMessages(prev =>
+          prev.map(m =>
+            m.id === assistantId ? { ...m, content: appendDeltaSmart(m.content ?? "", delta) } : m
+          )
+        )
+      },
+      onDone: () => {
+        setIsTyping(false)
+        streamRef.current = null
+      },
+      onError: (message) => {
+        setIsTyping(false)
+        setMessages(prev =>
+          prev.map(m => (m.id === assistantId ? { ...m, content: message || "Không thể kết nối trợ lý AI." } : m))
+        )
+        streamRef.current = null
+      },
+    })
   }
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
