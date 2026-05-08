@@ -1,0 +1,25 @@
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+exclude = [".venv", "venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.11"
+packages = ["app"]
+strict = true
+ignore_missing_imports = false
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+module = "langgraph.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "langgraph.graph.*"
+ignore_missing_imports = true
