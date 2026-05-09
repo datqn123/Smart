@@ -9,7 +9,13 @@ export default defineConfig({
   server: {
     proxy: {
       // Cùng origin: fetch('/api/...') → Spring trên 8080 (envelope JSON), không trúng index.html của Vite.
-      "/api": { target: "http://127.0.0.1:8080", changeOrigin: true },
+      // SSE (EventSource): tránh idle timeout quá ngắn của http-proxy / Node.
+      "/api": {
+        target: "http://127.0.0.1:8080",
+        changeOrigin: true,
+        timeout: 600_000,
+        proxyTimeout: 600_000,
+      },
     },
   },
   resolve: {

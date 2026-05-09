@@ -8,7 +8,7 @@ Gatekeeper review **đầu ra của AI_DEVELOPER**: coding rules + design confor
 
 ## 2. Inputs
 
-- Branch + commits của task: `feature/ai-task<XXX>` (`git diff develop..HEAD`).
+- Phạm vi review: `ai_python/app/`, `ai_python/tests/` so với SRS/ADR. **Không bắt buộc git**: nếu có `BASE_REF`/`BRANCH` (tuỳ Owner) có thể dùng `git diff` để thu hẹp scope; nếu không có ref → review static (grep/read tree) trên hai thư mục đó.
 - `ai_python/docs/srs/SRS_AI_Task<XXX>_*.md`.
 - `ai_python/docs/adr/ADR-<NNN>-*.md`.
 - Design Doc §1–§5: [`../../Design_Agent/CHAT_AGENT_DESIGN.md`](../../Design_Agent/CHAT_AGENT_DESIGN.md).
@@ -27,7 +27,7 @@ Gatekeeper review **đầu ra của AI_DEVELOPER**: coding rules + design confor
 | No hardcoded secret | grep `sk-`, `Bearer `, `api_key\s*=\s*"` (không qua `os.getenv`) |
 | Error handling async | grep `async def` không có `try`/`except` ở entrypoint → review case-by-case |
 | Logging level | `logging.getLogger(__name__)` thay vì `logging.info` global |
-| Conventional Commits | `git log develop..HEAD --pretty=%s` đúng format `<type>(<scope>): ...` |
+| Conventional Commits | Nếu có `git log` (có ref base): kiểm tra format; nếu không có git → ghi `Info` "skipped (no git ref)" — không Block |
 
 ### 3.2 Design conformance (Design Doc §1–§5)
 
@@ -70,8 +70,8 @@ Gatekeeper review **đầu ra của AI_DEVELOPER**: coding rules + design confor
 ```text
 # Code Review — Task<XXX>
 - Reviewer: AI_CODE_REVIEWER
-- Branch: feature/ai-task<XXX>
-- HEAD: <commit hash>
+- Task / nhãn branch (từ `Task<XXX>.md` nếu có): <text hoặc n/a>
+- HEAD / commit: <hash nếu có git; không thì n/a>
 - Iteration: <n> (1..3)
 
 ## Summary
@@ -118,16 +118,17 @@ Gatekeeper review **đầu ra của AI_DEVELOPER**: coding rules + design confor
 
 | Slot | Loại | Ví dụ |
 | :--- | :--- | :--- |
-| `BRANCH` | input | `feature/ai-task001` |
-| `BASE_REF` | input | `develop` |
+| `BRANCH` | input optional | `feature/ai-task001` — chỉ khi Owner/review dùng git |
+| `BASE_REF` | input optional | `develop` — chỉ khi có git diff |
 | `SRS_PATH` | input | `ai_python/docs/srs/SRS_AI_Task001_*.md` |
 | `ADR_PATH` | input | `ai_python/docs/adr/ADR-001-*.md` |
 | `OUT_PATH` | output | `ai_python/docs/task001/05-code-review/CODE_REVIEW_Task001.md` |
 | `ITERATION` | input | `1` (runner truyền 1..3) |
+| `TASK_FILE` | input optional | `ai_python/TASKS/Task001.md` — nhãn / scope |
 
 ## 8. STOP rules (escalate ngay, KHÔNG auto-loop)
 
-- **Hardcoded secret** / API key / `.env` content trong commit → STOP. Yêu cầu Owner: rotate key + git-filter-repo nếu push remote rồi.
+- **Hardcoded secret** / API key / `.env` trong code workspace → STOP. Yêu cầu Owner: rotate key; nếu đã từng push remote thì xử lý theo quy trình repo (git-filter-repo, v.v.).
 - **Mutation từ Chat Agent** không qua Write Agent + `interrupt()` → STOP (vi phạm bất biến tuyệt đối Design §1, §2.3).
 - **Code đụng `backend/` hoặc `frontend/`** → STOP (sai scope).
 - Phát hiện 5+ Block ở iteration 1 mà SRS/ADR rõ ràng → STOP (chứng tỏ DEV không đọc spec, không phải lỗi code) — báo Owner cần re-onboard DEV agent.

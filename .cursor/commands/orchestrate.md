@@ -24,7 +24,6 @@ description: Auto-run AI agent chain (BA → PM → TECH_LEAD → DEV → CODE_R
 ```yaml
 task_id: <Task???>
 task_slug: <slug>
-branch: feature/ai-task<???>
 artifacts:
   prd: <path?>
   srs: <path?>
@@ -61,7 +60,7 @@ Update state sau mỗi subagent return; in lại state ngắn cho user mỗi gat
 
 1. Read [`ai_python/AGENTS/WORKFLOW_RULE.md`](../../ai_python/AGENTS/WORKFLOW_RULE.md) + [`ai_python/AGENTS/AGENT_REGISTRY.md`](../../ai_python/AGENTS/AGENT_REGISTRY.md).
 2. Verify `ai_python/AGENTS/`, `ai_python/docs/`, `ai_python/TASKS/` tồn tại.
-3. `git branch --show-current` — log branch hiện tại (kỳ vọng `develop` hoặc một branch sạch).
+3. **Driver không dùng git**: không chạy lệnh git, không lưu branch/commit/hash, không `diff` / merge / push. Quản lý VCS là việc Owner (ngoài `/orchestrate`).
 4. Nếu `Mode=dry-run` → in plan từng step bên dưới + dự kiến artifact, **không** launch subagent. Stop.
 
 ### Step 1 — AI_PLANNER (HITL gate)
@@ -86,8 +85,8 @@ Update state sau mỗi subagent return; in lại state ngắn cho user mỗi gat
 
 ### Step 3 — AI_PM (G-AI-PM)
 
-- Launch với [`AI_PM_AGENT_INSTRUCTIONS.md`](../../ai_python/AGENTS/AI_PM_AGENT_INSTRUCTIONS.md). Slot: `SRS_PATH`, `TASK_ID`, `OUT_TASK_FILE`, `OUT_TASK_FOLDER`, `BRANCH_NAME`.
-- Verify branch tồn tại + `Task<XXX>.md` đúng cấu trúc → set `artifacts.task_file`, `state.branch`.
+- Launch với [`AI_PM_AGENT_INSTRUCTIONS.md`](../../ai_python/AGENTS/AI_PM_AGENT_INSTRUCTIONS.md). Slot: `SRS_PATH`, `TASK_ID`, `OUT_TASK_FILE`, `OUT_TASK_FOLDER`.
+- Verify `Task<XXX>.md` + folder `ai_python/docs/task<XXX>/` đúng cấu trúc → set `artifacts.task_file`.
 
 ### Step 4 — AI_TECH_LEAD (G-AI-TL)
 
@@ -96,8 +95,8 @@ Update state sau mỗi subagent return; in lại state ngắn cho user mỗi gat
 
 ### Step 5 — AI_DEVELOPER (G-AI-DEV)
 
-- Launch với [`AI_DEVELOPER_AGENT_INSTRUCTIONS.md`](../../ai_python/AGENTS/AI_DEVELOPER_AGENT_INSTRUCTIONS.md). Slot: `TASK_FILE`, `SRS_PATH`, `ADR_PATH`, `BRANCH`, `LOOP_FEEDBACK` (rỗng lần đầu).
-- Verify gate exit §5 (pytest/coverage/ruff/mypy + commit). Pass → đi tiếp.
+- Launch với [`AI_DEVELOPER_AGENT_INSTRUCTIONS.md`](../../ai_python/AGENTS/AI_DEVELOPER_AGENT_INSTRUCTIONS.md). Slot: `TASK_FILE`, `SRS_PATH`, `ADR_PATH`, `LOOP_FEEDBACK` (rỗng lần đầu). Driver **không** nhồi SOP dài vào prompt — subagent đọc file; driver chỉ path artifact + `LOOP_FEEDBACK` nếu có.
+- Verify gate exit §5 của DEV (pytest + coverage + ruff + mypy — **không** kiểm branch/commit). Pass → đi tiếp.
 
 ### Step 6 — AI_CODE_REVIEWER (G-AI-CR) — auto-loop
 
@@ -114,11 +113,11 @@ loop:
     relaunch AI_CODE_REVIEWER (iteration += 1)
 ```
 
-- Slot CR: `BRANCH`, `BASE_REF=develop`, `SRS_PATH`, `ADR_PATH`, `OUT_PATH`, `ITERATION`.
+- Slot CR: `SRS_PATH`, `ADR_PATH`, `OUT_PATH`, `ITERATION`, `TASK_FILE` (path Task chain để CR lấy nhãn / scope).
 
 ### Step 7 — AI_BRIDGE (G-AI-BRIDGE) — conditional
 
-- Skip nếu task không tạo/đổi event SSE và không tạo MCP tool mới (driver xác định bằng cách grep diff branch xem có chạm `app/api/sse.py` hoặc `app/mcp/`).
+- Skip nếu SRS + `Task<XXX>.md` không yêu cầu thay đổi contract SSE/MCP cho task này (driver đọc nhanh mục API/Design trong SRS/Task — **không** dùng git diff). Nếu không chắc → launch AI_BRIDGE `Mode=verify` (an toàn hơn skip nhầm).
 - Nếu chạm → launch [`AI_BRIDGE_AGENT_INSTRUCTIONS.md`](../../ai_python/AGENTS/AI_BRIDGE_AGENT_INSTRUCTIONS.md) `Mode=verify`.
 - Drift `Block` ở `ai_python ↔ SRS` → loop về DEV (cùng cơ chế CR, đếm `loop_count.bridge`).
 - Drift ngoài (Spring/FE) → ghi handoff section, **không** loop.
@@ -182,7 +181,6 @@ def run_with_loop(role_launch_fn, gate_check_fn, loop_key, max_loops=3, dev_rela
 - SRS: <link>
 - Task chain: <link>
 - ADR: <link>
-- Branch: <name> (HEAD: <hash>)
 - CR iterations: <n>
 - Bridge: <link or n/a>
 - Tester iterations: <n>; Eval pass-rate: <%>; HITL bypass: 0%
@@ -197,9 +195,9 @@ def run_with_loop(role_launch_fn, gate_check_fn, loop_key, max_loops=3, dev_rela
 ## /orchestrate DRY-RUN — Task=<id> Brief="..."
 1. AI_PLANNER → ai_python/docs/prd/PRD_<slug>.md (HITL: A/B/C)
 2. AI_BA → ai_python/docs/srs/SRS_AI_<task>_<slug>.md
-3. AI_PM → ai_python/TASKS/<task>.md + branch feature/ai-<task>
+3. AI_PM → ai_python/TASKS/<task>.md + ai_python/docs/task<XXX>/
 4. AI_TECH_LEAD → ai_python/docs/adr/ADR-<NNN>-<slug>.md
-5. AI_DEVELOPER → ai_python/app/** + tests
+5. AI_DEVELOPER → `ai_python/app/**` + tests (SOP §3: 3 bước — đọc → code+test → gate §5 một lượt)
 6. AI_CODE_REVIEWER → ai_python/docs/<task>/05-code-review/CODE_REVIEW_<task>.md (auto-loop ≤3)
 7. AI_BRIDGE (if SSE/MCP changed) → ai_python/docs/api/bridge/BRIDGE_AI_<task>_<slug>.md
 8. AI_TESTER → ai_python/docs/<task>/04-tester/* (auto-loop ≤3)
@@ -210,7 +208,7 @@ Budget cap: 20. Estimated invocations: 10–18 (no loops). With max loops: ~25 (
 
 ## Lưu ý kỹ thuật
 
-- Khi launch subagent qua Task tool, **luôn** truyền cả 3 thứ trong prompt: (a) nội dung file `*_INSTRUCTIONS.md` (read full), (b) I/O Contract instantiate cụ thể, (c) tóm tắt artifact đầu vào (đường dẫn file, không paste full nội dung).
+- Khi launch subagent qua Task tool, truyền (a) nội dung file `*_INSTRUCTIONS.md` **hoặc** `@path` đủ để subagent đọc trong repo, (b) I/O Contract instantiate, (c) đường dẫn artifact (không paste full PRD/SRS). **AI_DEVELOPER**: ưu tiên `@ai_python/AGENTS/AI_DEVELOPER_AGENT_INSTRUCTIONS.md` + slot path — không paste full instructions để tránh nhân đôi SOP.
 - Subagent không thấy lịch sử chat của driver — driver phải ghi rõ context cần thiết trong prompt.
 - Khi loop, đính kèm **path** của report cũ + 5–10 dòng quote Block nổi bật, không paste full report (tiết kiệm token).
 - Sau mỗi subagent xong: driver ghi 1 dòng vào terminal-log dạng `[gate=G-AI-DEV iter=1 budget=5/20] PASS/BLOCK <summary>`.

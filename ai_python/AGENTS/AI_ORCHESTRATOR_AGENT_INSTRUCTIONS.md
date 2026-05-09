@@ -13,7 +13,7 @@ Process auditor giám sát toàn chuỗi role: spot-check exit conditions từng
 - `Mode`: `spot-check` (sau 1 gate cụ thể) | `final` (cuối task/sprint).
 - `Gate`: `G-AI-BA` | `G-AI-PM` | `G-AI-TL` | `G-AI-DEV` | `G-AI-CR` | `G-AI-BRIDGE` | `G-AI-TST` | `G-AI-DS` (chỉ khi `Mode=spot-check`).
 - `Task`: `Task<XXX>`.
-- Toàn bộ artifact hiện có dưới `ai_python/docs/task<XXX>/`, `ai_python/TASKS/Task<XXX>.md`, `ai_python/docs/srs/`, `ai_python/docs/adr/`, code branch.
+- Toàn bộ artifact hiện có dưới `ai_python/docs/task<XXX>/`, `ai_python/TASKS/Task<XXX>.md`, `ai_python/docs/srs/`, `ai_python/docs/adr/`, code `ai_python/app/`.
 
 ## 3. Process (SOP)
 
@@ -22,10 +22,10 @@ Process auditor giám sát toàn chuỗi role: spot-check exit conditions từng
 | Gate | Spot-check |
 | :--- | :--- |
 | `G-AI-BA` | SRS file tồn tại; section 1–11 đầy đủ; mỗi event SSE có sample JSON; Open Question còn `[CRITICAL]` chưa đóng → `Block`; Approved status khớp Owner choice. |
-| `G-AI-PM` | `Task<XXX>.md` có ≥ 1 Unit + 1 Feature + 1 Eval; mỗi subtask có DoD link AC; branch `feature/ai-task<XXX>` exists trên remote. |
+| `G-AI-PM` | `Task<XXX>.md` có ≥ 1 Unit + 1 Feature + 1 Eval; mỗi subtask có DoD link AC; có dòng nhãn workflow (vd `Branch:`) nếu template PM yêu cầu — **không** verify git. |
 | `G-AI-TL` | ADR có 5 NFR cụ thể (số), ≥ 2 alternative, status `Accepted`; topology mermaid render được. |
-| `G-AI-DEV` | `git log develop..HEAD` ≥ 1 commit; pytest/ruff/mypy đã chạy (có log output); coverage ≥ 70%; branch đúng. **Cross-check**: số file mới trong commit ≥ số subtask Feature đã tick. |
-| `G-AI-CR` | Report tồn tại; verdict `PASS`; checklist 3.1–3.5 đều tick; iteration ≤ 3; **mỗi `Block` đã có commit fix tương ứng** (cross-check git log) khi iteration > 1. |
+| `G-AI-DEV` | pytest/ruff/mypy/coverage theo gate; **không** yêu cầu `git log`/branch. Cross-check nhẹ: mỗi Feature tick có ít nhất một file `app/` hoặc `tests/` liên quan (grep tên subtask hoặc AC). |
+| `G-AI-CR` | Report tồn tại; verdict `PASS`; checklist 3.1–3.5 đều tick; iteration ≤ 3; nếu iteration > 1: mỗi `Block` report trước có dấu hiệu đã xử (issue resolved / file đụng trong summary) — **không** bắt buộc đối chiếu git log. |
 | `G-AI-BRIDGE` | Bridge file đầy đủ cột; mỗi event SSE/MCP path trong SRS có 1 row trong bridge table. |
 | `G-AI-TST` | File `EVAL_REPORT_*`, `RED_TEAM_HITL_*`, `RED_TEAM_MCP_*`, `eval_run_*.jsonl` tồn tại; eval pass-rate ≥ 80%; HITL bypass = 0; p95/cost trong NFR. |
 | `G-AI-DS` | Sync report tồn tại; không drift `Block`. |
@@ -54,11 +54,11 @@ Build matrix bằng grep:
 | Signal | Severity |
 | :--- | :--- |
 | Tester báo `eval pass-rate ≥ 80%` nhưng `eval_run_*.jsonl` không có hoặc < 30 entry | `Block` (fake gate) |
-| CR verdict `PASS` nhưng `git diff` còn TODO comment "WIP" | `Major` |
+| CR verdict `PASS` nhưng còn comment `WIP`/`FIXME` trong `app/` | `Major` |
 | ADR §NFR có giá trị mà code không đo (không có hook) | `Major` |
-| Subtask trong Task<XXX>.md tick nhưng không có commit map | `Major` |
+| Subtask trong Task<XXX>.md tick nhưng thiếu test hoặc file app map (so SRS) | `Major` |
 | File ngoài `ai_python/` bị sửa | `Block` (cross-scope) |
-| Secret pattern xuất hiện trong commit (cross-check CR) | `Block` STOP |
+| Secret pattern trong code workspace (cross-check CR) | `Block` STOP |
 | HITL bypass red-team thiếu 1+ case sentinel (Design §6.1) | `Block` |
 
 ### 3.4 Final audit (Mode=final)

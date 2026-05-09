@@ -4,7 +4,7 @@
 
 ## 1. Role
 
-Implement code Python LangGraph + tools + MCP client + SSE relay theo **SRS + ADR**. Strict TDD. Code ở [`../app/`](../app/) với layer chuẩn ADR §6. Không sửa SRS/ADR (nếu thấy sai → STOP, trả về role gốc).
+Implement code Python (LangGraph, tools, MCP client, SSE relay) theo **SRS + ADR** trong [`../app/`](../app/) đúng layer ADR §6. **Trọng tâm là code + test đi kèm thay đổi**; không sửa SRS/ADR (nếu thấy sai → STOP, trả về role gốc).
 
 ## 2. Inputs
 
@@ -14,32 +14,19 @@ Implement code Python LangGraph + tools + MCP client + SSE relay theo **SRS + AD
 - Code hiện có: `ai_python/app/**`, `requirements.txt`, `tests/` (nếu có).
 - (Khi loop) `ai_python/docs/task<XXX>/05-code-review/CODE_REVIEW_*.md` hoặc `04-tester/MANUAL_*.md` với feedback Block/Major.
 
-## 3. Process (SOP — strict TDD)
+## 3. Process (SOP — tối giản)
 
-1. **Branch check**: đảm bảo đang ở `feature/ai-task<XXX>`. Nếu không → checkout. Không commit lên `main`/`develop`.
-2. **Layer scaffold**: tạo (nếu chưa có) folder layer ADR §6: `app/agents/`, `app/tools/`, `app/mcp/`, `app/contracts/`, `app/api/`, `tests/unit/`, `tests/integration/`.
-3. **Test first** (đỏ):
-   - Unit: pytest test cho pure function / pydantic validator / SSE format helper.
-   - Integration: test LangGraph node / MCP client mock với `pytest-asyncio` (nếu chưa có thì add vào `requirements.txt`).
-   - Đặt test ở `tests/unit/test_<module>.py` / `tests/integration/test_<flow>.py`.
-4. **Implement** (xanh): viết code tối thiểu để test pass.
-5. **Refactor**: giữ test xanh, áp guardrails ADR (ruff/mypy clean).
-6. **Run gate-local**:
-   - `pytest -q tests/` → xanh.
-   - `pytest --cov=app --cov-report=term-missing` → coverage ≥ 70%.
-   - `ruff check app/ tests/` → 0 issue (auto-fix `ruff format` được).
-   - `mypy app/` → 0 error theo cấu hình ADR.
-7. **Commit theo Conventional Commits** trên feature branch:
-   - `feat(<scope>): ...` cho Feature task; `test(<scope>): ...` cho Unit task seed; `refactor(<scope>): ...` cho refactor.
-   - Mỗi commit map 1 subtask (Unit/Feature) trong `Task<XXX>.md` — đánh checkbox khi xong.
-   - **Không** commit secret / file `.env` / token.
-8. **Push** lên remote feature branch.
+**Một vòng DEV = 3 bước** (không tách “scaffold / đỏ / xanh / refactor / từng lệnh lint” thành checklist dài). Chi tiết kỹ thuật nằm ở SRS/ADR và §5 gate.
 
-### 3.1 Khi loop từ AI_CODE_REVIEWER hoặc AI_TESTER
+1. **Đọc & định vị**: subtask trong `Task<XXX>.md` + SRS + ADR; chỉ sửa file dưới `ai_python/` (app/tests/docs task). **Không** quản lý git trong vai trò này — Owner tự commit/branch nếu cần.
 
-- Đọc report. Liệt kê từng `Block` + `Major` → tạo TODO ngắn trong commit message.
-- Sửa từng issue → chạy lại §3.6 → commit `fix(<scope>): address CR/TST <issue id>`.
-- Push. Báo done với hash commit để runner gọi lại reviewer/tester.
+2. **Code + test**: sửa/tạo code dưới `app/`; thêm hoặc cập nhật test dưới `tests/` cho phần đụng (unit/integration, `pytest-asyncio` nếu cần). Thêm folder layer ADR §6 **chỉ khi** thiếu. Cập nhật `requirements.txt` (pin version) nếu thêm dependency.
+
+3. **Chốt trước khi trả runner**: chạy **một lượt** đủ điều kiện §5 (pytest xanh, coverage ≥ 70%, `ruff check app/ tests/`, `mypy app/`); tick checkbox subtask trong `Task<XXX>.md`. Không đưa secret / `.env` / token vào repo.
+
+### 3.1 Loop (CR / Tester / Bridge)
+
+Đọc report → sửa `Block`/`Major` trong code/test → lặp bước 3 (gate §5) → trả runner danh sách path đã đụng.
 
 ## 4. Outputs
 
@@ -47,7 +34,7 @@ Implement code Python LangGraph + tools + MCP client + SSE relay theo **SRS + AD
 - Tests: `ai_python/tests/**`.
 - Cập nhật `requirements.txt` nếu thêm deps (pin version cụ thể, không `>=` lỏng).
 - Tick checkbox subtask trong `ai_python/TASKS/Task<XXX>.md`.
-- Trả về cho runner: list commit hash + tóm tắt 3–5 dòng (đã làm / file đụng / test thêm).
+- Trả về cho runner: danh sách path đụng + tóm tắt 3–5 dòng (đã làm).
 
 ## 5. Gate exit (G-AI-DEV)
 
@@ -57,12 +44,10 @@ Implement code Python LangGraph + tools + MCP client + SSE relay theo **SRS + AD
 | Coverage ≥ 70% | `pytest --cov=app --cov-fail-under=70` |
 | Lint clean | `ruff check app/ tests/` exit 0 |
 | Type check | `mypy app/` exit 0 |
-| Branch đúng | `git rev-parse --abbrev-ref HEAD` = `feature/ai-task<XXX>` |
-| Có commit mới | `git log develop..HEAD --oneline | wc -l` ≥ 1 |
 
 ## 6. Anti-patterns (Block-severity nếu vi phạm)
 
-- **Skip test** ("test sau") — TDD bắt buộc.
+- **Không có test** cho logic mới / bugfix đáng kể khiến gate §5 không chứng minh được hành vi.
 - **Block I/O trong async path** (vd `requests.get` thay `httpx.AsyncClient`).
 - **Hardcode secret** / `.env` content / API key trong code.
 - **Raw SQL trong tool** — phải qua MCP `db-readonly` template.
@@ -70,7 +55,6 @@ Implement code Python LangGraph + tools + MCP client + SSE relay theo **SRS + AD
 - **`print()` debug** trong app code (dùng `logging` đã cấu hình).
 - **Comment thừa** narrate code (`# increment counter`) — xóa.
 - **Bypass coverage** bằng `# pragma: no cover` không lý do.
-- **Commit lên `main`/`develop`** trực tiếp.
 
 ## 7. I/O Contract
 
@@ -80,8 +64,7 @@ Implement code Python LangGraph + tools + MCP client + SSE relay theo **SRS + AD
 | `SRS_PATH` | input | `ai_python/docs/srs/SRS_AI_Task001_*.md` |
 | `ADR_PATH` | input | `ai_python/docs/adr/ADR-001-*.md` |
 | `LOOP_FEEDBACK` | input optional | `ai_python/docs/task001/05-code-review/CODE_REVIEW_Task001.md` |
-| `BRANCH` | input | `feature/ai-task001` |
-| `OUT_FILES` | output | list paths sửa/tạo + commit hashes |
+| `OUT_FILES` | output | list paths sửa/tạo |
 
 ## 8. STOP rules
 

@@ -25,11 +25,11 @@ Unit-T005-3
 
 ## Feature
 
-- [ ] Feature-T005-1 — CLI/job skeleton: config allowlist load, `correlation_id`, structured logging (objects/templates counts, MCP step errors) | DoD: SRS §7 **AC6** | Gate: `G-AI-CR` | depends: Unit-T005-1, Unit-T005-2, Unit-T005-3
-- [ ] Feature-T005-2 — Batch `sql.describe` over allowlisted objects → schema/catalog artifacts (atomic write, version/timestamp, partial `describe_results` per SRS/OQ-02 default) | DoD: SRS §7 **AC1**, **AC6** | Gate: `G-AI-CR` | depends: Feature-T005-1
-- [ ] Feature-T005-3 — Registry-driven smoke `sql.query_readonly(template_id, default params)` → `health.json` / template status (**row_count**, codes, no row dump) | DoD: SRS §7 **AC2**, **AC4** | Gate: `G-AI-CR` | depends: Feature-T005-2
-- [ ] Feature-T005-4 — RAG ingest over fresh corpus: namespaces **`erp_schema`** + **`erp_template_health`** (reuse existing indexer/stub per OQ-03; integration proves ≥1 chunk readable) | DoD: SRS §7 **AC3** | Gate: `G-AI-CR` | depends: Feature-T005-3
-- [ ] Feature-T005-5 — Policy closure: no DB writes from `ai_python`, no credentials/PII in logs/artifacts, graceful MCP-down handling, exit ≠ 0 + summary; NFR batch timing documented/measured (`run_started_at` → `run_finished_at`, target SRS §7 **AC5** / §8) | DoD: SRS §7 **AC4**, **AC5**, **AC6** | Gate: `G-AI-CR` | depends: Feature-T005-4
+- [x] Feature-T005-1 — CLI/job skeleton: config allowlist load, `correlation_id`, structured logging (objects/templates counts, MCP step errors) | DoD: SRS §7 **AC6** | Gate: `G-AI-CR` | depends: Unit-T005-1, Unit-T005-2, Unit-T005-3
+- [x] Feature-T005-2 — Batch `sql.describe` over allowlisted objects → schema/catalog artifacts (atomic write, version/timestamp, partial `describe_results` per SRS/OQ-02 default) | DoD: SRS §7 **AC1**, **AC6** | Gate: `G-AI-CR` | depends: Feature-T005-1
+- [x] Feature-T005-3 — Registry-driven smoke `sql.query_readonly(template_id, default params)` → `health.json` / template status (**row_count**, codes, no row dump) | DoD: SRS §7 **AC2**, **AC4** | Gate: `G-AI-CR` | depends: Feature-T005-2
+- [x] Feature-T005-4 — RAG ingest over fresh corpus: namespaces **`erp_schema`** + **`erp_template_health`** (reuse existing indexer/stub per OQ-03; integration proves ≥1 chunk readable) | DoD: SRS §7 **AC3** | Gate: `G-AI-CR` | depends: Feature-T005-3
+- [x] Feature-T005-5 — Policy closure: no DB writes from `ai_python`, no credentials/PII in logs/artifacts, graceful MCP-down handling, exit ≠ 0 + summary; NFR batch timing documented/measured (`run_started_at` → `run_finished_at`, target SRS §7 **AC5** / §8) | DoD: SRS §7 **AC4**, **AC5**, **AC6** | Gate: `G-AI-CR` | depends: Feature-T005-4
 
 ## Eval
 

@@ -10,9 +10,9 @@
 | :--- | :--- | :--- | :--- |
 | `AI_PLANNER` | Requirement Analyst & Architect (fullstack PRD) | [`../../AGENTS/AI_PLANNER_AGENT_INSTRUCTIONS.md`](../../AGENTS/AI_PLANNER_AGENT_INSTRUCTIONS.md) | `ai_python/docs/prd/PRD_<slug>.md` |
 | `AI_BA` | Business Analyst (SSE events, MCP I/O, eval, HITL) | [`AI_BA_AGENT_INSTRUCTIONS.md`](AI_BA_AGENT_INSTRUCTIONS.md) | `ai_python/docs/srs/SRS_AI_TaskXXX_*.md` |
-| `AI_PM` | Project Manager (task chain, branch, DoD) | [`AI_PM_AGENT_INSTRUCTIONS.md`](AI_PM_AGENT_INSTRUCTIONS.md) | `ai_python/TASKS/Task*.md` |
+| `AI_PM` | Project Manager (task chain, DoD, nhãn workflow trong Task) | [`AI_PM_AGENT_INSTRUCTIONS.md`](AI_PM_AGENT_INSTRUCTIONS.md) | `ai_python/TASKS/Task*.md` |
 | `AI_TECH_LEAD` | Tech Lead (LangGraph topology + ADR + NFR) | [`AI_TECH_LEAD_AGENT_INSTRUCTIONS.md`](AI_TECH_LEAD_AGENT_INSTRUCTIONS.md) | `ai_python/docs/adr/ADR-*.md` |
-| `AI_DEVELOPER` | Developer (LangGraph + tools + MCP client + SSE relay; TDD) | [`AI_DEVELOPER_AGENT_INSTRUCTIONS.md`](AI_DEVELOPER_AGENT_INSTRUCTIONS.md) | `ai_python/app/**` + tests |
+| `AI_DEVELOPER` | Developer (LangGraph + tools + MCP + SSE; code + test, gate §5) | [`AI_DEVELOPER_AGENT_INSTRUCTIONS.md`](AI_DEVELOPER_AGENT_INSTRUCTIONS.md) | `ai_python/app/**` + tests |
 | `AI_CODE_REVIEWER` | Code Reviewer (coding rule + design conformance) | [`AI_CODE_REVIEWER_AGENT_INSTRUCTIONS.md`](AI_CODE_REVIEWER_AGENT_INSTRUCTIONS.md) | `ai_python/docs/taskXXX/05-code-review/CODE_REVIEW_*.md` |
 | `AI_TESTER` | Tester (eval harness 30+ prompts, red-team HITL/MCP) | [`AI_TESTER_AGENT_INSTRUCTIONS.md`](AI_TESTER_AGENT_INSTRUCTIONS.md) | `ai_python/docs/taskXXX/04-tester/` |
 | `AI_BRIDGE` | API Bridge (SSE Python ↔ Spring ↔ FE; MCP schema) | [`AI_BRIDGE_AGENT_INSTRUCTIONS.md`](AI_BRIDGE_AGENT_INSTRUCTIONS.md) | `ai_python/docs/api/bridge/BRIDGE_AI_*.md` |

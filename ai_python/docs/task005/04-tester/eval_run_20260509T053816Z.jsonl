@@ -1,0 +1,38 @@
+{"id": "T005-B1-01", "ok": true, "detail": "SqlDescribeIn rejects blank object_name", "capability": "batch_describe", "base_scenario": "B1"}
+{"id": "T005-B1-02", "ok": true, "detail": "SqlDescribeOut accepts 512 columns", "capability": "batch_describe", "base_scenario": "B1"}
+{"id": "T005-B1-03", "ok": true, "detail": "happy pipeline exit 0", "capability": "batch_pipeline", "base_scenario": "B1"}
+{"id": "T005-B1-04", "ok": true, "detail": "catalog versioned", "capability": "batch_describe", "base_scenario": "B1"}
+{"id": "T005-B1-05", "ok": true, "detail": "health smoke summary-only", "capability": "batch_smoke", "base_scenario": "B1"}
+{"id": "T005-B1-06", "ok": true, "detail": "index_chunks>=2", "capability": "batch_rag", "base_scenario": "B1"}
+{"id": "T005-B2-01", "ok": true, "detail": "partial describe_results", "capability": "batch_describe", "base_scenario": "B2"}
+{"id": "T005-B2-02", "ok": true, "detail": "has_failures true", "capability": "batch_describe", "base_scenario": "B2"}
+{"id": "T005-B2-03", "ok": true, "detail": "DB_TIMEOUT on failed object", "capability": "batch_describe", "base_scenario": "B2"}
+{"id": "T005-B2-04", "ok": true, "detail": "describe fail + smoke ok -> exit != 0", "capability": "batch_pipeline", "base_scenario": "B2"}
+{"id": "T005-B3-01", "ok": true, "detail": "two templates invoked", "capability": "batch_smoke", "base_scenario": "B3"}
+{"id": "T005-B3-02", "ok": true, "detail": "serialised summary-only", "capability": "batch_smoke", "base_scenario": "B3"}
+{"id": "T005-B3-03", "ok": true, "detail": "SqlQueryReadonlyIn extra=forbid", "capability": "batch_smoke", "base_scenario": "B3"}
+{"id": "T005-B3-04", "ok": true, "detail": "row_count capped at 50", "capability": "batch_smoke", "base_scenario": "B3"}
+{"id": "T005-B3-05", "ok": true, "detail": "non-smoke_safe skipped", "capability": "batch_smoke", "base_scenario": "B3"}
+{"id": "T005-B4-01", "ok": true, "detail": "DB_QUERY_REJECTED recorded", "capability": "batch_smoke", "base_scenario": "B4"}
+{"id": "T005-B4-02", "ok": true, "detail": "smoke_templates_failed populated", "capability": "batch_pipeline", "base_scenario": "B4"}
+{"id": "T005-B4-03", "ok": true, "detail": "smoke_entry_from_failure ok", "capability": "batch_smoke", "base_scenario": "B4"}
+{"id": "T005-B5-01", "ok": true, "detail": "transport down handled", "capability": "batch_resilience", "base_scenario": "B5"}
+{"id": "T005-B5-02", "ok": true, "detail": "Unconfigured raises McpTransportError", "capability": "batch_resilience", "base_scenario": "B5"}
+{"id": "T005-B5-03", "ok": true, "detail": "log_summary observability keys", "capability": "batch_observability", "base_scenario": "B5"}
+{"id": "T005-B6-01", "ok": true, "detail": "ingest non-empty", "capability": "batch_rag", "base_scenario": "B6"}
+{"id": "T005-B6-02", "ok": true, "detail": "erp_schema readable", "capability": "batch_rag", "base_scenario": "B6"}
+{"id": "T005-B6-03", "ok": true, "detail": "erp_template_health readable", "capability": "batch_rag", "base_scenario": "B6"}
+{"id": "T005-X-01", "ok": true, "detail": "duration_seconds recorded", "capability": "batch_observability", "base_scenario": "cross"}
+{"id": "T005-X-02", "ok": true, "detail": "DEFAULT_CORPUS_ROOT stable", "capability": "batch_pipeline", "base_scenario": "cross"}
+{"id": "T005-X-03", "ok": true, "detail": "CorpusJobContext validates", "capability": "batch_contract", "base_scenario": "cross"}
+{"id": "T005-X-04", "ok": true, "detail": "McpToolError fixture ok", "capability": "batch_contract", "base_scenario": "cross"}
+{"id": "T005-RT-H1", "ok": true, "detail": "no interrupt in orchestrator", "capability": "red_team_hitl", "base_scenario": "HITL"}
+{"id": "T005-RT-H2", "ok": true, "detail": "no HITL symbols in task005 app modules", "capability": "red_team_hitl", "base_scenario": "HITL"}
+{"id": "T005-RT-H3", "ok": true, "detail": "DbReadonlyMcpClient: describe + query_readonly", "capability": "red_team_hitl", "base_scenario": "HITL"}
+{"id": "T005-RT-H4", "ok": true, "detail": "no obvious REST POST in task005 modules", "capability": "red_team_hitl", "base_scenario": "HITL"}
+{"id": "T005-RT-H5", "ok": true, "detail": "no approval / write-trigger vocabulary in task005 app", "capability": "red_team_hitl", "base_scenario": "HITL"}
+{"id": "T005-RT-M1", "ok": true, "detail": "describe input: object_name only", "capability": "red_team_mcp", "base_scenario": "MCP"}
+{"id": "T005-RT-M2", "ok": true, "detail": "query_readonly: template_id + params", "capability": "red_team_mcp", "base_scenario": "MCP"}
+{"id": "T005-RT-M3", "ok": true, "detail": "row_count capped at 50", "capability": "red_team_mcp", "base_scenario": "MCP"}
+{"id": "T005-RT-M4", "ok": true, "detail": "DB_QUERY_REJECTED typed", "capability": "red_team_mcp", "base_scenario": "MCP"}
+{"id": "T005-RT-M5", "ok": true, "detail": "extra field rejected", "capability": "red_team_mcp", "base_scenario": "MCP"}

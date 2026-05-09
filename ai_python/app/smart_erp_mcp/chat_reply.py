@@ -51,7 +51,7 @@ def format_turn_as_chat_text(turn: dict[str, Any]) -> str:
                 continue
             cols = list(res.get("columns") or [])
             rows = list(res.get("rows") or [])
-            lines.append("Số liệu (demo SQLite, tối đa 5 dòng):")
+            lines.append("Số liệu (DB read-only qua template, tối đa 5 dòng):")
             if cols:
                 lines.append(" | ".join(str(c) for c in cols))
             for row in rows[:5]:

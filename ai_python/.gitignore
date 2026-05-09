@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Test / lint caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# Generated corpus data (recreated by the daily job)
+data/rag_corpus/erp_schema/
+data/rag_corpus/erp_template_health/
+data/rag_corpus/index/

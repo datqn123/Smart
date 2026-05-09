@@ -1,9 +1,9 @@
-from collections.abc import Iterator
+from collections.abc import AsyncIterator
 
 from fastapi import FastAPI, Query
 from fastapi.responses import StreamingResponse
 
-from .mkp_client import stream_chat_deltas
+from .smart_erp_mcp.agent_turn import stream_final_answer
 
 app = FastAPI(title="ai_python", version="0.1.0")
 
@@ -24,10 +24,10 @@ def health() -> dict[str, str]:
 
 
 @app.get("/v1/chat/stream")
-def chat_stream(q: str = Query(min_length=1, max_length=4000)) -> StreamingResponse:
-    def gen() -> Iterator[str]:
+async def chat_stream(q: str = Query(min_length=1, max_length=4000)) -> StreamingResponse:
+    async def gen() -> AsyncIterator[str]:
         try:
-            for delta in stream_chat_deltas(q):
+            async for delta in stream_final_answer(q):
                 yield _sse_event("delta", delta)
             yield _sse_event("done", "[DONE]")
         except Exception as e:
@@ -43,4 +43,3 @@ def chat_stream(q: str = Query(min_length=1, max_length=4000)) -> StreamingRespo
             "X-Accel-Buffering": "no",
         },
     )
-

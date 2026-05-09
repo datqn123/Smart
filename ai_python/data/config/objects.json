@@ -1,3 +1,3 @@
 {
-  "objects": []
+  "objects": ["public.inventory", "public.products", "public.salesorders"]
 }

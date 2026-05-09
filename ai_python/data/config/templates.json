@@ -1,3 +1,18 @@
 {
-  "templates": []
+  "templates": [
+    {
+      "template_id": "inventory_by_sku_prefix_v1",
+      "intent": "report.inventory_by_sku",
+      "description": "Tồn kho lọc theo tiền tố SKU (ILIKE, LIMIT).",
+      "params": { "sku_prefix": "DEMO-", "limit": 20 },
+      "smoke_safe": true
+    },
+    {
+      "template_id": "recent_sales_orders_v1",
+      "intent": "report.recent_sales_orders",
+      "description": "Danh sách đơn bán mới nhất (ORDER BY created_at DESC, LIMIT).",
+      "params": { "limit": 15 },
+      "smoke_safe": true
+    }
+  ]
 }

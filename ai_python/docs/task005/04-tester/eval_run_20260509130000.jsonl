@@ -1,0 +1,39 @@
+{"id": "T005-B1-01", "pass": true, "detail": "catalog.corpus_version matches CorpusJobContext", "duration_ms": 52.855}
+{"id": "T005-B1-02", "pass": true, "detail": "correlation_id propagated", "duration_ms": 28.066}
+{"id": "T005-B1-03", "pass": true, "detail": "describe_results={'reporting.sales_by_day_v1': 'ok'}", "duration_ms": 32.69}
+{"id": "T005-B1-04", "pass": true, "detail": "order=('reporting.a_v1', 'reporting.b_v1', 'reporting.c_v1')", "duration_ms": 59.137}
+{"id": "T005-B1-05", "pass": true, "detail": "no obvious secret markers in catalog file", "duration_ms": 26.324}
+{"id": "T005-B1-06", "pass": true, "detail": "catalog objects omit SQL row payloads", "duration_ms": 24.584}
+{"id": "T005-B2-01", "pass": true, "detail": "{'reporting.sales_by_day_v1': 'failed'}", "duration_ms": 40.02}
+{"id": "T005-B2-02", "pass": true, "detail": "all objects recorded", "duration_ms": 44.744}
+{"id": "T005-B2-03", "pass": true, "detail": "failure code preserved", "duration_ms": 37.789}
+{"id": "T005-B2-04", "pass": true, "detail": "exit_code=1", "duration_ms": 35.808}
+{"id": "T005-B3-01", "pass": true, "detail": "tried={'sales_by_day_v1', 'inventory_snapshot_v1'}", "duration_ms": 43.489}
+{"id": "T005-B3-02", "pass": true, "detail": "health summary-only", "duration_ms": 20.836}
+{"id": "T005-B3-03", "pass": true, "detail": "['sales_by_day_v1']", "duration_ms": 23.864}
+{"id": "T005-B3-04", "pass": true, "detail": "params={'date_from': '2026-04-01'}", "duration_ms": 38.654}
+{"id": "T005-B3-05", "pass": true, "detail": "tried=['sales_by_day_v1', 'inventory_snapshot_v1']", "duration_ms": 15.583}
+{"id": "T005-B4-01", "pass": true, "detail": "codes={'DB_QUERY_REJECTED'}", "duration_ms": 41.136}
+{"id": "T005-B4-02", "pass": true, "detail": "[SmokeTemplateFailure(template_id='sales_by_day_v1', code='DB_QUERY_REJECTED')]", "duration_ms": 38.475}
+{"id": "T005-B4-03", "pass": true, "detail": "exit=1", "duration_ms": 32.287}
+{"id": "T005-B5-01", "pass": true, "detail": "codes={'MCP_TRANSPORT_DOWN'}", "duration_ms": 38.449}
+{"id": "T005-B5-02", "pass": true, "detail": "exit=1", "duration_ms": 44.17}
+{"id": "T005-B5-03", "pass": true, "detail": "corr_keep", "duration_ms": 42.775}
+{"id": "T005-B6-01", "pass": true, "detail": "n_chunks=2", "duration_ms": 28.428}
+{"id": "T005-B6-02", "pass": true, "detail": "C:\\Users\\Admin\\AppData\\Local\\Temp\\tmpr4td1d3m\\rag\\index\\index__2026-05-09T12-00-00Z.json", "duration_ms": 26.527}
+{"id": "T005-B6-03", "pass": true, "detail": "schema_chunks=1", "duration_ms": 36.418}
+{"id": "T005-X-01", "pass": false, "detail": "no handler registered", "duration_ms": 0.0}
+{"id": "T005-X-02", "pass": false, "detail": "no handler registered", "duration_ms": 0.0}
+{"id": "T005-X-03", "pass": false, "detail": "no handler registered", "duration_ms": 0.0}
+{"id": "T005-X-04", "pass": false, "detail": "no handler registered", "duration_ms": 0.0}
+{"id": "T005-RT-H1", "pass": false, "detail": "no handler registered", "duration_ms": 0.0}
+{"id": "T005-RT-H2", "pass": false, "detail": "no handler registered", "duration_ms": 0.0}
+{"id": "T005-RT-H3", "pass": false, "detail": "no handler registered", "duration_ms": 0.0}
+{"id": "T005-RT-H4", "pass": false, "detail": "no handler registered", "duration_ms": 0.0}
+{"id": "T005-RT-H5", "pass": false, "detail": "no handler registered", "duration_ms": 0.0}
+{"id": "T005-RT-M1", "pass": false, "detail": "no handler registered", "duration_ms": 0.0}
+{"id": "T005-RT-M2", "pass": false, "detail": "no handler registered", "duration_ms": 0.0}
+{"id": "T005-RT-M3", "pass": false, "detail": "no handler registered", "duration_ms": 0.0}
+{"id": "T005-RT-M4", "pass": false, "detail": "no handler registered", "duration_ms": 0.0}
+{"id": "T005-RT-M5", "pass": false, "detail": "no handler registered", "duration_ms": 0.0}
+{"eval_summary": {"total_prompts": 38, "passed": 24, "pass_rate_pct": 63.16, "branch": "feature/ai-task005", "timestamp_utc": "2026-05-09T05:37:00.751002+00:00"}}

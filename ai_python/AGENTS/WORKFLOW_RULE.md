@@ -61,9 +61,9 @@ flowchart LR
 | :--- | :--- | :--- |
 | `G-AI-PLAN` | AI_PLANNER | PRD ở `ai_python/docs/prd/PRD_<slug>.md` + Owner xác nhận option A/B/C |
 | `G-AI-BA` | AI_BA | `ai_python/docs/srs/SRS_AI_TaskXXX_*.md` Approved (SSE events + MCP I/O + eval criteria + HITL flow + ≥1 sample JSON request/response per event) |
-| `G-AI-PM` | AI_PM | `ai_python/TASKS/Task<XXX>.md` chain (Unit + Feature + Eval) merged vào `develop`; branch `feature/ai-task<XXX>` từ latest `develop` |
+| `G-AI-PM` | AI_PM | `ai_python/TASKS/Task<XXX>.md` chain (Unit + Feature + Eval) + folder task docs; nhãn workflow trong Task file (merge/push do Owner tự VCS) |
 | `G-AI-TL` | AI_TECH_LEAD | `ai_python/docs/adr/ADR-<NNN>-<slug>.md` có 5 NFR mục: p95 latency / cost cap / HITL bypass=0% / file caps / model-provider lock |
-| `G-AI-DEV` | AI_DEVELOPER | `pytest -q` xanh trên branch; coverage ≥ 70%; `ruff check` + `mypy` clean theo cấu hình ADR; commit theo Conventional Commits trên feature branch |
+| `G-AI-DEV` | AI_DEVELOPER | `pytest -q` xanh; coverage ≥ 70%; `ruff check` + `mypy` clean theo ADR — **không** yêu cầu branch/commit trong pipeline |
 | `G-AI-CR` | AI_CODE_REVIEWER | `ai_python/docs/taskXXX/05-code-review/CODE_REVIEW_TaskXXX.md` có 0 `Block` + 0 `Major` chưa giải quyết (hoặc có ADR exception) |
 | `G-AI-BRIDGE` | AI_BRIDGE | Bắt buộc khi task tạo/đổi event SSE hoặc MCP tool schema; `ai_python/docs/api/bridge/BRIDGE_AI_TaskXXX_*.md` đầy đủ cột (xem `AI_BRIDGE_AGENT_INSTRUCTIONS.md` §5) |
 | `G-AI-TST` | AI_TESTER | Eval pass ≥ 80% (≥30 prompt cover 4 năng lực Design Doc §6); 0% HITL bypass; MCP guardrail red-team pass; latency/cost trong NFR ADR |
@@ -89,7 +89,7 @@ flowchart LR
 | AI_BA | Open Question gắn tag `[CRITICAL]` không có default trong Design Doc / ADR | Quyết định nghiệp vụ thật, không default được |
 | AI_TECH_LEAD | Model/provider chưa cấu hình API key hoặc MCP server chưa cài | Không thể implement |
 | AI_DEVELOPER | Dependency conflict không tự fix; test infrastructure (pytest) hỏng | Không thể tiếp |
-| AI_CODE_REVIEWER | Phát hiện hardcoded secret / API key / `.env` commit | Security incident |
+| AI_CODE_REVIEWER | Phát hiện hardcoded secret / API key / `.env` trong code | Security incident |
 | AI_TESTER | Red-team chứng minh HITL bypass thật (mutation không qua `interrupt()`) | Vi phạm bất biến tuyệt đối Design §1 |
 | AI_BRIDGE | Path BE thực tế lệch với spec mà BE đã merge | Data integrity |
 | AI_DOC_SYNC | Code đụng chạm `backend/` hoặc `frontend/` (sai scope) | Vượt boundary repo |
@@ -100,7 +100,7 @@ flowchart LR
 ## 4. Bất biến không được vi phạm
 
 1. **Mutation luôn qua Write Agent + `interrupt()`** — Chat Agent / runner không tự gọi tool ghi DB. Design Doc §1, §2.3.
-2. **No commit to `main` / `develop`** — chỉ branch `feature/ai-task<XXX>` từ latest `develop` (do AI_PM tạo).
+2. **Không sửa trực tiếp `main` / `develop`** trong vai trò agent chain — nhánh/merge do Owner quản lý ngoài pipeline; agent chỉ làm việc dưới `ai_python/` theo Task.
 3. **No HITL ngoài AI_PLANNER** trong auto-mode. Nếu role muốn hỏi user → áp default + log assumption hoặc match STOP rule.
 4. **No cross-scope edit** — file Python chỉ trong `ai_python/app/`, doc chỉ trong `ai_python/docs/`. Đụng `backend/` / `frontend/` → STOP.
 5. **No secret in code** — API key qua biến môi trường (xem `ai_python/README.md`).

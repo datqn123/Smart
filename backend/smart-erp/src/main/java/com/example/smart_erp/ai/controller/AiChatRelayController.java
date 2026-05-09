@@ -6,6 +6,7 @@ import java.io.InputStreamReader;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
+import java.net.http.HttpClient.Version;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
@@ -33,8 +34,21 @@ public class AiChatRelayController {
 	private final ExecutorService sseIoExecutor = Executors.newCachedThreadPool();
 
 	public AiChatRelayController(@Value("${app.ai.python.base-url}") String pythonBaseUrl) {
-		this.pythonBaseUrl = Objects.requireNonNull(pythonBaseUrl, "pythonBaseUrl").replaceAll("/+$", "");
+		this.pythonBaseUrl = normalizePythonBaseUrl(pythonBaseUrl);
 		this.httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+	}
+
+	/**
+	 * Avoid {@code URI.create("localhost:9000/...")} (opaque / wrong scheme) and trim trailing slashes.
+	 * Uvicorn expects cleartext HTTP/1.1; {@code https://} to port 9000 causes TLS bytes → "Invalid HTTP request".
+	 */
+	private static String normalizePythonBaseUrl(String raw) {
+		String s = Objects.requireNonNull(raw, "pythonBaseUrl").trim();
+		s = s.replaceAll("/+$", "");
+		if (!(s.startsWith("http://") || s.startsWith("https://"))) {
+			s = "http://" + s;
+		}
+		return s;
 	}
 
 	@GetMapping(path = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -45,15 +59,30 @@ public class AiChatRelayController {
 
 		sseIoExecutor.execute(() -> {
 			try {
-				HttpRequest req = HttpRequest.newBuilder(uri)
-						.timeout(Duration.ofMinutes(5))
-						.header("Accept", "text/event-stream")
-						.GET()
-						.build();
+				HttpRequest req = HttpRequest.newBuilder(uri).version(Version.HTTP_1_1).timeout(Duration.ofMinutes(5))
+						.header("Accept", "text/event-stream").GET().build();
 
 				HttpResponse<InputStream> res = httpClient.send(req, HttpResponse.BodyHandlers.ofInputStream());
+				int code = res.statusCode();
+				if (code < 200 || code >= 300) {
+					String detail;
+					try (InputStream errIn = res.body()) {
+						byte[] snippet = errIn.readNBytes(2048);
+						detail =
+								new String(snippet, StandardCharsets.UTF_8).replace('\r', ' ').replace('\n', ' ');
+					}
+					String msg = "Python AI HTTP " + code
+							+ " — đặt AI_PYTHON_BASE_URL=http://127.0.0.1:9000 (uvicorn chỉ nhận HTTP thường, không "
+							+ "https:// tới cổng 9000 — TLS sẽ gây lỗi \"Invalid HTTP request\" trên Python). Chi tiết: "
+							+ detail;
+					emitter.send(SseEmitter.event().name("error").data(msg));
+					emitter.complete();
+					return;
+				}
 
-				try (BufferedReader reader = new BufferedReader(new InputStreamReader(res.body(), StandardCharsets.UTF_8))) {
+				try (InputStream upstream = res.body();
+						BufferedReader reader =
+								new BufferedReader(new InputStreamReader(upstream, StandardCharsets.UTF_8))) {
 					String line;
 					String event = null;
 					StringBuilder data = new StringBuilder();

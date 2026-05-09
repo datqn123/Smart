@@ -1,0 +1,37 @@
+{"id": "T005-B1-01", "ok": true, "detail": "SqlDescribeIn rejects blank object_name", "capability": "batch_describe", "base_scenario": null}
+{"id": "T005-B1-02", "ok": true, "detail": "SqlDescribeOut accepts 512 columns", "capability": "batch_describe", "base_scenario": null}
+{"id": "T005-B1-03", "ok": true, "detail": "happy pipeline exit 0", "capability": "batch_describe", "base_scenario": null}
+{"id": "T005-B1-04", "ok": true, "detail": "catalog versioned", "capability": "batch_describe", "base_scenario": null}
+{"id": "T005-B1-05", "ok": true, "detail": "health smoke summary-only", "capability": "batch_describe", "base_scenario": null}
+{"id": "T005-B1-06", "ok": true, "detail": "index_chunks>=2", "capability": "batch_describe", "base_scenario": null}
+{"id": "T005-B2-01", "ok": true, "detail": "partial describe_results", "capability": "partial_failure", "base_scenario": null}
+{"id": "T005-B2-02", "ok": true, "detail": "has_failures true", "capability": "partial_failure", "base_scenario": null}
+{"id": "T005-B2-03", "ok": true, "detail": "DB_TIMEOUT on failed object", "capability": "partial_failure", "base_scenario": null}
+{"id": "T005-B2-04", "ok": true, "detail": "describe fail + smoke ok -> exit != 0", "capability": "partial_failure", "base_scenario": null}
+{"id": "T005-B2-05", "ok": false, "detail": "unknown case_id=T005-B2-05", "capability": "partial_failure", "base_scenario": null}
+{"id": "T005-B3-01", "ok": true, "detail": "two templates invoked", "capability": "smoke_query_readonly", "base_scenario": null}
+{"id": "T005-B3-02", "ok": true, "detail": "serialised summary-only", "capability": "smoke_query_readonly", "base_scenario": null}
+{"id": "T005-B3-03", "ok": true, "detail": "SqlQueryReadonlyIn extra=forbid", "capability": "smoke_query_readonly", "base_scenario": null}
+{"id": "T005-B3-04", "ok": true, "detail": "row_count capped at 50", "capability": "smoke_query_readonly", "base_scenario": null}
+{"id": "T005-B3-05", "ok": true, "detail": "non-smoke_safe skipped", "capability": "smoke_query_readonly", "base_scenario": null}
+{"id": "T005-B4-01", "ok": true, "detail": "DB_QUERY_REJECTED recorded", "capability": "smoke_query_readonly", "base_scenario": null}
+{"id": "T005-B4-02", "ok": true, "detail": "smoke_templates_failed populated", "capability": "smoke_query_readonly", "base_scenario": null}
+{"id": "T005-B4-03", "ok": true, "detail": "smoke_entry_from_failure ok", "capability": "smoke_query_readonly", "base_scenario": null}
+{"id": "T005-B4-04", "ok": false, "detail": "unknown case_id=T005-B4-04", "capability": "smoke_query_readonly", "base_scenario": null}
+{"id": "T005-B4-05", "ok": false, "detail": "unknown case_id=T005-B4-05", "capability": "smoke_query_readonly", "base_scenario": null}
+{"id": "T005-B5-01", "ok": true, "detail": "transport down handled", "capability": "mcp_transport", "base_scenario": null}
+{"id": "T005-B5-02", "ok": true, "detail": "Unconfigured raises McpTransportError", "capability": "mcp_transport", "base_scenario": null}
+{"id": "T005-B5-03", "ok": true, "detail": "log_summary observability keys", "capability": "mcp_transport", "base_scenario": null}
+{"id": "T005-B5-04", "ok": false, "detail": "unknown case_id=T005-B5-04", "capability": "mcp_transport", "base_scenario": null}
+{"id": "T005-B6-01", "ok": true, "detail": "ingest non-empty", "capability": "rag_ingest", "base_scenario": null}
+{"id": "T005-B6-02", "ok": true, "detail": "erp_schema readable", "capability": "rag_ingest", "base_scenario": null}
+{"id": "T005-B6-03", "ok": true, "detail": "erp_template_health readable", "capability": "rag_ingest", "base_scenario": null}
+{"id": "T005-B6-04", "ok": false, "detail": "unknown case_id=T005-B6-04", "capability": "rag_ingest", "base_scenario": null}
+{"id": "T005-B6-05", "ok": false, "detail": "unknown case_id=T005-B6-05", "capability": "rag_ingest", "base_scenario": null}
+{"id": "T005-MCP-01", "ok": false, "detail": "unknown case_id=T005-MCP-01", "capability": "mcp_guardrail", "base_scenario": null}
+{"id": "T005-MCP-02", "ok": false, "detail": "unknown case_id=T005-MCP-02", "capability": "mcp_guardrail", "base_scenario": null}
+{"id": "T005-MCP-03", "ok": false, "detail": "unknown case_id=T005-MCP-03", "capability": "mcp_guardrail", "base_scenario": null}
+{"id": "T005-MCP-04", "ok": false, "detail": "unknown case_id=T005-MCP-04", "capability": "mcp_guardrail", "base_scenario": null}
+{"id": "T005-MCP-05", "ok": false, "detail": "unknown case_id=T005-MCP-05", "capability": "mcp_guardrail", "base_scenario": null}
+{"id": "T005-MCP-06", "ok": false, "detail": "unknown case_id=T005-MCP-06", "capability": "mcp_guardrail", "base_scenario": null}
+{"id": "T005-MCP-07", "ok": false, "detail": "unknown case_id=T005-MCP-07", "capability": "mcp_guardrail", "base_scenario": null}

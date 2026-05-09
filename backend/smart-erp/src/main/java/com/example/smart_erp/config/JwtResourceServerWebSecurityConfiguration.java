@@ -64,6 +64,8 @@ public class JwtResourceServerWebSecurityConfiguration {
 				.authorizeHttpRequests(auth -> auth
 						// SSE chat: MVP permitAll (EventSource cannot attach Authorization header)
 						.requestMatchers("/api/v1/ai/chat/stream").permitAll()
+						// Python AI → JDBC read-only bridge (template-first). Lock down via network / future API key.
+						.requestMatchers("/api/v1/ai/db/**").permitAll()
 						.requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
 						.anyRequest().authenticated())
 				.oauth2ResourceServer(oauth2 -> oauth2.jwt(
