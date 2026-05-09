@@ -32,6 +32,7 @@ $env:FPT_MKP_MODEL="gemma-4-31B-it"
 $env:SPRING_AI_DB_BASE_URL="http://localhost:8080"
 $env:SPRING_AI_DB_BASE_URL="http://127.0.0.1:8080"
 $env:SPRING_AI_DB_TIMEOUT_SEC="60"
+python -m app.cli.task005_vector_ingest
 ```
 
 ## 3) Chạy service

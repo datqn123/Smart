@@ -10,8 +10,6 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
-import numpy as np
-
 from app.contracts.task005 import McpToolError, SqlQueryReadonlyOut, SqlQueryReadonlyIn
 from app.mkp_client import chat_text, stream_chat_deltas
 from app.mcp.db_readonly_port import DbReadonlyMcpClient, McpTransportError
@@ -94,7 +92,7 @@ def _rag_retrieve(query: str, chunks: list[RagChunk]) -> dict[str, Any]:
 
         model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
         emb = model.encode([query], normalize_embeddings=True, convert_to_numpy=True).astype("float32")
-        picked = vector_query(query_embedding=np.asarray(emb[0], dtype="float32"), top_k=8)
+        picked = vector_query(query_embedding=emb[0], top_k=8)
         if picked:
             return {"ok": True, "chunks": picked, "rag_stale_warning": None}
         return {
@@ -140,7 +138,9 @@ def plan_tool_from_rag(*, user_message: str, rag_chunks: list[dict[str, Any]]) -
     msg_lower = user_message.lower()
     # Deterministic routing for frequent ambiguous queries.
     # "bao nhiêu sản phẩm" usually means count of distinct products (not quantity sum).
-    if "tồn kho" in msg_lower and "bao nhiêu" in msg_lower and "sản phẩm" in msg_lower:
+    # Cover variants like: "trong kho ... bao nhiêu sản phẩm", "bao nhiêu sản phẩm còn hoạt động", ...
+    has_inventory = ("tồn kho" in msg_lower) or ("trong kho" in msg_lower) or ("kho" in msg_lower)
+    if has_inventory and "bao nhiêu" in msg_lower and "sản phẩm" in msg_lower:
         return {"action": "query", "template_id": "inventory_active_products_count_v1", "params": {"min_quantity": 0}}
 
     templates_brief = "\n".join(
@@ -178,6 +178,36 @@ def plan_tool_from_rag(*, user_message: str, rag_chunks: list[dict[str, Any]]) -
         "template_id": str(parsed.get("template_id") or "").strip(),
         "params": parsed.get("params") if isinstance(parsed.get("params"), dict) else {},
     }
+
+
+def plan_raw_sql_from_rag(*, user_message: str, rag_chunks: list[dict[str, Any]]) -> dict[str, Any]:
+    """Fallback: LLM generates guarded SELECT-only SQL based on RAG schema context."""
+    rag_text = "\n\n".join(str(ch.get("text") or "")[:900] for ch in rag_chunks[:8])
+    prompt = (
+        "Bạn là DB Query Agent (read-only) cho Smart ERP.\n"
+        "Hãy tạo 1 câu SQL SELECT duy nhất để trả lời câu hỏi.\n"
+        "RÀNG BUỘC BẮT BUỘC:\n"
+        "- Chỉ SELECT (không INSERT/UPDATE/DELETE/DROP/ALTER/CREATE)\n"
+        "- Không có dấu ';'\n"
+        "- Ưu tiên bảng/schema public.\n"
+        "- Nếu có thể, dùng COUNT/SUM/AVG phù hợp.\n"
+        "- Không cần LIMIT (server sẽ ép LIMIT nếu thiếu).\n\n"
+        "NGỮ CẢNH RAG (schema/docs):\n"
+        f"{rag_text}\n\n"
+        "Trả JSON THUẦN: {\"action\":\"raw_sql\",\"query\":\"...\"} hoặc {\"action\":\"no_sql\",\"reason\":\"...\"}\n"
+        f"Câu hỏi: {user_message!r}\n"
+    )
+    raw = chat_text(prompt, max_tokens=350, temperature=0.0).strip()
+    try:
+        parsed = json.loads(raw)
+    except Exception:
+        return {"action": "no_sql", "reason": "raw_sql_parse_failed"}
+    if not isinstance(parsed, dict):
+        return {"action": "no_sql", "reason": "raw_sql_bad_shape"}
+    if str(parsed.get("action") or "") != "raw_sql":
+        return {"action": "no_sql", "reason": str(parsed.get("reason") or "no_sql")}
+    q = str(parsed.get("query") or "").strip()
+    return {"action": "raw_sql", "query": q}
 
 
 def _intent_guard_local(msg: str) -> dict[str, Any] | None:
@@ -301,6 +331,33 @@ async def run_smart_erp_turn(user_message: str, *, conversation_id: str | None) 
         steps.append({"tool": "rag_retrieve", "result": rag})
 
         rag_chunks = list((rag or {}).get("chunks") or []) if isinstance(rag, dict) else []
+
+        # Deterministic TOP-N routing for common inventory questions:
+        # "sản phẩm nào ... nhiều nhất/cao nhất" should NOT hit count templates.
+        msg_lower = user_message.lower()
+        wants_top = any(k in msg_lower for k in ("nhiều nhất", "cao nhất", "top", "lớn nhất"))
+        is_inventory = any(k in msg_lower for k in ("tồn kho", "trong kho", "kho", "inventory"))
+        if wants_top and is_inventory and isinstance(db, SpringHttpDbReadonlyClient):
+            # TOP 1 by total quantity (distinct SKU).
+            query = (
+                "SELECT p.sku_code AS sku_code, SUM(i.quantity) AS total_quantity "
+                "FROM inventory i "
+                "JOIN products p ON p.id = i.product_id "
+                "WHERE p.status = 'Active' "
+                "GROUP BY p.sku_code "
+                "ORDER BY total_quantity DESC "
+                "LIMIT 1"
+            )
+            raw_plan = {"action": "raw_sql", "query": query}
+            steps.append({"tool": "raw_sql_plan", "result": raw_plan})
+            raw = await db.query_readonly_raw(query=query, max_rows=5)
+            steps.append({"tool": "sql_execute_read", "result": _map_sql_step(raw)})
+            # Store minimal summary for follow-up (redacted; no raw rows persisted beyond runtime).
+            if conversation_id:
+                tool_summary = format_turn_as_chat_text({"steps": steps})
+                _mem_put(conversation_id, {"tool_summary": tool_summary})
+            return {"steps": steps}
+
         plan = plan_tool_from_rag(user_message=user_message, rag_chunks=rag_chunks)
         steps.append({"tool": "tool_plan", "result": plan})
 
@@ -334,6 +391,14 @@ async def run_smart_erp_turn(user_message: str, *, conversation_id: str | None) 
                     },
                 }
             )
+        else:
+            # Raw SQL fallback (guarded by Spring).
+            if isinstance(db, SpringHttpDbReadonlyClient):
+                raw_plan = plan_raw_sql_from_rag(user_message=user_message, rag_chunks=rag_chunks)
+                steps.append({"tool": "raw_sql_plan", "result": raw_plan})
+                if raw_plan.get("action") == "raw_sql":
+                    raw = await db.query_readonly_raw(query=str(raw_plan.get("query") or ""), max_rows=50)
+                    steps.append({"tool": "sql_execute_read", "result": _map_sql_step(raw)})
 
         # Store minimal summary for follow-up (redacted; no raw rows persisted beyond runtime).
         if conversation_id:

@@ -8,14 +8,14 @@ import com.example.smart_erp.ai.dbreadonly.dto.McpSqlDtos;
 import com.example.smart_erp.ai.dbreadonly.dto.McpSqlDtos.SqlColumnDto;
 import com.example.smart_erp.ai.dbreadonly.dto.McpSqlDtos.SqlQueryReadonlyHttpResponse;
 
-final class DbTemplateUtils {
+public final class DbTemplateUtils {
 
 	static final int MAX_ROWS = 50;
 
 	private DbTemplateUtils() {
 	}
 
-	static SqlQueryReadonlyHttpResponse matrixResponse(List<Map<String, Object>> maps, List<String> columnKeys,
+	public static SqlQueryReadonlyHttpResponse matrixResponse(List<Map<String, Object>> maps, List<String> columnKeys,
 			String summary, String correlationId) {
 		List<SqlColumnDto> cols = columnKeys.stream().map(k -> new SqlColumnDto(k, guessTypeKey(k))).toList();
 		List<List<Object>> rows = McpSqlDtos.rowMatrixFromMaps(maps, columnKeys);

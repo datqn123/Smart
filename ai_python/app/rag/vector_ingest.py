@@ -7,8 +7,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import numpy as np
-
 from app.rag.task005_ingest import RagChunk, read_chunks
 from app.registry.task005_templates import TemplateRegistry, load_registry_from_path
 from app.tools.task005_corpus_fs import (
@@ -63,11 +61,6 @@ def _registry_chunks(reg: TemplateRegistry) -> list[RagChunk]:
     return chunks
 
 
-def _normalize(v: np.ndarray) -> np.ndarray:
-    denom = np.linalg.norm(v, axis=1, keepdims=True) + 1e-12
-    return v / denom
-
-
 def build_faiss_index(
     *,
     corpus_root: Path | None = None,
@@ -76,6 +69,7 @@ def build_faiss_index(
 ) -> IngestResult:
     """Create `faiss__<ver>.bin` + `meta__<ver>.json` under `<corpus_root>/index/`."""
 
+    import numpy as np
     import faiss  # local import
     from sentence_transformers import SentenceTransformer
 
@@ -101,6 +95,7 @@ def build_faiss_index(
     model_name = "sentence-transformers/all-MiniLM-L6-v2"
     model = SentenceTransformer(model_name)
     emb = model.encode(texts, normalize_embeddings=True, convert_to_numpy=True).astype("float32")
+    emb = np.asarray(emb, dtype="float32")
     dim = int(emb.shape[1])
 
     index = faiss.IndexFlatIP(dim)

@@ -30,6 +30,10 @@ public final class McpSqlDtos {
 		}
 	}
 
+	public record SqlQueryReadonlyRawHttpRequest(@JsonProperty("query") String query,
+			@JsonProperty("max_rows") Integer maxRows) {
+	}
+
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public record ColumnMetaDto(String name, String type, boolean nullable) {
 	}

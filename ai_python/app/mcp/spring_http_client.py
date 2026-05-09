@@ -56,6 +56,21 @@ class SpringHttpDbReadonlyClient:
             return SqlQueryReadonlyOut.model_validate(body)
         return _as_tool_error(body, fallback_cid=cid)
 
+    async def query_readonly_raw(self, *, query: str, max_rows: int = 50) -> QueryReadonlyResult:
+        cid = str(uuid.uuid4())
+        try:
+            r = await self._http.post(
+                "/api/v1/ai/db/sql/query-readonly-raw",
+                json={"query": query, "max_rows": max_rows},
+                headers={"X-Correlation-Id": cid},
+            )
+        except httpx.RequestError as e:
+            return _transport_error(e, cid)
+        body = _safe_json(r)
+        if r.is_success:
+            return SqlQueryReadonlyOut.model_validate(body)
+        return _as_tool_error(body, fallback_cid=cid)
+
     async def aclose(self) -> None:
         await self._http.aclose()
 

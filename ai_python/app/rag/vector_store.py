@@ -13,8 +13,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import numpy as np
-
 from app.rag.task005_ingest import RagChunk
 from app.tools.task005_corpus_fs import DEFAULT_CORPUS_ROOT
 
@@ -56,11 +54,6 @@ def latest_vector_index(corpus_root: Path | None = None) -> VectorStoreIndex | N
     return VectorStoreIndex(corpus_version=ver, dim=dim, index_path=idx, meta_path=meta)
 
 
-def _normalize(v: np.ndarray) -> np.ndarray:
-    denom = np.linalg.norm(v, axis=1, keepdims=True) + 1e-12
-    return v / denom
-
-
 def _chunks_from_meta(meta: dict[str, Any]) -> list[RagChunk]:
     chunks_payload = meta.get("chunks") or []
     out: list[RagChunk] = []
@@ -79,7 +72,7 @@ def _chunks_from_meta(meta: dict[str, Any]) -> list[RagChunk]:
 
 def query(
     *,
-    query_embedding: np.ndarray,
+    query_embedding: Any,
     top_k: int,
     corpus_root: Path | None = None,
 ) -> list[dict[str, Any]]:
@@ -91,13 +84,15 @@ def query(
         return []
 
     import faiss  # local import: optional at import-time
+    import numpy as np
 
     idx = faiss.read_index(str(latest.index_path))
     meta = latest.load_meta()
     chunks = _chunks_from_meta(meta)
 
     q = np.asarray(query_embedding, dtype="float32").reshape(1, -1)
-    q = _normalize(q)
+    denom = np.linalg.norm(q, axis=1, keepdims=True) + 1e-12
+    q = q / denom
     scores, ids = idx.search(q, int(top_k))
     picked: list[dict[str, Any]] = []
     for score, i in zip(scores[0].tolist(), ids[0].tolist(), strict=False):

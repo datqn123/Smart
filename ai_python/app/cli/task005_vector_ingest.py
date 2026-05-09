@@ -14,7 +14,12 @@ from app.tools.task005_corpus_fs import DEFAULT_CORPUS_ROOT
 
 
 def main() -> None:
-    res = build_faiss_index(corpus_root=Path(DEFAULT_CORPUS_ROOT))
+    try:
+        res = build_faiss_index(corpus_root=Path(DEFAULT_CORPUS_ROOT))
+    except ModuleNotFoundError as e:
+        raise SystemExit(
+            f"Missing dependency: {e}. Run: pip install -r requirements.txt"
+        ) from e
     print(
         f"ok: corpus_version={res.corpus_version} dim={res.dim} chunks={res.chunk_count} "
         f"index={res.index_path.name} meta={res.meta_path.name}"
