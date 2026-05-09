@@ -5,7 +5,6 @@ from fastapi.responses import StreamingResponse
 
 from .mkp_client import stream_chat_deltas
 
-
 app = FastAPI(title="ai_python", version="0.1.0")
 
 

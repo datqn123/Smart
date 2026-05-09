@@ -19,9 +19,9 @@ Unit-T005-3
 
 ## Unit
 
-- [ ] Unit-T005-1 — Pydantic models: batch job context (SRS §3), `McpToolError`, audit-friendly metadata fields | DoD: SRS §7 **AC4**, **AC6** | Gate: `G-AI-DEV` | depends: -
-- [ ] Unit-T005-2 — Validators / serializers: describe caps (`columns`, `summary`), smoke artifact **summary-only** (no persisted full rows), registry/catalog JSON shape | DoD: SRS §7 **AC1**, **AC2**, **AC4** | Gate: `G-AI-DEV` | depends: Unit-T005-1
-- [ ] Unit-T005-3 — Pure helpers: atomic corpus writes, stable corpus paths + `corpus_version` / timestamp naming per module docs | DoD: SRS §7 **AC1** | Gate: `G-AI-DEV` | depends: -
+- [x] Unit-T005-1 — Pydantic models: batch job context (SRS §3), `McpToolError`, audit-friendly metadata fields | DoD: SRS §7 **AC4**, **AC6** | Gate: `G-AI-DEV` | depends: -
+- [x] Unit-T005-2 — Validators / serializers: describe caps (`columns`, `summary`), smoke artifact **summary-only** (no persisted full rows), registry/catalog JSON shape | DoD: SRS §7 **AC1**, **AC2**, **AC4** | Gate: `G-AI-DEV` | depends: Unit-T005-1
+- [x] Unit-T005-3 — Pure helpers: atomic corpus writes, stable corpus paths + `corpus_version` / timestamp naming per module docs | DoD: SRS §7 **AC1** | Gate: `G-AI-DEV` | depends: -
 
 ## Feature
 

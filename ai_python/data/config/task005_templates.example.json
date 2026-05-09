@@ -1,0 +1,31 @@
+{
+  "templates": [
+    {
+      "template_id": "sales_by_day_v1",
+      "intent": "report.sales_by_day",
+      "description": "Daily sales totals (smoke params: last 7 days, channel=null).",
+      "params": {
+        "date_from": "2026-04-01",
+        "date_to": "2026-04-07",
+        "channel": null
+      },
+      "smoke_safe": true
+    },
+    {
+      "template_id": "inventory_snapshot_v1",
+      "intent": "report.inventory_snapshot",
+      "description": "Latest inventory snapshot (smoke params: SKU prefix demo).",
+      "params": {
+        "sku_prefix": "DEMO-"
+      },
+      "smoke_safe": true
+    },
+    {
+      "template_id": "manual_export_v1",
+      "intent": "export.large",
+      "description": "Manual-only export; not validated by smoke.",
+      "params": {},
+      "smoke_safe": false
+    }
+  ]
+}
