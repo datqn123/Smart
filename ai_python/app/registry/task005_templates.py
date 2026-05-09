@@ -35,6 +35,7 @@ class SmokeTemplate(BaseModel):
     intent: str = Field(min_length=1)
     description: str = Field(min_length=1)
     params: dict[str, Any] = Field(default_factory=dict)
+    params_schema: dict[str, Any] = Field(default_factory=dict)
     smoke_safe: bool = False
 
     @field_validator("template_id")

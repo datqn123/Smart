@@ -24,10 +24,13 @@ def health() -> dict[str, str]:
 
 
 @app.get("/v1/chat/stream")
-async def chat_stream(q: str = Query(min_length=1, max_length=4000)) -> StreamingResponse:
+async def chat_stream(
+    q: str = Query(min_length=1, max_length=4000),
+    cid: str | None = Query(default=None, max_length=128),
+) -> StreamingResponse:
     async def gen() -> AsyncIterator[str]:
         try:
-            async for delta in stream_final_answer(q):
+            async for delta in stream_final_answer(q, conversation_id=cid):
                 yield _sse_event("delta", delta)
             yield _sse_event("done", "[DONE]")
         except Exception as e:

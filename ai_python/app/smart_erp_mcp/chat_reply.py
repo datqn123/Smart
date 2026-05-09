@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Any
 
 
@@ -21,10 +22,14 @@ def format_turn_as_chat_text(turn: dict[str, Any]) -> str:
         return "Xin lỗi, tôi không phân tích được yêu cầu của bạn."
 
     primary = str(intent_result.get("primary_intent", "?"))
-    lines.append(f"Ý định: {primary}.")
+    debug = os.getenv("SMART_ERP_CHAT_DEBUG", "false").strip().lower() in ("1", "true", "yes")
+    if debug:
+        lines.append(f"Ý định: {primary}.")
 
     if primary == "refusal":
         return "Tôi không thể hỗ trợ yêu cầu đó."
+    if primary == "greeting":
+        return "Xin chào! Bạn muốn hỏi về tồn kho, SKU, đơn hàng, hay schema Database?"
 
     for step in steps:
         tool = step.get("tool")
@@ -61,7 +66,7 @@ def format_turn_as_chat_text(turn: dict[str, Any]) -> str:
         if tool == "viz_build_chart_spec" and res.get("ok"):
             lines.append("(Biểu đồ rich UI chưa bật; đã lấy series phục vụ báo cáo.)")
 
-    if len(lines) <= 2 and primary in ("conversation", "help", "rag_qa"):
+    if len(lines) <= (2 if debug else 1) and primary in ("conversation", "help", "rag_qa"):
         lines.append("Bạn có thể hỏi cụ thể hơn về tồn kho, SKU, doanh thu, hoặc tài liệu dự án.")
 
     return "\n".join(lines).strip()

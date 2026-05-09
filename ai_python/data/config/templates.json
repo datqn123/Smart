@@ -4,7 +4,16 @@
       "template_id": "inventory_by_sku_prefix_v1",
       "intent": "report.inventory_by_sku",
       "description": "Tồn kho lọc theo tiền tố SKU (ILIKE, LIMIT).",
-      "params": { "sku_prefix": "DEMO-", "limit": 20 },
+      "params": { "sku_prefix": "", "limit": 20 },
+      "params_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "sku_prefix": { "type": "string", "minLength": 0 },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 50 }
+        },
+        "required": []
+      },
       "smoke_safe": true
     },
     {
@@ -12,6 +21,27 @@
       "intent": "report.recent_sales_orders",
       "description": "Danh sách đơn bán mới nhất (ORDER BY created_at DESC, LIMIT).",
       "params": { "limit": 15 },
+      "params_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "limit": { "type": "integer", "minimum": 1, "maximum": 50 }
+        }
+      },
+      "smoke_safe": true
+    },
+    {
+      "template_id": "inventory_active_products_count_v1",
+      "intent": "report.inventory_active_products_count",
+      "description": "Đếm số SKU sản phẩm đang Active có ít nhất 1 dòng tồn kho.",
+      "params": { "min_quantity": 0 },
+      "params_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "min_quantity": { "type": "integer", "minimum": 0, "maximum": 1000000 }
+        }
+      },
       "smoke_safe": true
     }
   ]

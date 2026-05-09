@@ -30,6 +30,8 @@ $env:FPT_MKP_API_KEY="..."
 $env:FPT_MKP_BASE_URL="https://mkp-api.fptcloud.com"
 $env:FPT_MKP_MODEL="gemma-4-31B-it"
 $env:SPRING_AI_DB_BASE_URL="http://localhost:8080"
+$env:SPRING_AI_DB_BASE_URL="http://127.0.0.1:8080"
+$env:SPRING_AI_DB_TIMEOUT_SEC="60"
 ```
 
 ## 3) Chạy service

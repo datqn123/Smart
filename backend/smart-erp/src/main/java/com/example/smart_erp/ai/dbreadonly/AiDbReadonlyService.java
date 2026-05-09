@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -16,9 +17,9 @@ import org.springframework.web.server.ResponseStatusException;
 import com.example.smart_erp.ai.dbreadonly.dto.McpSqlDtos;
 import com.example.smart_erp.ai.dbreadonly.dto.McpSqlDtos.ColumnMetaDto;
 import com.example.smart_erp.ai.dbreadonly.dto.McpSqlDtos.McpToolErrorResponse;
-import com.example.smart_erp.ai.dbreadonly.dto.McpSqlDtos.SqlColumnDto;
 import com.example.smart_erp.ai.dbreadonly.dto.McpSqlDtos.SqlDescribeHttpResponse;
 import com.example.smart_erp.ai.dbreadonly.dto.McpSqlDtos.SqlQueryReadonlyHttpResponse;
+import com.example.smart_erp.ai.dbreadonly.templates.DbTemplateExecutor;
 
 /**
  * Read-only JDBC bridge implementing MCP {@code sql.describe} and {@code sql.query_readonly} semantics
@@ -27,14 +28,15 @@ import com.example.smart_erp.ai.dbreadonly.dto.McpSqlDtos.SqlQueryReadonlyHttpRe
 @Service
 public class AiDbReadonlyService {
 
-	private static final int MAX_ROWS = 50;
-
 	private static final Set<String> DESCRIBE_ALLOWLIST = Set.of("inventory", "products", "salesorders");
 
 	private final JdbcTemplate jdbcTemplate;
 
-	public AiDbReadonlyService(JdbcTemplate jdbcTemplate) {
+	private final Map<String, DbTemplateExecutor> executors;
+
+	public AiDbReadonlyService(JdbcTemplate jdbcTemplate, List<DbTemplateExecutor> executors) {
 		this.jdbcTemplate = jdbcTemplate;
+		this.executors = indexExecutors(executors);
 	}
 
 	public SqlDescribeHttpResponse describe(String objectNameRaw, String correlationId) {
@@ -76,95 +78,12 @@ public class AiDbReadonlyService {
 		Map<String, Object> params = McpSqlDtos.paramMapOrEmpty(paramsRaw);
 		String templateId = templateIdRaw == null ? "" : templateIdRaw.trim();
 
-		return switch (templateId) {
-			case "inventory_by_sku_prefix_v1" -> runInventoryBySkuPrefix(params, correlation);
-			case "recent_sales_orders_v1" -> runRecentSalesOrders(params, correlation);
-			default -> {
-				mcpFail(HttpStatus.BAD_REQUEST, "DB_QUERY_REJECTED", "Không có template_id: " + templateId, false, correlation);
-				yield null; // unreachable
-			}
-		};
-	}
-
-	private SqlQueryReadonlyHttpResponse runInventoryBySkuPrefix(Map<String, Object> params, String correlation) {
-		String prefix = stringParam(params, "sku_prefix", "DEMO-");
-		if (!prefix.endsWith("%")) {
-			prefix = prefix + "%";
+		DbTemplateExecutor ex = executors.get(templateId);
+		if (ex == null) {
+			mcpFail(HttpStatus.BAD_REQUEST, "DB_QUERY_REJECTED", "Không có template_id: " + templateId, false, correlation);
+			return null; // unreachable (mcpFail throws)
 		}
-		int lim = limitParam(params, "limit", 25);
-		final String sql = """
-				SELECT i.id AS inv_id, p.sku_code AS sku_code, i.quantity AS quantity,
-				       i.location_id AS location_id, i.batch_number AS batch_number
-				FROM inventory i
-				JOIN products p ON p.id = i.product_id
-				WHERE p.sku_code ILIKE ?
-				ORDER BY p.sku_code, i.id
-				LIMIT ?
-				""";
-		List<Map<String, Object>> maps =
-				jdbcTemplate.queryForList(sql, prefix, lim);
-		return matrixResponse(maps,
-				List.of("inv_id", "sku_code", "quantity", "location_id", "batch_number"),
-				"Tồn kho theo SKU (template inventory_by_sku_prefix_v1), tối đa " + lim + " dòng.", correlation);
-	}
-
-	private SqlQueryReadonlyHttpResponse runRecentSalesOrders(Map<String, Object> params, String correlation) {
-		int lim = limitParam(params, "limit", 15);
-		final String sql = """
-				SELECT id AS id, order_code AS order_code, order_channel AS order_channel, status AS status,
-				       total_amount AS total_amount, created_at AS created_at
-				FROM salesorders
-				ORDER BY created_at DESC
-				LIMIT ?
-				""";
-		List<Map<String, Object>> maps = jdbcTemplate.queryForList(sql, lim);
-		return matrixResponse(maps,
-				List.of("id", "order_code", "order_channel", "status", "total_amount", "created_at"),
-				"Đơn bán gần đây (template recent_sales_orders_v1), tối đa " + lim + " dòng.", correlation);
-	}
-
-	private SqlQueryReadonlyHttpResponse matrixResponse(List<Map<String, Object>> maps, List<String> columnKeys,
-			String summary, String correlation) {
-		List<SqlColumnDto> cols =
-				columnKeys.stream().map(k -> new SqlColumnDto(k, guessTypeKey(k))).toList();
-		List<List<Object>> rows = McpSqlDtos.rowMatrixFromMaps(maps, columnKeys);
-		int rc = rows.size();
-		return new SqlQueryReadonlyHttpResponse(cols, rows, rc, truncateSummary(summary), correlation);
-	}
-
-	private static String guessTypeKey(String key) {
-		String k = key.toLowerCase(Locale.ROOT);
-		if (k.contains("amount")) {
-			return "number";
-		}
-		if (k.contains("quantity") || k.endsWith("_id") || "id".equals(k)) {
-			return "int";
-		}
-		if (k.contains("at") || k.contains("date")) {
-			return "timestamp";
-		}
-		return "varchar";
-	}
-
-	private static int limitParam(Map<String, Object> params, String key, int defaultVal) {
-		Object v = params.get(key);
-		if (v == null) {
-			return Math.min(defaultVal, MAX_ROWS);
-		}
-		int n = (v instanceof Number nb) ? nb.intValue() : Integer.parseInt(v.toString().trim());
-		if (n < 1) {
-			return 1;
-		}
-		return Math.min(n, MAX_ROWS);
-	}
-
-	private static String stringParam(Map<String, Object> params, String key, String defaultVal) {
-		Object v = params.get(key);
-		if (v == null) {
-			return defaultVal;
-		}
-		String s = v.toString().trim();
-		return s.isEmpty() ? defaultVal : s;
+		return ex.execute(params, correlation);
 	}
 
 	private static QualifiedName parseObjectName(String raw) {
@@ -203,13 +122,6 @@ public class AiDbReadonlyService {
 		};
 	}
 
-	private static String truncateSummary(String s) {
-		if (s.length() <= 2000) {
-			return s;
-		}
-		return s.substring(0, 1997) + "...";
-	}
-
 	private static String blankToRandom(String correlationId) {
 		if (correlationId == null || correlationId.isBlank()) {
 			return UUID.randomUUID().toString();
@@ -222,5 +134,20 @@ public class AiDbReadonlyService {
 		McpToolErrorResponse body =
 				new McpToolErrorResponse(code, message, retryable, new LinkedHashMap<>(), correlationId);
 		throw new McpToolInvocationException(status, body);
+	}
+
+	private static Map<String, DbTemplateExecutor> indexExecutors(List<DbTemplateExecutor> list) {
+		Map<String, DbTemplateExecutor> map = new LinkedHashMap<>();
+		for (DbTemplateExecutor ex : list) {
+			String id = Optional.ofNullable(ex.templateId()).orElse("").trim();
+			if (id.isEmpty()) {
+				continue;
+			}
+			if (map.containsKey(id)) {
+				throw new IllegalStateException("Duplicate template executor: " + id);
+			}
+			map.put(id, ex);
+		}
+		return map;
 	}
 }

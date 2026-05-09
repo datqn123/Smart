@@ -29,7 +29,7 @@ def test_format_turn_includes_intent() -> None:
         ],
     }
     text = format_turn_as_chat_text(turn)
-    assert "rag_qa" in text or "Ý định" in text
+    assert "rag_qa" not in text  # intent is hidden by default (debug only)
     assert "Chunk" in text or "ERP" in text
 
 

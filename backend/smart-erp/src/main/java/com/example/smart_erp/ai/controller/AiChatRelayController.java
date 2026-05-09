@@ -52,10 +52,11 @@ public class AiChatRelayController {
 	}
 
 	@GetMapping(path = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-	public SseEmitter stream(@RequestParam("q") String q) {
+	public SseEmitter stream(@RequestParam("q") String q, @RequestParam(value = "cid", required = false) String cid) {
 		SseEmitter emitter = new SseEmitter(0L);
 		String encoded = URLEncoder.encode(q, StandardCharsets.UTF_8);
-		URI uri = URI.create(pythonBaseUrl + "/v1/chat/stream?q=" + encoded);
+		String cidParam = cid == null || cid.isBlank() ? "" : ("&cid=" + URLEncoder.encode(cid, StandardCharsets.UTF_8));
+		URI uri = URI.create(pythonBaseUrl + "/v1/chat/stream?q=" + encoded + cidParam);
 
 		sseIoExecutor.execute(() -> {
 			try {

@@ -2,13 +2,14 @@ import { getApiUrl } from "@/lib/api/config"
 
 type OpenAiChatStreamArgs = {
   query: string
+  conversationId: string
   onDelta: (delta: string) => void
   onDone: () => void
   onError: (message: string) => void
 }
 
-export function openAiChatStream({ query, onDelta, onDone, onError }: OpenAiChatStreamArgs): EventSource {
-  const url = getApiUrl(`/api/v1/ai/chat/stream?q=${encodeURIComponent(query)}`)
+export function openAiChatStream({ query, conversationId, onDelta, onDone, onError }: OpenAiChatStreamArgs): EventSource {
+  const url = getApiUrl(`/api/v1/ai/chat/stream?q=${encodeURIComponent(query)}&cid=${encodeURIComponent(conversationId)}`)
   const es = new EventSource(url)
 
   es.addEventListener("delta", (evt) => {

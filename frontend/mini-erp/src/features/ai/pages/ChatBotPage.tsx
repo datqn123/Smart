@@ -22,6 +22,13 @@ export function ChatBotPage() {
   const [inputValue, setInputValue] = useState("")
   const [isTyping, setIsTyping] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
+  const [conversationId] = useState(() => {
+    const fromStorage = window.sessionStorage.getItem("ai_chat_conversation_id")
+    if (fromStorage && fromStorage.trim().length > 0) return fromStorage
+    const cid = crypto.randomUUID()
+    window.sessionStorage.setItem("ai_chat_conversation_id", cid)
+    return cid
+  })
   const chatEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const streamRef = useRef<EventSource | null>(null)
@@ -112,6 +119,7 @@ export function ChatBotPage() {
 
     streamRef.current = openAiChatStream({
       query: content,
+      conversationId,
       onDelta: (delta) => {
         setMessages(prev =>
           prev.map(m =>

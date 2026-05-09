@@ -41,3 +41,21 @@ def stream_chat_deltas(prompt: str) -> Iterator[str]:
         if content:
             yield content
 
+
+def chat_text(prompt: str, *, max_tokens: int = 512, temperature: float = 0.2) -> str:
+    """Non-stream text completion for internal 'agent' steps (intent, routing, etc.)."""
+    client, model = get_mkp_client()
+    res = client.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=temperature,
+        max_tokens=max_tokens,
+        top_p=1,
+        stream=False,
+    )
+    if not res.choices:
+        return ""
+    msg = res.choices[0].message
+    content = getattr(msg, "content", None)
+    return content or ""
+
