@@ -1,0 +1,10 @@
+{
+  "columns": [
+    { "name": "day", "type": "date" },
+    { "name": "revenue", "type": "number" }
+  ],
+  "rows": [["2026-04-01", 1230000]],
+  "row_count": 1,
+  "summary": "1 row(s); smoke OK.",
+  "correlation_id": "corr_smoke_001"
+}

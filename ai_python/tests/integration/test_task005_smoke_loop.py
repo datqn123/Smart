@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from app.contracts.task005 import (
     McpToolError,
     SqlColumn,
@@ -12,6 +15,12 @@ from app.contracts.task005 import (
 from app.mcp.db_readonly_port import QueryReadonlyResult
 from app.registry.task005_templates import TemplateRegistry, load_registry_from_dict
 from app.tools.task005_smoke import run_smoke_loop
+
+_FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "task005"
+
+
+def _load_task005_fixture(name: str) -> dict:
+    return json.loads((_FIXTURES / name).read_text(encoding="utf-8"))
 
 
 class _StubClient:
@@ -31,41 +40,15 @@ class _StubClient:
 
 def _registry() -> TemplateRegistry:
     return load_registry_from_dict(
-        {
-            "templates": [
-                {
-                    "template_id": "sales_by_day_v1",
-                    "intent": "report",
-                    "description": "ok",
-                    "params": {"date_from": "2026-04-01"},
-                    "smoke_safe": True,
-                },
-                {
-                    "template_id": "inventory_snapshot_v1",
-                    "intent": "report",
-                    "description": "ok",
-                    "params": {},
-                    "smoke_safe": True,
-                },
-                {
-                    "template_id": "manual_only_v1",
-                    "intent": "export",
-                    "description": "skipped",
-                    "params": {},
-                    "smoke_safe": False,
-                },
-            ]
-        }
+        _load_task005_fixture("templates_registry_smoke_loop.json")
     )
 
 
+# AC: AC2
+# AC: AC4
 async def test_smoke_loop_records_ok_and_failure_summary_only() -> None:
-    success = SqlQueryReadonlyOut(
-        columns=[SqlColumn(name="day", type="date")],
-        rows=[["2026-04-01"]],
-        row_count=1,
-        summary="1 row(s)",
-        correlation_id="corr-ok",
+    success = SqlQueryReadonlyOut.model_validate(
+        _load_task005_fixture("sql_query_readonly_response.json")
     )
     failure = McpToolError(
         code="DB_TIMEOUT",
@@ -105,6 +88,7 @@ async def test_smoke_loop_records_ok_and_failure_summary_only() -> None:
     assert outcome.has_failures is True
 
 
+# AC: AC2
 async def test_smoke_loop_skips_non_smoke_safe_templates() -> None:
     success = SqlQueryReadonlyOut(
         columns=[SqlColumn(name="day", type="date")],

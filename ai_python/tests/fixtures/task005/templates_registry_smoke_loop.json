@@ -1,0 +1,25 @@
+{
+  "templates": [
+    {
+      "template_id": "sales_by_day_v1",
+      "intent": "report",
+      "description": "ok",
+      "params": { "date_from": "2026-04-01" },
+      "smoke_safe": true
+    },
+    {
+      "template_id": "inventory_snapshot_v1",
+      "intent": "report",
+      "description": "ok",
+      "params": {},
+      "smoke_safe": true
+    },
+    {
+      "template_id": "manual_only_v1",
+      "intent": "export",
+      "description": "skipped",
+      "params": {},
+      "smoke_safe": false
+    }
+  ]
+}

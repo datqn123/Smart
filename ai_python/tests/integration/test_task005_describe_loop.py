@@ -34,6 +34,8 @@ def _ok(name: str) -> SqlDescribeOut:
     )
 
 
+# AC: AC1
+# AC: AC6
 async def test_describe_loop_records_partial_failures() -> None:
     client = _StubClient(
         results={
@@ -69,6 +71,7 @@ async def test_describe_loop_records_partial_failures() -> None:
     assert outcome.has_failures is True
 
 
+# AC: AC1
 async def test_describe_loop_all_ok_marks_no_failures() -> None:
     client = _StubClient(
         results={

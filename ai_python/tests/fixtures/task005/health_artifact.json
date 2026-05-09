@@ -1,0 +1,18 @@
+{
+  "corpus_version": "2026-05-09T12:00:00Z",
+  "correlation_id": "corr_run_abc",
+  "smoke": [
+    {
+      "template_id": "sales_by_day_v1",
+      "ok": true,
+      "row_count": 1,
+      "code": null
+    },
+    {
+      "template_id": "inventory_snapshot_v1",
+      "ok": false,
+      "row_count": 0,
+      "code": "DB_TIMEOUT"
+    }
+  ]
+}

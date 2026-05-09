@@ -14,6 +14,7 @@ from app.mcp.task005_client_factory import build_db_readonly_client_from_env
 from app.mcp.task005_unconfigured_client import UnconfiguredDbReadonlyClient
 
 
+# AC: AC6
 def test_build_db_readonly_client_stub_returns_unconfigured(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -22,6 +23,7 @@ def test_build_db_readonly_client_stub_returns_unconfigured(
     assert isinstance(client, UnconfiguredDbReadonlyClient)
 
 
+# AC: AC6
 def test_daily_main_inserts_default_argv(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
 
@@ -42,12 +44,14 @@ def test_daily_main_inserts_default_argv(monkeypatch: pytest.MonkeyPatch) -> Non
     assert objects_path.name == "objects.json"
 
 
+# AC: AC6
 def test_build_db_readonly_unknown_adapter_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TASK005_DB_READONLY_ADAPTER", "unknown_transport_xyz")
     with pytest.raises(RuntimeError, match="Unknown TASK005_DB_READONLY_ADAPTER"):
         build_db_readonly_client_from_env()
 
 
+# AC: AC6
 async def test_unconfigured_client_raises_transport_error() -> None:
     client = UnconfiguredDbReadonlyClient()
     with pytest.raises(McpTransportError):

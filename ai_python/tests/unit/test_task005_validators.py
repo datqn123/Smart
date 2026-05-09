@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -28,11 +31,18 @@ from app.tools.task005_artifacts import (
     smoke_entry_from_success,
 )
 
+_FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "task005"
+
+
+def _load_task005_fixture(name: str) -> dict:
+    return json.loads((_FIXTURES / name).read_text(encoding="utf-8"))
+
 
 def _column(idx: int) -> ColumnMeta:
     return ColumnMeta(name=f"c{idx}", type="text", nullable=True)
 
 
+# AC: AC1
 def test_describe_out_rejects_too_many_columns() -> None:
     with pytest.raises(ValidationError):
         SqlDescribeOut(
@@ -43,6 +53,7 @@ def test_describe_out_rejects_too_many_columns() -> None:
         )
 
 
+# AC: AC1
 def test_describe_out_accepts_max_columns() -> None:
     out = SqlDescribeOut(
         object_name="reporting.wide_v1",
@@ -53,6 +64,7 @@ def test_describe_out_accepts_max_columns() -> None:
     assert len(out.columns) == MAX_COLUMNS
 
 
+# AC: AC1
 def test_describe_out_summary_capped() -> None:
     with pytest.raises(ValidationError):
         SqlDescribeOut(
@@ -63,6 +75,7 @@ def test_describe_out_summary_capped() -> None:
         )
 
 
+# AC: AC2
 def test_query_readonly_out_smoke_row_count_capped() -> None:
     with pytest.raises(ValidationError):
         SqlQueryReadonlyOut(
@@ -74,6 +87,7 @@ def test_query_readonly_out_smoke_row_count_capped() -> None:
         )
 
 
+# AC: AC2
 def test_query_readonly_out_negative_row_count_rejected() -> None:
     with pytest.raises(ValidationError):
         SqlQueryReadonlyOut(
@@ -85,6 +99,8 @@ def test_query_readonly_out_negative_row_count_rejected() -> None:
         )
 
 
+# AC: AC2
+# AC: AC4
 def test_smoke_entry_from_success_strips_rows() -> None:
     entry = smoke_entry_from_success(
         SqlQueryReadonlyOut(
@@ -106,6 +122,8 @@ def test_smoke_entry_from_success_strips_rows() -> None:
     assert "rows" not in dumped
 
 
+# AC: AC2
+# AC: AC4
 def test_smoke_entry_from_failure_records_code_only() -> None:
     entry = smoke_entry_from_failure(
         template_id="inventory_snapshot_v1",
@@ -117,6 +135,7 @@ def test_smoke_entry_from_failure_records_code_only() -> None:
     assert entry.code == "DB_TIMEOUT"
 
 
+# AC: AC1
 def test_catalog_entry_from_describe_round_trip() -> None:
     out = SqlDescribeOut(
         object_name="reporting.sales_by_day_v1",
@@ -133,6 +152,7 @@ def test_catalog_entry_from_describe_round_trip() -> None:
     assert entry.columns[1].nullable is True
 
 
+# AC: AC2
 def test_smoke_health_artifact_serialises_summary_only() -> None:
     artifact = SmokeHealthArtifact(
         corpus_version="2026-05-09T12:00:00Z",
@@ -151,29 +171,19 @@ def test_smoke_health_artifact_serialises_summary_only() -> None:
     assert dumped["smoke"][0]["row_count"] == 1
 
 
+# AC: AC2
+def test_health_artifact_fixture_matches_smoke_health_model() -> None:
+    raw = _load_task005_fixture("health_artifact.json")
+    artifact = SmokeHealthArtifact.model_validate(raw)
+    dumped = artifact.model_dump()
+    for entry in dumped["smoke"]:
+        assert "rows" not in entry
+
+
+# AC: AC2
 def test_template_registry_loads_smoke_templates() -> None:
     registry = load_registry_from_dict(
-        {
-            "templates": [
-                {
-                    "template_id": "sales_by_day_v1",
-                    "intent": "report",
-                    "description": "Daily sales rollup.",
-                    "params": {
-                        "date_from": "2026-04-01",
-                        "date_to": "2026-04-07",
-                    },
-                    "smoke_safe": True,
-                },
-                {
-                    "template_id": "sensitive_export_v1",
-                    "intent": "export",
-                    "description": "Not smoke-safe.",
-                    "params": {},
-                    "smoke_safe": False,
-                },
-            ]
-        }
+        _load_task005_fixture("templates_registry_validators.json")
     )
     assert isinstance(registry, TemplateRegistry)
     smoke = registry.smoke_safe_templates()
@@ -182,6 +192,7 @@ def test_template_registry_loads_smoke_templates() -> None:
     assert smoke[0].template_id == "sales_by_day_v1"
 
 
+# AC: AC2
 def test_template_registry_rejects_duplicate_template_ids() -> None:
     with pytest.raises(ValidationError):
         load_registry_from_dict(
@@ -206,6 +217,7 @@ def test_template_registry_rejects_duplicate_template_ids() -> None:
         )
 
 
+# AC: AC2
 def test_template_registry_rejects_blank_template_id() -> None:
     with pytest.raises(ValidationError):
         load_registry_from_dict(

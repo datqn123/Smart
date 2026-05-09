@@ -1,0 +1,6 @@
+{
+  "object_name": "reporting.sales_by_day_v1",
+  "columns": [{ "name": "day", "type": "date", "nullable": false }],
+  "summary": "Allowlisted reporting view; 1 column shown (truncated for doc).",
+  "correlation_id": "corr_desc_001"
+}

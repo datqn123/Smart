@@ -1,0 +1,21 @@
+{
+  "templates": [
+    {
+      "template_id": "sales_by_day_v1",
+      "intent": "report",
+      "description": "Daily sales rollup.",
+      "params": {
+        "date_from": "2026-04-01",
+        "date_to": "2026-04-07"
+      },
+      "smoke_safe": true
+    },
+    {
+      "template_id": "sensitive_export_v1",
+      "intent": "export",
+      "description": "Not smoke-safe.",
+      "params": {},
+      "smoke_safe": false
+    }
+  ]
+}

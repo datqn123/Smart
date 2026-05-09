@@ -4,15 +4,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from app.agents.task005_corpus_job import RunOutcome, run_corpus_job
 from app.cli.task005_corpus_job import build_arg_parser, run_cli
 from app.contracts.task005 import (
-    ColumnMeta,
     McpToolError,
-    SqlColumn,
     SqlDescribeIn,
     SqlDescribeOut,
     SqlQueryReadonlyIn,
@@ -24,6 +23,12 @@ from app.mcp.db_readonly_port import (
     QueryReadonlyResult,
 )
 from app.tools.task005_corpus_fs import HEALTH_NAMESPACE, SCHEMA_NAMESPACE
+
+_FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "task005"
+
+
+def _load_task005_fixture(name: str) -> dict[str, Any]:
+    return json.loads((_FIXTURES / name).read_text(encoding="utf-8"))
 
 
 class _FakeClient:
@@ -51,52 +56,43 @@ class _FakeClient:
         return self._smokes[payload.template_id]
 
 
-def _write_objects(path: Path, names: list[str]) -> None:
-    path.write_text(json.dumps({"objects": names}), encoding="utf-8")
-
-
-def _write_templates(path: Path, templates: list[dict[str, object]]) -> None:
-    path.write_text(json.dumps({"templates": templates}), encoding="utf-8")
-
-
 def _ok_describe(name: str) -> SqlDescribeOut:
-    return SqlDescribeOut(
-        object_name=name,
-        columns=[ColumnMeta(name="day", type="date", nullable=False)],
-        summary=f"cols=1 object={name}",
-        correlation_id=f"corr-{name}",
+    base = _load_task005_fixture("sql_describe_response.json")
+    return SqlDescribeOut.model_validate(
+        {
+            **base,
+            "object_name": name,
+            "summary": f"cols=1 object={name}",
+            "correlation_id": f"corr-{name}",
+        }
     )
 
 
 def _ok_smoke() -> SqlQueryReadonlyOut:
-    return SqlQueryReadonlyOut(
-        columns=[SqlColumn(name="day", type="date")],
-        rows=[["2026-04-01"]],
-        row_count=1,
-        summary="ok",
-        correlation_id="corr-smoke",
+    return SqlQueryReadonlyOut.model_validate(
+        _load_task005_fixture("sql_query_readonly_response.json")
     )
 
 
 def _seed_config(tmp_path: Path) -> tuple[Path, Path]:
     objects_path = tmp_path / "objects.json"
     templates_path = tmp_path / "templates.json"
-    _write_objects(objects_path, ["reporting.sales_by_day_v1"])
-    _write_templates(
-        templates_path,
-        [
-            {
-                "template_id": "sales_by_day_v1",
-                "intent": "report",
-                "description": "ok",
-                "params": {"date_from": "2026-04-01"},
-                "smoke_safe": True,
-            }
-        ],
+    objects_path.write_text(
+        json.dumps(_load_task005_fixture("objects_allowlist.json")),
+        encoding="utf-8",
+    )
+    templates_path.write_text(
+        json.dumps(_load_task005_fixture("templates_registry_pipeline.json")),
+        encoding="utf-8",
     )
     return objects_path, templates_path
 
 
+# AC: AC1
+# AC: AC2
+# AC: AC3
+# AC: AC5
+# AC: AC6
 async def test_run_corpus_job_happy_path_writes_artifacts(tmp_path: Path) -> None:
     client = _FakeClient(
         describes={"reporting.sales_by_day_v1": _ok_describe("reporting.sales_by_day_v1")},
@@ -130,6 +126,9 @@ async def test_run_corpus_job_happy_path_writes_artifacts(tmp_path: Path) -> Non
     assert outcome.index_chunks >= 2
 
 
+# AC: AC1
+# AC: AC5
+# AC: AC6
 async def test_run_corpus_job_partial_describe_failure_exits_non_zero(
     tmp_path: Path,
 ) -> None:
@@ -162,6 +161,8 @@ async def test_run_corpus_job_partial_describe_failure_exits_non_zero(
     assert outcome.context.smoke_templates_ok == ["sales_by_day_v1"]
 
 
+# AC: AC4
+# AC: AC6
 async def test_run_corpus_job_mcp_transport_down_exits_non_zero(
     tmp_path: Path,
 ) -> None:
@@ -184,12 +185,16 @@ async def test_run_corpus_job_mcp_transport_down_exits_non_zero(
     assert "MCP_TRANSPORT_DOWN" in failed_codes
 
 
+# AC: AC6
 def test_cli_arg_parser_requires_paths() -> None:
     parser = build_arg_parser()
     with pytest.raises(SystemExit):
         parser.parse_args([])
 
 
+# AC: AC1
+# AC: AC2
+# AC: AC6
 def test_cli_run_happy_path(tmp_path: Path) -> None:
     objects_path, templates_path = _seed_config(tmp_path)
     corpus_root = tmp_path / "rag_corpus"

@@ -62,6 +62,7 @@ def _seed_corpus(root: Path) -> str:
     return corpus_version
 
 
+# AC: AC3
 def test_ingest_corpus_writes_index_with_two_namespaces(tmp_path: Path) -> None:
     corpus_version = _seed_corpus(tmp_path)
 
@@ -80,6 +81,7 @@ def test_ingest_corpus_writes_index_with_two_namespaces(tmp_path: Path) -> None:
     assert any(chunk["namespace"] == SCHEMA_NAMESPACE for chunk in parsed["chunks"])
 
 
+# AC: AC3
 def test_read_chunks_returns_at_least_one_per_namespace(tmp_path: Path) -> None:
     corpus_version = _seed_corpus(tmp_path)
     ingest_corpus(corpus_root=tmp_path, corpus_version=corpus_version)
@@ -105,6 +107,7 @@ def test_read_chunks_returns_at_least_one_per_namespace(tmp_path: Path) -> None:
     assert "sales_by_day_v1" in health_chunks[0].text
 
 
+# AC: AC3
 def test_ingest_corpus_skips_when_corpus_missing(tmp_path: Path) -> None:
     corpus_version = "2026-05-09T12-00-00Z"
 
