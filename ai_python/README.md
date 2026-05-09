@@ -56,3 +56,14 @@ curl -N "http://localhost:9000/v1/chat/stream?q=Xin%20ch%C3%A0o"
 
 Bạn sẽ thấy các event `delta`, và kết thúc bằng event `done`.
 
+## 5) MCP `smart-erp-ai` (Task004 — stdio)
+
+Chạy MCP server cho Cursor (thư mục làm việc `ai_python/`):
+
+```powershell
+cd ai_python
+python -m app.smart_erp_mcp
+```
+
+Chi tiết: [`docs/task004/RUNBOOK_MCP.md`](docs/task004/RUNBOOK_MCP.md).
+

@@ -38,6 +38,7 @@
 | `files-storage` | 0 | [`../../Design_Agent/mcp/FILES_STORAGE_TOOLS.md`](../../Design_Agent/mcp/FILES_STORAGE_TOOLS.md) |
 | `vector-rag` | 0 | [`../../Design_Agent/mcp/VECTOR_RAG_TOOLS.md`](../../Design_Agent/mcp/VECTOR_RAG_TOOLS.md) |
 | `db-readonly` | 1 | [`../../Design_Agent/mcp/DB_READONLY_TOOLS.md`](../../Design_Agent/mcp/DB_READONLY_TOOLS.md) |
+| `smart-erp-ai` | — (Task004) | Code: [`../app/smart_erp_mcp/`](../app/smart_erp_mcp/), SRS [`../docs/srs/SRS_AI_Task004_smart_erp_mcp_server.md`](../docs/srs/SRS_AI_Task004_smart_erp_mcp_server.md), Runbook [`../docs/task004/RUNBOOK_MCP.md`](../docs/task004/RUNBOOK_MCP.md) |
 | `google-drive-sheets` | 2 | [`../../Design_Agent/mcp/GOOGLE_DRIVE_SHEETS_TOOLS.md`](../../Design_Agent/mcp/GOOGLE_DRIVE_SHEETS_TOOLS.md) |
 | `external-accounting` | 3 | [`../../Design_Agent/mcp/EXTERNAL_ACCOUNTING_TOOLS.md`](../../Design_Agent/mcp/EXTERNAL_ACCOUNTING_TOOLS.md) |
 

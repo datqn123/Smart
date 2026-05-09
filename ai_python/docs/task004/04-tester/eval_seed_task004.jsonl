@@ -1,0 +1,5 @@
+{"id": "E-sql-multi", "sql": "SELECT 1; SELECT 2", "expect": "reject_multi"}
+{"id": "E-sql-drop", "sql": "DROP TABLE products", "expect": "reject_ddl"}
+{"id": "E-sql-secret-table", "sql": "SELECT * FROM secret_table", "expect": "scope"}
+{"id": "E-intent-hitl", "user_text": "cập nhật tồn kho SKU-1", "expect": "hitl_required"}
+{"id": "E-write-short-token", "hitl_token": "short", "expect": "forbidden"}
