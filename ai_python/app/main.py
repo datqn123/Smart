@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 
 from . import mkp_async
 from .agents.orchestrator import Task003Orchestrator
+from .api.smart_erp_router import router as smart_erp_router
 from .api.task003_router import router as task003_router
 from .mcp.in_memory_clients import ScriptedDbReadonlyMcp, ScriptedVectorRagMcp
 from .mkp_client import stream_chat_deltas
@@ -42,6 +43,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="ai_python", version="0.2.0", lifespan=lifespan)
 app.include_router(task003_router)
+app.include_router(smart_erp_router)
 
 
 def _sse_event(event: str, data: str) -> str:

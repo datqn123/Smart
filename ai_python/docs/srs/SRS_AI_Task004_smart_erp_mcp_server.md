@@ -12,7 +12,7 @@
 
 ## 1. Scope
 
-- **In scope**: MCP server process **`smart-erp-ai`** (FastMCP stdio) under `ai_python/app/smart_erp_mcp/`; tool contracts; `sqlglot` validation; demo **in-memory SQLite** execution; stubs for RAG/write; docs + bridge table + runbook.
+- **In scope**: MCP server process **`smart-erp-ai`** (FastMCP stdio) under `ai_python/app/smart_erp_mcp/`; tool contracts; `sqlglot` validation; demo **in-memory SQLite** execution; stubs for RAG/write; docs + bridge table + runbook; **HTTP relay** `POST /v1/smart-erp/turn` trên FastAPI (`app/api/smart_erp_router.py`) gọi intent → tool (inline hoặc MCP stdio qua env).
 - **Out of scope**: `backend/`, `frontend/` changes; production wiring to Spring; real vector index.
 
 ---
@@ -118,7 +118,7 @@ Expand to ≥30 in Eval task folder later.
 | AC-2 | `sql_execute_read` rejects non-SELECT / multi-statement / off-allowlist tables (tests). |
 | AC-3 | `intent_analyze` returns stable keys; transactional phrases set `hitl_required`. |
 | AC-4 | `write_commit` rejects short token / missing idempotency. |
-| AC-5 | Logging helper never emits full `hitl_token` body (unit assertion or code inspection checklist in CR). |
+| AC-6 | `POST /v1/smart-erp/turn` trả `mode` + `steps` (≥1 step); với `SMART_ERP_MCP_INLINE=1` pytest xanh. |
 
 ---
 

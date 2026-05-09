@@ -67,3 +67,14 @@ python -m app.smart_erp_mcp
 
 Chi tiết: [`docs/task004/RUNBOOK_MCP.md`](docs/task004/RUNBOOK_MCP.md).
 
+### HTTP — một lượt intent + tool (`/v1/smart-erp/turn`)
+
+```powershell
+curl -s -X POST http://localhost:9000/v1/smart-erp/turn `
+  -H "Content-Type: application/json" `
+  -d "{\"user_text\":\"tồn kho SKU\",\"session_id\":\"demo\"}"
+```
+
+- In-process (mặc định): không cần biến môi trường (hoặc `SMART_ERP_MCP_INLINE=1`).
+- Kết nối MCP stdio thật: bật `SMART_ERP_MCP_STDIO=1` trước khi chạy uvicorn; process con chạy `python -m app.smart_erp_mcp`.
+

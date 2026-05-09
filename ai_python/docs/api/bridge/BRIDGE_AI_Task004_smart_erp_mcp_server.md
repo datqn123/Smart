@@ -5,6 +5,17 @@
 | **Task** | Task004 |
 | **SRS** | [`SRS_AI_Task004_smart_erp_mcp_server.md`](../srs/SRS_AI_Task004_smart_erp_mcp_server.md) |
 
+## HTTP (FastAPI relay)
+
+| Path | Method | Request body | Response |
+| :--- | :--- | :--- | :--- |
+| `/v1/smart-erp/turn` | `POST` | `{ "user_text": string, "session_id?": string, "sql?": string }` | `{ "mode": "inline" \| "stdio", "steps": [{ "tool", "result" }] }` |
+
+Env:
+
+- `SMART_ERP_MCP_STDIO=1` — spawn MCP stdio subprocess per request (real MCP wire).
+- `SMART_ERP_MCP_INLINE=1` — in-process handlers (default when stdio unset; tests).
+
 ## MCP tools (stdio host: `smart-erp-ai`)
 
 | SRS § | MCP tool | Args (summary) | Response (summary) | Notes |
