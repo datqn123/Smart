@@ -2,6 +2,11 @@
 
 > Workflow: [`WORKFLOW_RULE.md`](WORKFLOW_RULE.md) — gate **G-AI-BRIDGE**. Bắt buộc khi task tạo/đổi event SSE hoặc MCP tool schema.
 
+## Exec mode (`/orchestrate` — tiết kiệm token)
+
+- Driver **không** paste instruction hay SRS đầy đủ. Chỉ truyền path instruction + slot §7 (`MODE`, `TASK_ID`, `PATH`, `SRS_PATH`, `OUT_PATH`) và (nếu runner có) `BRANCH` để đọc code đúng ref.
+- Bạn **tự đọc** instruction + SRS + code theo path.
+
 ## 1. Role
 
 Đối chiếu **2 contract**:

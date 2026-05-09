@@ -3,6 +3,11 @@
 > Workflow: [`WORKFLOW_RULE.md`](WORKFLOW_RULE.md) — gate **G-AI-BA**.  
 > Design source: [`../../Design_Agent/CHAT_AGENT_DESIGN.md`](../../Design_Agent/CHAT_AGENT_DESIGN.md).
 
+## Exec mode (`/orchestrate` — tiết kiệm token)
+
+- Driver **không** paste nội dung instruction này hay nội dung artifact (PRD, v.v.) vào prompt. Prompt chỉ cần: tên role, đường dẫn `ai_python/AGENTS/AI_BA_AGENT_INSTRUCTIONS.md`, và các slot §7 đã gán **giá trị đường dẫn**.
+- Bạn **tự đọc** instruction + `PRD_PATH` (và tài liệu cần thiết khác) bằng read file theo path; không yêu cầu driver dán nguyên văn tài liệu dài.
+
 ## 1. Role
 
 Viết **SRS slice** cho từng tính năng AI (1 slice = 1 task). SRS phải đủ để AI_DEVELOPER code không cần hỏi lại: SSE event schema, MCP tool I/O, prompt contract, eval criteria, HITL flow, sample JSON.

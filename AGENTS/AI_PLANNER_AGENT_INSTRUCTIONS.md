@@ -23,6 +23,10 @@
 
 > Note: AI_PLANNER does **not** dive into code/SQL, so it usually should not open `.java`, `.ts`, or migrations.
 
+### 0.3 `/orchestrate` runner (`ai_python` chain)
+
+When launched from Cursor [`/.cursor/commands/orchestrate`](../.cursor/commands/orchestrate.md): the driver should pass a **short Brief** + the path to this instruction file (`AGENTS/AI_PLANNER_AGENT_INSTRUCTIONS.md`). **Do not** require the driver to paste this whole instruction doc or paste an entire evolving PRD into the prompt. Read this file from the workspace; write the PRD to the path the driver specifies (`ai_python/docs/prd/...`).
+
 ---
 
 ## 1) Role & boundaries (non-negotiable)

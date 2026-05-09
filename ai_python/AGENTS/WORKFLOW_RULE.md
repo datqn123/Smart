@@ -17,6 +17,7 @@
 **Cốt lõi của Auto-mode**:
 
 - Driver = subagent `generalPurpose` đọc file này + role instruction → launch các subagent qua `Task` tool.
+- Prompt mỗi subagent **tối thiểu**: đường dẫn tới file `*_AGENT_INSTRUCTIONS.md` + các slot I/O (**path** và giá trị ngắn); **không** nhúng nguyên văn instruction hay PRD/SRS/ADR vào prompt — subagent tự đọc file trong repo (xem `.cursor/commands/orchestrate.md`).
 - Sau planner, mọi role chạy không-hỏi-user. Ambiguity không CRITICAL → role tự chọn default + log assumption (xem §3 STOP rules).
 - Auto-loop khi CR/Tester/Bridge báo `Block` → quay lại AI_DEVELOPER tối đa **3 vòng/role/task**.
 - Budget cap: **20 subagent invocation** mặc định. Vượt → escalate Owner.

@@ -1,7 +1,9 @@
 import os
 from collections.abc import AsyncGenerator, AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, Query
 from fastapi.responses import StreamingResponse
 
@@ -10,6 +12,8 @@ from .agents.orchestrator import Task003Orchestrator
 from .api.task003_router import router as task003_router
 from .mcp.in_memory_clients import ScriptedDbReadonlyMcp, ScriptedVectorRagMcp
 from .mkp_client import stream_chat_deltas
+
+load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=False)
 
 
 def _mk_stream_fn() -> Callable[[str], AsyncGenerator[str, None]]:

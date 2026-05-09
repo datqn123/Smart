@@ -5,7 +5,9 @@ description: Auto-run AI agent chain (BA → PM → TECH_LEAD → DEV → CODE_R
 
 # /orchestrate — Auto-runner cho ai_python
 
-> Driver thực thi chuỗi role theo [`ai_python/AGENTS/WORKFLOW_RULE.md`](../../ai_python/AGENTS/WORKFLOW_RULE.md). Bạn (driver agent) đọc file này + Workflow + Registry, rồi tuần tự launch subagent qua **Task tool** (`subagent_type=generalPurpose`) cho từng role.
+> Driver thực thi chuỗi role theo [`ai_python/AGENTS/WORKFLOW_RULE.md`](../../ai_python/AGENTS/WORKFLOW_RULE.md) + [`ai_python/AGENTS/AGENT_REGISTRY.md`](../../ai_python/AGENTS/AGENT_REGISTRY.md).
+>
+> Mục tiêu: **tối ưu token**. Driver **không nhúng** nội dung `*_AGENT_INSTRUCTIONS.md` vào prompt; chỉ đưa **đường dẫn file** để subagent tự đọc (và tự đọc artifact input theo path).
 
 ## Tham số (parse từ user message)
 
@@ -19,43 +21,38 @@ description: Auto-run AI agent chain (BA → PM → TECH_LEAD → DEV → CODE_R
 - `Budget`: trần số lần invoke subagent. Mặc định 20. Vượt → escalate.
 - `SkipPlanner`: nếu PRD đã có sẵn cho task → bỏ qua planner.
 
-## Driver state (giữ trong message history của driver)
+## Driver state (tối thiểu; giữ trong message history)
 
 ```yaml
 task_id: <Task???>
 task_slug: <slug>
 branch: feature/ai-task<???>
-artifacts:
-  prd: <path?>
-  srs: <path?>
-  adr: <path?>
-  task_file: <path?>
-  code_review: <path?>
-  bridge: <path?>
-  tester: <folder?>
-  sync_report: <path?>
-  audit: <path?>
-loop_count:
-  cr: 0
-  tester: 0
-  bridge: 0
+artifacts: { prd: <path?>, srs: <path?>, task_file: <path?>, adr: <path?> }
+reports: { cr: <path?>, bridge: <path?>, tester: <folder?>, doc_sync: <path?>, audit: <path?> }
+loops: { cr: 0, bridge: 0, tester: 0 }
 budget_used: 0
 budget_cap: 20
 current_gate: G-AI-PLAN
 ```
 
-Update state sau mỗi subagent return; in lại state ngắn cho user mỗi gate xong.
+Update state sau mỗi subagent return; chỉ in **1–2 dòng** trạng thái (gate + budget + loop counters).
 
 ## Quy tắc tuyệt đối (không vi phạm)
 
 1. **HITL duy nhất ở AI_PLANNER**: sau khi planner trả option A/B/C → DỪNG, in prompt yêu cầu Owner gõ `A` / `B` / `C` / `pick optimal`. **Không** hỏi user ở role nào khác.
-2. **STOP rules** từng role (xem mục 8 file `*_INSTRUCTIONS.md`): match → escalate Owner ngay, không loop.
-3. **Auto-loop**: CR/TST/BRIDGE Block → relaunch DEV với feedback đính kèm, tăng `loop_count.<role>`. Vượt 3 → STOP escalate.
+2. **STOP rules**: theo `WORKFLOW_RULE.md` §3.1 và STOP rules trong từng role instruction. Match → escalate Owner ngay, không loop.
+3. **Auto-loop**: CR/TST/BRIDGE Block → relaunch DEV với feedback đính kèm, tăng `loops.<role>`. Vượt 3 → STOP escalate.
 4. **Budget**: mỗi lần launch subagent → `budget_used += 1`. Vượt cap → STOP escalate.
 5. **Không sửa file ngoài `ai_python/`**: nếu role nào trả output đụng `backend/` hoặc `frontend/` → STOP cross-scope.
 6. **Không tự gõ `A/B/C` thay user** (ngay cả khi `pick optimal` được Owner uỷ quyền — vẫn để planner subagent quyết, driver chỉ relay).
 
-## Pipeline (mỗi step = launch 1 subagent qua Task tool)
+## Nguyên tắc prompt (để giảm token mà vẫn đúng)
+
+- **Không paste instruction**: prompt chỉ gồm (a) role name, (b) đường dẫn `*_AGENT_INSTRUCTIONS.md`, (c) I/O variables, (d) gate cần pass, (e) loop feedback (nếu có).
+- **Không paste nội dung artifact**: chỉ đưa **path** + “đọc file đó” (subagent tự đọc).
+- **Loop feedback**: đưa **path report** + tối đa 10 dòng trích dẫn phần `Block`/`Major` (nếu cần), không dán toàn report.
+
+## Pipeline (mỗi step = 1 subagent qua Task tool)
 
 ### Step 0 — Pre-flight
 
@@ -70,9 +67,12 @@ Update state sau mỗi subagent return; in lại state ngắn cho user mỗi gat
 - Launch:
   ```
   Task tool → subagent_type=generalPurpose
-  prompt = nội dung @AGENTS/AI_PLANNER_AGENT_INSTRUCTIONS.md +
-           "Brief: <Brief>" +
-           "Output PRD tới ai_python/docs/prd/PRD_<slug>.md theo format §4 PRD."
+  prompt:
+    - Role: AI_PLANNER
+    - Read instructions: @AGENTS/AI_PLANNER_AGENT_INSTRUCTIONS.md
+    - Brief: <Brief>
+    - Output PRD: ai_python/docs/prd/PRD_<slug>.md
+    - Requirement: provide options A/B/C + recommendation
   ```
 - Subagent trả ≥ 2 option A/B/C + recommendation.
 - **DỪNG**, in cho user:
@@ -81,98 +81,93 @@ Update state sau mỗi subagent return; in lại state ngắn cho user mỗi gat
 
 ### Step 2 — AI_BA (G-AI-BA)
 
-- Launch subagent với prompt = nội dung [`ai_python/AGENTS/AI_BA_AGENT_INSTRUCTIONS.md`](../../ai_python/AGENTS/AI_BA_AGENT_INSTRUCTIONS.md) + I/O Contract instantiate (`PRD_PATH`, `TASK_ID`, `TASK_SLUG`, `OUT_PATH`, `MCP_PHASE=0`).
+- Launch:
+  - Role: AI_BA
+  - Read instructions: @ai_python/AGENTS/AI_BA_AGENT_INSTRUCTIONS.md
+  - Inputs: `PRD_PATH=<artifacts.prd>`
+  - Outputs: `OUT_PATH=ai_python/docs/srs/SRS_AI_<task_id>_<task_slug>.md`
+  - Vars: `TASK_ID`, `TASK_SLUG`, `MCP_PHASE=0`
 - Verify gate exit §5 của BA. Match STOP rule → escalate. Pass → set `artifacts.srs`.
 
 ### Step 3 — AI_PM (G-AI-PM)
 
-- Launch với [`AI_PM_AGENT_INSTRUCTIONS.md`](../../ai_python/AGENTS/AI_PM_AGENT_INSTRUCTIONS.md). Slot: `SRS_PATH`, `TASK_ID`, `OUT_TASK_FILE`, `OUT_TASK_FOLDER`, `BRANCH_NAME`.
+- Launch:
+  - Role: AI_PM
+  - Read instructions: @ai_python/AGENTS/AI_PM_AGENT_INSTRUCTIONS.md
+  - Inputs: `SRS_PATH=<artifacts.srs>`
+  - Outputs: `OUT_TASK_FILE=ai_python/TASKS/Task<XXX>.md`, `OUT_TASK_FOLDER=ai_python/docs/task<XXX>/`
+  - Vars: `TASK_ID`, `BRANCH_NAME=feature/ai-task<XXX>`
 - Verify branch tồn tại + `Task<XXX>.md` đúng cấu trúc → set `artifacts.task_file`, `state.branch`.
 
 ### Step 4 — AI_TECH_LEAD (G-AI-TL)
 
-- Launch với [`AI_TECH_LEAD_AGENT_INSTRUCTIONS.md`](../../ai_python/AGENTS/AI_TECH_LEAD_AGENT_INSTRUCTIONS.md). Slot: `SRS_PATH`, `TASK_FILE`, `ADR_NUMBER` (driver đọc folder `docs/adr/` lấy số kế tiếp), `OUT_PATH`.
+- Launch:
+  - Role: AI_TECH_LEAD
+  - Read instructions: @ai_python/AGENTS/AI_TECH_LEAD_AGENT_INSTRUCTIONS.md
+  - Inputs: `SRS_PATH=<artifacts.srs>`, `TASK_FILE=<artifacts.task_file>`
+  - Outputs: `OUT_PATH=ai_python/docs/adr/ADR-<NNN>-<task_slug>.md`
+  - Vars: `ADR_NUMBER=<next>`
 - Verify NFR có 5 mục số. Pass → set `artifacts.adr`.
 
 ### Step 5 — AI_DEVELOPER (G-AI-DEV)
 
-- Launch với [`AI_DEVELOPER_AGENT_INSTRUCTIONS.md`](../../ai_python/AGENTS/AI_DEVELOPER_AGENT_INSTRUCTIONS.md). Slot: `TASK_FILE`, `SRS_PATH`, `ADR_PATH`, `BRANCH`, `LOOP_FEEDBACK` (rỗng lần đầu).
+- Launch:
+  - Role: AI_DEVELOPER
+  - Read instructions: @ai_python/AGENTS/AI_DEVELOPER_AGENT_INSTRUCTIONS.md
+  - Inputs: `TASK_FILE=<artifacts.task_file>`, `SRS_PATH=<artifacts.srs>`, `ADR_PATH=<artifacts.adr>`
+  - Vars: `BRANCH=<state.branch>`, `LOOP_FEEDBACK=<empty | report path>`
 - Verify gate exit §5 (pytest/coverage/ruff/mypy + commit). Pass → đi tiếp.
 
 ### Step 6 — AI_CODE_REVIEWER (G-AI-CR) — auto-loop
 
-```
-loop:
-  launch AI_CODE_REVIEWER (iteration = loop_count.cr + 1)
-  read CODE_REVIEW report verdict
-  if verdict == PASS: break
-  else if loop_count.cr >= 3: escalate STOP
-  else if STOP rule matched: escalate STOP
-  else:
-    loop_count.cr += 1
-    relaunch AI_DEVELOPER với LOOP_FEEDBACK = path report
-    relaunch AI_CODE_REVIEWER (iteration += 1)
-```
-
-- Slot CR: `BRANCH`, `BASE_REF=develop`, `SRS_PATH`, `ADR_PATH`, `OUT_PATH`, `ITERATION`.
+- Loop rule: theo `WORKFLOW_RULE.md` §2/§3 (`Block` → loop về DEV, max 3).
+- Launch each iteration:
+  - Role: AI_CODE_REVIEWER
+  - Read instructions: @ai_python/AGENTS/AI_CODE_REVIEWER_AGENT_INSTRUCTIONS.md
+  - Inputs: `BRANCH=<state.branch>`, `BASE_REF=develop`, `SRS_PATH=<artifacts.srs>`, `ADR_PATH=<artifacts.adr>`
+  - Outputs: `OUT_PATH=ai_python/docs/task<XXX>/05-code-review/CODE_REVIEW_Task<XXX>.md`
+  - Vars: `ITERATION=<loops.cr+1>`
 
 ### Step 7 — AI_BRIDGE (G-AI-BRIDGE) — conditional
 
-- Skip nếu task không tạo/đổi event SSE và không tạo MCP tool mới (driver xác định bằng cách grep diff branch xem có chạm `app/api/sse.py` hoặc `app/mcp/`).
-- Nếu chạm → launch [`AI_BRIDGE_AGENT_INSTRUCTIONS.md`](../../ai_python/AGENTS/AI_BRIDGE_AGENT_INSTRUCTIONS.md) `Mode=verify`.
-- Drift `Block` ở `ai_python ↔ SRS` → loop về DEV (cùng cơ chế CR, đếm `loop_count.bridge`).
-- Drift ngoài (Spring/FE) → ghi handoff section, **không** loop.
+- Skip nếu task không tạo/đổi event SSE hoặc MCP schema (xác định bằng diff chạm `ai_python/app/api/sse.py` hoặc `ai_python/app/mcp/`).
+- Launch:
+  - Role: AI_BRIDGE
+  - Read instructions: @ai_python/AGENTS/AI_BRIDGE_AGENT_INSTRUCTIONS.md
+  - Mode: `verify`
+  - Inputs: `SRS_PATH=<artifacts.srs>`, `ADR_PATH=<artifacts.adr>`, `BRANCH=<state.branch>`
+  - Outputs: `OUT_PATH=ai_python/docs/api/bridge/BRIDGE_AI_Task<XXX>_<task_slug>.md`
+- Loop only khi drift thuộc scope `ai_python` (theo instruction). Drift ngoài scope → handoff, không loop.
 
 ### Step 8 — AI_TESTER (G-AI-TST) — auto-loop
 
-```
-loop:
-  launch AI_TESTER
-  if pass: break
-  else if loop_count.tester >= 3: escalate
-  else if HITL bypass red-team passes (security STOP): escalate IMMEDIATELY
-  else:
-    loop_count.tester += 1
-    relaunch AI_DEVELOPER với LOOP_FEEDBACK = report path
-    rerun AI_CODE_REVIEWER (1 vòng nhanh — không đếm vào loop_count.cr)
-    rerun AI_TESTER
-```
-
-- Slot: `SRS_PATH`, `ADR_PATH`, `TASK_ID`, `OUT_FOLDER`, `EVAL_PROMPTS`.
+- Loop rule: `Block` → loop về DEV, max 3; security STOP (HITL bypass) → escalate ngay.
+- Launch:
+  - Role: AI_TESTER
+  - Read instructions: @ai_python/AGENTS/AI_TESTER_AGENT_INSTRUCTIONS.md
+  - Inputs: `SRS_PATH=<artifacts.srs>`, `ADR_PATH=<artifacts.adr>`
+  - Outputs: `OUT_FOLDER=ai_python/docs/task<XXX>/04-tester/`
+  - Vars: `TASK_ID`, `EVAL_PROMPTS=<as required by instruction>`
 
 ### Step 9 — AI_DOC_SYNC (G-AI-DS)
 
-- Launch với [`AI_DOC_SYNC_AGENT_INSTRUCTIONS.md`](../../ai_python/AGENTS/AI_DOC_SYNC_AGENT_INSTRUCTIONS.md). Slot: `SCOPE=Task<XXX>`, `OUT_PATH`.
+- Launch:
+  - Role: AI_DOC_SYNC
+  - Read instructions: @ai_python/AGENTS/AI_DOC_SYNC_AGENT_INSTRUCTIONS.md
+  - Vars: `SCOPE=Task<XXX>`
+  - Outputs: `OUT_PATH=ai_python/docs/sync_reports/SYNC_REPORT_Task<XXX>_<date>.md`
 - 0 drift Block → pass.
 
 ### Step 10 — AI_ORCHESTRATOR (G-AI-OR final)
 
-- Launch với [`AI_ORCHESTRATOR_AGENT_INSTRUCTIONS.md`](../../ai_python/AGENTS/AI_ORCHESTRATOR_AGENT_INSTRUCTIONS.md). Slot: `MODE=final`, `TASK_ID`, `OUT_PATH=ai_python/docs/orchestration/AUDIT_<Task>_final.md`.
+- Launch:
+  - Role: AI_ORCHESTRATOR
+  - Read instructions: @ai_python/AGENTS/AI_ORCHESTRATOR_AGENT_INSTRUCTIONS.md
+  - Vars: `MODE=final`, `TASK_ID`
+  - Outputs: `OUT_PATH=ai_python/docs/orchestration/AUDIT_<Task>_final.md`
 - Verdict `PASS` → toàn task xong.
-- Verdict `WARN` → in danh sách warn, hỏi Owner accept (đây là **HITL ngoại lệ duy nhất** sau planner — nếu Owner muốn skip Warn → driver chấp nhận và đóng task).
+- Verdict `WARN` → in danh sách warn, hỏi Owner accept (HITL ngoại lệ duy nhất sau planner).
 - Verdict `FAIL` → escalate Owner full report.
-
-## Auto-loop snippet (mã giả runner dùng)
-
-```python
-def run_with_loop(role_launch_fn, gate_check_fn, loop_key, max_loops=3, dev_relaunch_fn=None):
-    iteration = 1
-    while True:
-        report = role_launch_fn(iteration=iteration)
-        verdict = gate_check_fn(report)
-        if verdict == "PASS":
-            return report
-        if verdict == "STOP":
-            escalate(report)
-            return None
-        if state["loop_count"][loop_key] >= max_loops:
-            escalate(f"{loop_key} loop > {max_loops}", report)
-            return None
-        state["loop_count"][loop_key] += 1
-        if dev_relaunch_fn:
-            dev_relaunch_fn(loop_feedback=report.path)
-        iteration += 1
-```
 
 ## Final summary template (driver in cho user khi xong)
 
@@ -197,7 +192,7 @@ def run_with_loop(role_launch_fn, gate_check_fn, loop_key, max_loops=3, dev_rela
 ## /orchestrate DRY-RUN — Task=<id> Brief="..."
 1. AI_PLANNER → ai_python/docs/prd/PRD_<slug>.md (HITL: A/B/C)
 2. AI_BA → ai_python/docs/srs/SRS_AI_<task>_<slug>.md
-3. AI_PM → ai_python/TASKS/<task>.md + branch feature/ai-<task>
+3. AI_PM → ai_python/TASKS/<task>.md + branch feature/ai-task<task>
 4. AI_TECH_LEAD → ai_python/docs/adr/ADR-<NNN>-<slug>.md
 5. AI_DEVELOPER → ai_python/app/** + tests
 6. AI_CODE_REVIEWER → ai_python/docs/<task>/05-code-review/CODE_REVIEW_<task>.md (auto-loop ≤3)
@@ -210,10 +205,9 @@ Budget cap: 20. Estimated invocations: 10–18 (no loops). With max loops: ~25 (
 
 ## Lưu ý kỹ thuật
 
-- Khi launch subagent qua Task tool, **luôn** truyền cả 3 thứ trong prompt: (a) nội dung file `*_INSTRUCTIONS.md` (read full), (b) I/O Contract instantiate cụ thể, (c) tóm tắt artifact đầu vào (đường dẫn file, không paste full nội dung).
-- Subagent không thấy lịch sử chat của driver — driver phải ghi rõ context cần thiết trong prompt.
-- Khi loop, đính kèm **path** của report cũ + 5–10 dòng quote Block nổi bật, không paste full report (tiết kiệm token).
-- Sau mỗi subagent xong: driver ghi 1 dòng vào terminal-log dạng `[gate=G-AI-DEV iter=1 budget=5/20] PASS/BLOCK <summary>`.
+- Subagent có thể tự đọc repo, nên driver **ưu tiên**: đưa path + biến I/O + gate cần pass (không paste file dài).
+- Driver chỉ cần nhắc subagent: “đọc instruction + đọc các artifact input theo path; không vượt scope `ai_python/`”.
+- Khi loop: đưa report path + trích ngắn phần `Block`/`Major` để DEV sửa đúng điểm.
 
 ## Khi gặp escalation
 
@@ -222,7 +216,7 @@ In cho Owner:
 ```text
 ## /orchestrate ESCALATED at <gate>
 Reason: <STOP rule | budget exceeded | loop > 3>
-State: <yaml dump>
+State: <task_id, branch, gate, budget, loops>
 Last report: <link>
 Suggested next steps:
 1. ...

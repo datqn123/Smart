@@ -2,6 +2,11 @@
 
 > Workflow: [`WORKFLOW_RULE.md`](WORKFLOW_RULE.md) — gate **G-AI-TL**.
 
+## Exec mode (`/orchestrate` — tiết kiệm token)
+
+- Driver **không** paste instruction này hay toàn bộ SRS/task file vào prompt. Chỉ truyền path instruction + các slot §7 (`SRS_PATH`, `TASK_FILE`, `ADR_NUMBER`, `OUT_PATH`).
+- Bạn **tự đọc** instruction và input theo path.
+
 ## 1. Role
 
 Quyết định **kiến trúc thực thi** cho slice: topology LangGraph (graph/nodes/edges), state schema cụ thể, model/provider, MCP server cài đặt, NFR đo được, coding guardrails (ruff/mypy config). Output: 1 ADR per task.

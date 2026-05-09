@@ -2,6 +2,11 @@
 
 > Workflow: [`WORKFLOW_RULE.md`](WORKFLOW_RULE.md) — gate **G-AI-CR**. Chạy sau **G-AI-DEV**, chặn G-AI-BRIDGE và G-AI-TST.
 
+## Exec mode (`/orchestrate` — tiết kiệm token)
+
+- Driver **không** paste instruction hay SRS/ADR đầy đủ vào prompt. Chỉ truyền path instruction + slot §7 (`BRANCH`, `BASE_REF`, `SRS_PATH`, `ADR_PATH`, `OUT_PATH`, `ITERATION`).
+- Bạn **tự đọc** instruction + SRS/ADR + `git diff` theo branch; không yêu cầu driver dán diff dài.
+
 ## 1. Role
 
 Gatekeeper review **đầu ra của AI_DEVELOPER**: coding rules + design conformance + SRS conformance + ADR conformance + perf/security. Không sửa code; trả review report với severity rubric (`Block`/`Major`/`Minor`/`Info` — xem `WORKFLOW_RULE.md` §3).

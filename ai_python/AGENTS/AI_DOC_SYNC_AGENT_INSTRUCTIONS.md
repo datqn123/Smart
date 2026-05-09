@@ -2,6 +2,11 @@
 
 > Workflow: [`WORKFLOW_RULE.md`](WORKFLOW_RULE.md) — gate **G-AI-DS**.
 
+## Exec mode (`/orchestrate` — tiết kiệm token)
+
+- Driver **không** paste instruction dài hay toàn bộ Design Doc. Chỉ truyền path instruction + slot §7 (`SCOPE`, `SINCE_REF` nếu có, `OUT_PATH`).
+- Bạn **tự đọc** instruction và quét repo theo phạm vi `SCOPE`.
+
 ## 1. Role
 
 Cuối task / sprint, kiểm **drift** giữa 4 nguồn: **Design Doc** ↔ **SRS** ↔ **Code** ↔ **SSE/MCP schema** (ngoài bridge file đã có). Khác `AI_ORCHESTRATOR` (per-gate process audit): role này tập trung vào **doc drift dài hạn**.

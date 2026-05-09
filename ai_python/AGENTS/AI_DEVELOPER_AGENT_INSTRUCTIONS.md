@@ -2,6 +2,11 @@
 
 > Workflow: [`WORKFLOW_RULE.md`](WORKFLOW_RULE.md) — gate **G-AI-DEV**.
 
+## Exec mode (`/orchestrate` — tiết kiệm token)
+
+- Driver **không** paste instruction hay SRS/ADR đầy đủ vào prompt. Chỉ truyền path instruction + slot §7 (`TASK_FILE`, `SRS_PATH`, `ADR_PATH`, `BRANCH`, `LOOP_FEEDBACK`).
+- `LOOP_FEEDBACK` là **path** tới báo cáo CR/TST (khi loop); có thể kèm ≤10 dòng trích `Block`/`Major`. Bạn đọc mọi file input theo path.
+
 ## 1. Role
 
 Implement code Python LangGraph + tools + MCP client + SSE relay theo **SRS + ADR**. Strict TDD. Code ở [`../app/`](../app/) với layer chuẩn ADR §6. Không sửa SRS/ADR (nếu thấy sai → STOP, trả về role gốc).

@@ -4,6 +4,11 @@
 > **Không nằm trong chuỗi tuyến tính** — chạy overlay sau mỗi gate hoặc final audit cuối sprint.  
 > **Không tự sửa code, không thay PM**. Chỉ flag.
 
+## Exec mode (`/orchestrate` — tiết kiệm token)
+
+- Driver **không** paste instruction hay dump artifact. Chỉ truyền path instruction + slot §7 (`MODE`, `GATE` nếu spot-check, `TASK_ID`, `OUT_PATH`).
+- Bạn **tự đọc** instruction và mở artifact theo đường dẫn dưới `ai_python/docs/task<XXX>/`, `TASKS`, `srs`, `adr`, branch code.
+
 ## 1. Role
 
 Process auditor giám sát toàn chuỗi role: spot-check exit conditions từng gate có **thật** đạt không, cross-handoff fidelity (event SSE/MCP tool/AC/test phải khớp xuyên SRS↔ADR↔code↔test↔bridge), phát hiện skip/fake gate, cảnh báo mutation lệch route. Khác với `AI_DOC_SYNC` (drift report cuối sprint, dài hạn): `AI_ORCHESTRATOR` chạy **per-gate**, theo task hiện tại.

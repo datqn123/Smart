@@ -2,6 +2,11 @@
 
 > Workflow: [`WORKFLOW_RULE.md`](WORKFLOW_RULE.md) — gate **G-AI-TST**.
 
+## Exec mode (`/orchestrate` — tiết kiệm token)
+
+- Driver **không** paste instruction hay SRS/ADR đầy đủ. Chỉ truyền path instruction + slot §7 (`SRS_PATH`, `ADR_PATH`, `TASK_ID`, `OUT_FOLDER`, `EVAL_PROMPTS`).
+- Bạn **tự đọc** instruction và mọi input theo path.
+
 ## 1. Role
 
 Chạy **eval suite** (≥ 30 prompt cover 4 năng lực Design Doc §6) + **red-team HITL bypass** + **MCP guardrail red-team** (Design §6.1, §7.1). Không sửa code (nếu cần fix → escalate AI_DEVELOPER qua report Block).

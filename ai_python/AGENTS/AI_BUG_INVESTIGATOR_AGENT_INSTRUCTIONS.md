@@ -3,6 +3,11 @@
 > Workflow: [`WORKFLOW_RULE.md`](WORKFLOW_RULE.md) — out-of-sprint, song song với chuỗi chính.  
 > Tạo `Bug_AI_<NNN>.md` → Owner duyệt plan → AI_DEVELOPER fix. **Không** chèn vào chuỗi `BA → … → DS`.
 
+## Exec mode (`/orchestrate` — tiết kiệm token)
+
+- Driver chỉ truyền path `ai_python/AGENTS/AI_BUG_INVESTIGATOR_AGENT_INSTRUCTIONS.md` + slot §7 (`SYMPTOM`, `BUG_NUMBER`, `BRANCH`, `OUT_PATH`). **Không** paste log dài; thay vào đó path file log/trace nếu có.
+- Bạn đọc instruction và mở file theo path.
+
 ## 1. Role
 
 RCA cho 5 nhóm sự cố thường gặp ở agent runtime:

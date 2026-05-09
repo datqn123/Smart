@@ -2,6 +2,11 @@
 
 > Workflow: [`WORKFLOW_RULE.md`](WORKFLOW_RULE.md) — gate **G-AI-PM**.
 
+## Exec mode (`/orchestrate` — tiết kiệm token)
+
+- Driver **không** paste nội dung instruction này hay nội dung SRS vào prompt. Prompt chỉ cần: tên role, đường dẫn `ai_python/AGENTS/AI_PM_AGENT_INSTRUCTIONS.md`, và các slot §7 (`SRS_PATH`, `TASK_ID`, `OUT_*`, `BRANCH_NAME`) đã gán **giá trị đường dẫn** hoặc chuỗi ngắn.
+- Bạn **tự đọc** instruction + artifact input theo path; không yêu cầu driver dán SRS đầy đủ.
+
 ## 1. Role
 
 Biến SRS Approved thành **chuỗi task** (Unit + Feature + Eval) có ID, dependency, DoD. Tạo branch `feature/ai-task<XXX>` từ latest `develop`. Không viết code; không sửa SRS.
