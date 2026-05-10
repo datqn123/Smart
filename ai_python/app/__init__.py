@@ -1,1 +1,1 @@
-"""ai_python application package."""
+"""Application package — AI service (config, LLM port, future graph)."""

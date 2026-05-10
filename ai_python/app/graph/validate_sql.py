@@ -1,0 +1,229 @@
+"""Deterministic SQL validation (TASK-LG-08 / FR-07 / Task 3 upgrade)."""
+
+from __future__ import annotations
+
+import re
+
+import sqlparse
+from sqlparse.sql import Comparison, Identifier, IdentifierList, Statement, Where
+
+from app.config.graph_settings import GraphSettings
+
+_DDL_DML = re.compile(
+    r"\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE|GRANT|REVOKE)\b",
+    re.IGNORECASE,
+)
+
+_SQL_KEYWORDS = frozenset(
+    """
+    select distinct from where and or not null true false as on in is like
+    left right inner outer join cross natural full group by order having limit
+    offset union all case when then else end between exists asc desc
+    """.split(),
+)
+
+
+def _extract_from_join_tables(sql: str) -> set[str]:
+    names: set[str] = set()
+    for m in re.finditer(r"(?i)\b(?:from|join)\s+([a-zA-Z_][\w.]*)", sql):
+        names.add(m.group(1).split(".")[-1].lower())
+    return names
+
+
+def _from_join_alias_map(sql: str) -> dict[str, str]:
+    """Map alias or table token → canonical table name (last path segment, lower)."""
+    out: dict[str, str] = {}
+    for m in re.finditer(
+        r"(?i)\b(?:from|join)\s+([a-zA-Z_][\w.]*)(?:\s+(?:as\s+)?([a-zA-Z_]\w*))?\b",
+        sql,
+    ):
+        raw_t = m.group(1).split(".")[-1].lower()
+        alias = m.group(2)
+        out[raw_t] = raw_t
+        if alias:
+            out[alias.lower()] = raw_t
+    return out
+
+
+def _from_keyword_index(tokens: list) -> int:
+    for i, t in enumerate(tokens):
+        if str(t).upper().strip() == "FROM":
+            return i
+    return -1
+
+
+def _end_join_region(tokens: list, fi: int) -> int:
+    """First index at or after FROM clause where main filters start (WHERE / GROUP / …)."""
+    for i in range(fi + 1, len(tokens)):
+        t = tokens[i]
+        if isinstance(t, Where):
+            return i
+        su = str(t).upper().strip()
+        if su.startswith(("GROUP BY", "ORDER BY", "LIMIT", "HAVING")):
+            return i
+    return len(tokens)
+
+
+def _rec_ids(token: object) -> list[Identifier]:
+    out: list[Identifier] = []
+    if isinstance(token, Identifier):
+        return [token]
+    if isinstance(token, IdentifierList):
+        for x in token.get_identifiers():
+            if str(x).strip() == "*":
+                continue
+            out.extend(_rec_ids(x))
+        return out
+    if isinstance(token, Comparison):
+        for x in token.tokens:
+            out.extend(_rec_ids(x))
+        return out
+    if hasattr(token, "tokens"):
+        for x in token.tokens:
+            out.extend(_rec_ids(x))
+    return out
+
+
+def _collect_column_identifiers(stmt: Statement) -> list[Identifier]:
+    """Identifiers used as columns (excludes FROM table names; includes JOIN ON / WHERE / GROUP / ORDER)."""
+    tks = stmt.tokens
+    fi = _from_keyword_index(tks)
+    ids: list[Identifier] = []
+    if fi < 0:
+        return ids
+    for t in tks[0:fi]:
+        if str(t).upper().strip() == "SELECT":
+            continue
+        ids.extend(_rec_ids(t))
+    ej = _end_join_region(tks, fi)
+    for t in tks[fi + 1 : ej]:
+        if isinstance(t, Comparison):
+            ids.extend(_rec_ids(t))
+    wi = next((i for i, t in enumerate(tks) if isinstance(t, Where)), None)
+    if wi is not None:
+        ids.extend(_rec_ids(tks[wi]))
+    start_post = (wi + 1) if wi is not None else ej
+    i = start_post
+    while i < len(tks):
+        su = str(tks[i]).upper().strip()
+        if su.startswith("GROUP BY"):
+            i += 1
+            while i < len(tks):
+                ns = str(tks[i]).upper().strip()
+                if ns.startswith(("ORDER BY", "LIMIT", "HAVING")):
+                    break
+                ids.extend(_rec_ids(tks[i]))
+                i += 1
+            continue
+        if su.startswith("ORDER BY"):
+            i += 1
+            while i < len(tks):
+                ns = str(tks[i]).upper().strip()
+                if ns.startswith("LIMIT"):
+                    break
+                ids.extend(_rec_ids(tks[i]))
+                i += 1
+            continue
+        if su.startswith("HAVING"):
+            i += 1
+            while i < len(tks):
+                if isinstance(tks[i], Comparison):
+                    ids.extend(_rec_ids(tks[i]))
+                ns = str(tks[i]).upper().strip()
+                if ns.startswith(("ORDER BY", "LIMIT")):
+                    break
+                i += 1
+            continue
+        i += 1
+    return ids
+
+
+def _resolve_canonical_table(ref: str, alias_map: dict[str, str]) -> str:
+    r = ref.lower()
+    return alias_map.get(r, r)
+
+
+def _validate_columns_for_map(
+    stmt: Statement,
+    *,
+    table_columns: dict[str, set[str]],
+    alias_map: dict[str, str],
+) -> str | None:
+    canonical_tables = set(alias_map.values())
+    union_cols: set[str] = set()
+    for t in canonical_tables:
+        union_cols |= table_columns.get(t, set())
+
+    for ident in _collect_column_identifiers(stmt):
+        parent = ident.get_parent_name()
+        real = ident.get_real_name()
+        if real is None:
+            continue
+        real_l = real.lower()
+        if real_l == "*":
+            continue
+        if parent:
+            tbl = _resolve_canonical_table(parent, alias_map)
+            allowed = table_columns.get(tbl)
+            if allowed is None or real_l not in allowed:
+                return f"column not in allowlist: {real_l}"
+        else:
+            if real_l in _SQL_KEYWORDS:
+                continue
+            if real_l not in union_cols:
+                return f"column not in allowlist: {real_l}"
+    return None
+
+
+def validate_sql_deterministic(
+    sql: str | None,
+    settings: GraphSettings,
+    *,
+    allowlist_tables: set[str] | None = None,
+    table_columns: dict[str, set[str]] | None = None,
+) -> tuple[bool, str | None, str | None, list[str]]:
+    """
+    Returns (ok, detail, sanitized_sql, policy_notes).
+    If ok, sanitized_sql may inject LIMIT; notes capture hybrid LIMIT policy messages.
+    """
+    notes: list[str] = []
+    if not sql or not sql.strip():
+        return False, "empty sql", None, notes
+    s = sql.strip()
+    parsed = sqlparse.parse(s)
+    if len(parsed) != 1:
+        return False, "only single statement allowed", None, notes
+    stmt = parsed[0]
+    stype = (stmt.get_type() or "").upper()
+    if stype != "SELECT":
+        return False, "only SELECT is allowed", None, notes
+    if _DDL_DML.search(s):
+        return False, "DDL/DML keywords not allowed", None, notes
+
+    if allowlist_tables is not None:
+        allow = allowlist_tables
+    else:
+        cfg = settings.sql_allowed_tables
+        if cfg:
+            allow = {t.strip().lower() for t in cfg.split(",") if t.strip()}
+        else:
+            allow = None
+
+    tables = _extract_from_join_tables(s)
+    if allow is not None:
+        if tables and not tables <= allow:
+            return False, f"table not in allowlist {sorted(allow)}", None, notes
+
+    if table_columns is not None:
+        alias_map = _from_join_alias_map(s)
+        col_err = _validate_columns_for_map(stmt, table_columns=table_columns, alias_map=alias_map)
+        if col_err:
+            return False, col_err, None, notes
+
+    upper = s.upper()
+    has_limit = " LIMIT " in f" {upper} " or upper.rstrip().rstrip(";").endswith("LIMIT")
+    if not has_limit:
+        lim = settings.sql_limit_max
+        s = f"{s.rstrip().rstrip(';')} LIMIT {lim}"
+        notes.append("LIMIT injected (was missing)")
+    return True, None, s, notes

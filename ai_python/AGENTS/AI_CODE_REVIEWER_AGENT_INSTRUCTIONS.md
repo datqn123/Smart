@@ -1,134 +1,47 @@
-# Agent — AI_CODE_REVIEWER
+# AI_CODE_REVIEWER — Code Review (`ai_python`)
 
-> Workflow: [`WORKFLOW_RULE.md`](WORKFLOW_RULE.md) — gate **G-AI-CR**. Chạy sau **G-AI-DEV**, chặn G-AI-BRIDGE và G-AI-TST.
+> **Callsign**: `AI_CODE_REVIEWER`  
+> **Input**: SRS, ADR, Task file; codebase `ai_python/` sau DEV.
 
-## 1. Role
+---
 
-Gatekeeper review **đầu ra của AI_DEVELOPER**: coding rules + design conformance + SRS conformance + ADR conformance + perf/security. Không sửa code; trả review report với severity rubric (`Block`/`Major`/`Minor`/`Info` — xem `WORKFLOW_RULE.md` §3).
+## §1 I/O contract
 
-## 2. Inputs
+| Slot | Mô tả |
+| :-- | :-- |
+| `SRS_PATH` | SRS |
+| `ADR_PATH` | ADR |
+| `TASK_FILE` | Task — scope & nhãn báo cáo |
+| `OUT_PATH` | `ai_python/docs/task<XXX>/05-code-review/CODE_REVIEW_<task>.md` |
+| `ITERATION` | Số vòng (1…4) — ghi trong báo cáo |
 
-- Phạm vi review: `ai_python/app/`, `ai_python/tests/` so với SRS/ADR. **Không bắt buộc git**: nếu có `BASE_REF`/`BRANCH` (tuỳ Owner) có thể dùng `git diff` để thu hẹp scope; nếu không có ref → review static (grep/read tree) trên hai thư mục đó.
-- `ai_python/docs/srs/SRS_AI_Task<XXX>_*.md`.
-- `ai_python/docs/adr/ADR-<NNN>-*.md`.
-- Design Doc §1–§5: [`../../Design_Agent/CHAT_AGENT_DESIGN.md`](../../Design_Agent/CHAT_AGENT_DESIGN.md).
-- (Loop trước) report cũ ở `ai_python/docs/task<XXX>/05-code-review/CODE_REVIEW_TaskXXX.md` để check fix.
+---
 
-## 3. Process (SOP) — 5 nhóm checklist
+## §2 Nội dung báo cáo
 
-### 3.1 Coding rules (deterministic)
+1. **Verdict**: `PASS` | `BLOCK` | `STOP`.
+2. **Tóm tắt** — 3–7 gạch đầu dòng.
+3. **Findings** — chấm điểm mức độ; chỉ code path `ai_python/`.
+4. **Khớp SRS/ADR** — đạt / lệch (nêu mục).
+5. **Nếu BLOCK** — hành động cụ thể cho DEV (file + gợi ý).
 
-| Check | Cách |
-| :--- | :--- |
-| `ruff check app/ tests/` | exit 0 |
-| `mypy app/` | exit 0 (config theo ADR) |
-| Type hints đầy đủ | grep `def ` không có `->` annotation → flag |
-| No `print(` trong `app/` | grep `^\s*print(` |
-| No hardcoded secret | grep `sk-`, `Bearer `, `api_key\s*=\s*"` (không qua `os.getenv`) |
-| Error handling async | grep `async def` không có `try`/`except` ở entrypoint → review case-by-case |
-| Logging level | `logging.getLogger(__name__)` thay vì `logging.info` global |
-| Conventional Commits | Nếu có `git log` (có ref base): kiểm tra format; nếu không có git → ghi `Info` "skipped (no git ref)" — không Block |
+---
 
-### 3.2 Design conformance (Design Doc §1–§5)
+## §3 Verdict
 
-| Check | Block nếu |
-| :--- | :--- |
-| Chat Agent **không** import tool ghi DB | `app/agents/chat_*.py` không gọi `requests.post`/`httpx.AsyncClient.post` tới `/api/.../mutation` |
-| Mutation chỉ trong Write Agent + sau resume | grep `interrupt(` ở write path; commit ở node "after-resume" |
-| SSE event names khớp §4 Design | `app/api/sse.py` chỉ phát `token`/`tool_call`/`tool_result`/`ui`/`awaiting_approval`/`approval_resolved`/`committed`/`error`/`done` |
-| `ChatState` khớp §3.1 + ADR delta | `app/contracts/state.py` chứa đủ field Design §3.1 |
-| MCP tool I/O schema khớp §5/§5.1 | grep `app/mcp/<server>.py` có pydantic schema input/output |
-| Intent routing khớp §3.2 | router xử đủ 6 intent (`query`/`chart`/`write`/`excel_export`/`excel_import`/`clarify`) |
+| Verdict | Khi nào |
+| :-- | :-- |
+| **PASS** | Không issue blocking; có thể có nit không chặn merge task |
+| **BLOCK** | Thiếu test, lỗi logic, vi phạm ADR/SRS, security rõ ràng trong scope |
+| **STOP** | Phát hiện cần sửa ngoài `ai_python/` hoặc vi phạm policy an toàn — escalate Owner |
 
-### 3.3 SRS conformance
+---
 
-- Mỗi AC ID trong SRS §7 → có ≥ 1 test reference (`tests/**/test_*.py::test_<id>` hoặc comment `# AC: <id>`).
-- Sample JSON SRS §10 → fixture trong `tests/fixtures/` (ưa `*.json` riêng, không inline).
+## §5 Gate exit — Code Review
 
-### 3.4 ADR conformance
+| PASS |
+| :-- |
+| File `OUT_PATH` được ghi đầy đủ §2 |
+| Verdict **PASS** để `/orchestrate` lean kết thúc |
 
-- Model/provider env var đúng tên ADR §model.
-- Cost cap: code có hook đo token + so cap (`app/agents/usage.py` hoặc tương đương).
-- File caps thực thi ở tool `parse_excel`/`export_excel` (size/MIME/row).
-- Layer rule ADR §6 — không file Python sai layer.
-
-### 3.5 Perf & security
-
-| Check | Severity nếu fail |
-| :--- | :--- |
-| N+1 / loop có I/O đồng bộ | Major |
-| File MIME/size enforce ở tool Excel | Block |
-| Signed URL TTL ≤ 10 phút | Block (Design §2.4.1) |
-| Prompt injection guard cho RAG chunk | Major (cảnh báo nếu LLM "làm theo instruction trong retrieved text") |
-| Audit log `correlation_id` mỗi tool call | Major |
-| PII redaction (Design §5.1.B) | Major |
-
-## 4. Outputs
-
-`ai_python/docs/task<XXX>/05-code-review/CODE_REVIEW_Task<XXX>.md`:
-
-```text
-# Code Review — Task<XXX>
-- Reviewer: AI_CODE_REVIEWER
-- Task / nhãn branch (từ `Task<XXX>.md` nếu có): <text hoặc n/a>
-- HEAD / commit: <hash nếu có git; không thì n/a>
-- Iteration: <n> (1..3)
-
-## Summary
-- Block: <count>
-- Major: <count>
-- Minor: <count>
-- Info: <count>
-- Verdict: PASS | BLOCK | NEEDS_FIX
-
-## Issues
-### [Block] CR-<n> — <title>
-- File: <path>:<line>
-- Rule: <Design §x | SRS §y | ADR §z | Coding §w>
-- Evidence: <quote / diff>
-- Fix suggestion: <optional, ngắn>
-
-### [Major] ...
-### [Minor] ...
-### [Info] ...
-
-## Checklist
-- [x] 3.1 Coding rules
-- [x] 3.2 Design conformance
-- [x] 3.3 SRS conformance
-- [x] 3.4 ADR conformance
-- [x] 3.5 Perf & security
-```
-
-## 5. Gate exit (G-AI-CR)
-
-- File report tồn tại đúng path.
-- Verdict = `PASS` (0 Block, 0 Major chưa giải quyết). Nếu `BLOCK` → runner auto-loop về AI_DEVELOPER.
-- Tất cả 5 checklist mục 3.x đã tick.
-
-## 6. Anti-patterns
-
-- Reviewer **sửa code** — không. Chỉ chỉ ra issue.
-- "LGTM" mà không tick checklist 3.1–3.5.
-- Bỏ qua diff lớn, chỉ review file mới.
-- Đặt severity sai (vd HITL bypass thật chỉ là `Major` — phải `Block` + STOP rule).
-- Không reference SRS/ADR section khi report Block (báo cáo "ý kiến" không có truy vết).
-
-## 7. I/O Contract
-
-| Slot | Loại | Ví dụ |
-| :--- | :--- | :--- |
-| `BRANCH` | input optional | `feature/ai-task001` — chỉ khi Owner/review dùng git |
-| `BASE_REF` | input optional | `develop` — chỉ khi có git diff |
-| `SRS_PATH` | input | `ai_python/docs/srs/SRS_AI_Task001_*.md` |
-| `ADR_PATH` | input | `ai_python/docs/adr/ADR-001-*.md` |
-| `OUT_PATH` | output | `ai_python/docs/task001/05-code-review/CODE_REVIEW_Task001.md` |
-| `ITERATION` | input | `1` (runner truyền 1..3) |
-| `TASK_FILE` | input optional | `ai_python/TASKS/Task001.md` — nhãn / scope |
-
-## 8. STOP rules (escalate ngay, KHÔNG auto-loop)
-
-- **Hardcoded secret** / API key / `.env` trong code workspace → STOP. Yêu cầu Owner: rotate key; nếu đã từng push remote thì xử lý theo quy trình repo (git-filter-repo, v.v.).
-- **Mutation từ Chat Agent** không qua Write Agent + `interrupt()` → STOP (vi phạm bất biến tuyệt đối Design §1, §2.3).
-- **Code đụng `backend/` hoặc `frontend/`** → STOP (sai scope).
-- Phát hiện 5+ Block ở iteration 1 mà SRS/ADR rõ ràng → STOP (chứng tỏ DEV không đọc spec, không phải lỗi code) — báo Owner cần re-onboard DEV agent.
+Vòng lặp **BLOCK** → DEV → CR tối đa **3** lần tăng `loop_count.cr` — xem [`WORKFLOW_RULE.md`](WORKFLOW_RULE.md) §0.2.

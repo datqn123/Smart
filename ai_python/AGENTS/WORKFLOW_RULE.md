@@ -1,147 +1,75 @@
-# WORKFLOW_RULE — Agent chain (Python LangGraph / `ai_python`)
+# WORKFLOW_RULE — chuỗi Agent `ai_python` (FastAPI / AI service)
 
-> **Version**: 1.0  
-> **Source of truth**: file này + [`AGENT_REGISTRY.md`](AGENT_REGISTRY.md).  
-> **Design source**: [`../../Design_Agent/CHAT_AGENT_DESIGN.md`](../../Design_Agent/CHAT_AGENT_DESIGN.md) — không lặp lại nội dung.  
-> **Scope**: chỉ thư mục [`ai_python/`](../). Không sửa `backend/` hoặc `frontend/`.
-
----
-
-## 0. Execution model — `/orchestrate` (auto) vs manual
-
-| Mode | Khi dùng | HITL |
-| :--- | :--- | :--- |
-| **Auto** (mặc định) | Owner gõ `/orchestrate Task=<id?> Brief="..."` (xem [`../../.cursor/commands/orchestrate.md`](../../.cursor/commands/orchestrate.md)) | **Duy nhất** ở bước AI_PLANNER chọn option A/B/C |
-| **Manual** | Khi cần debug từng role hoặc rerun một mắt xích | Mỗi handoff Owner kiểm + paste prompt kế tiếp (chuỗi giống §1) |
-
-**Cốt lõi của Auto-mode**:
-
-- Driver = subagent `generalPurpose` đọc file này + role instruction → launch các subagent qua `Task` tool.
-- Sau planner, mọi role chạy không-hỏi-user. Ambiguity không CRITICAL → role tự chọn default + log assumption (xem §3 STOP rules).
-- Auto-loop khi CR/Tester/Bridge báo `Block` → quay lại AI_DEVELOPER tối đa **3 vòng/role/task**.
-- Budget cap: **20 subagent invocation** mặc định. Vượt → escalate Owner.
+> **Source of truth** cho điều phối trong thư mục **`ai_python/`** — đọc cùng [`AGENT_REGISTRY.md`](AGENT_REGISTRY.md).
+>
+> **Lệnh Cursor**: `/.cursor/commands/orchestrate.md` — **chuỗi mặc định (lean)** không gồm Tester / Bridge / Doc Sync / Orchestrator final.
 
 ---
 
-## 1. Chuỗi role (mandatory)
+## §0 Phạm vi & ranh giới
 
-```text
+| Quy tắc | Nội dung |
+| :-- | :-- |
+| Code & doc artifact | Chỉ dưới **`ai_python/`** — không sửa `backend/` hay `frontend/` trừ khi Owner / contract rõ ràng yêu cầu (handoff tách biệt). |
+| Driver `/orchestrate` | Không dùng git; không branch/commit; chỉ Task tool + file artifact. |
+| HITL Planner | Chỉ tại **AI_PLANNER**: chọn option **A / B / C** hoặc **`pick optimal`** sau khi có PRD draft — không HITL ở gate khác trong lean. |
+
+---
+
+## §0.1 Chuỗi mặc định (lean) — `/orchestrate`
+
+Thứ tự **bắt buộc** cho một task feature trong `ai_python`:
+
+```
 AI_PLANNER → AI_BA → AI_PM → AI_TECH_LEAD → AI_DEVELOPER → AI_CODE_REVIEWER
-            → (AI_BRIDGE if SSE thay đổi) → AI_TESTER → AI_DOC_SYNC
 ```
 
-Lớp giám sát overlay (không nối tiếp): **AI_ORCHESTRATOR** chạy spot-check sau mỗi gate + final audit cuối sprint.  
-Ad-hoc: **AI_BUG_INVESTIGATOR** khi có RCA cần (parallel session).
+| Gate | Agent | Artifact chính |
+| :-- | :-- | :-- |
+| G-AI-PLAN | `AI_PLANNER` | `ai_python/docs/prd/PRD_<slug>.md` |
+| G-AI-BA | `AI_BA` | `ai_python/docs/srs/SRS_AI_<task>_<slug>.md` (hoặc quy ước tương đương trong SRS instruction) |
+| G-AI-PM | `AI_PM` | `ai_python/TASKS/Task<XXX>.md` + `ai_python/docs/task<XXX>/` |
+| G-AI-TL | `AI_TECH_LEAD` | `ai_python/docs/adr/ADR-<NNN>-<slug>.md` |
+| G-AI-DEV | `AI_DEVELOPER` | `ai_python/app/**` (hoặc cấu trúc app hiện có) + tests |
+| G-AI-CR | `AI_CODE_REVIEWER` | `ai_python/docs/task<XXX>/05-code-review/CODE_REVIEW_<task>.md` |
 
-```mermaid
-flowchart LR
-  PLAN[AI_PLANNER] --> BA[AI_BA]
-  BA --> PM[AI_PM]
-  PM --> TL[AI_TECH_LEAD]
-  TL --> DEV[AI_DEVELOPER]
-  DEV --> CR[AI_CODE_REVIEWER]
-  CR --> BR[AI_BRIDGE]
-  CR --> TST[AI_TESTER]
-  BR --> TST
-  TST --> DS[AI_DOC_SYNC]
-  ORCH["AI_ORCHESTRATOR overlay"] -.audits.-> BA
-  ORCH -.audits.-> TL
-  ORCH -.audits.-> DEV
-  ORCH -.audits.-> CR
-  ORCH -.audits.-> BR
-  ORCH -.audits.-> TST
-  ORCH -.audits.-> DS
-```
+**Kết thúc lean**: báo cáo Code Review verdict **PASS**.
 
 ---
 
-## 2. Gates
+## §0.2 Vòng lặp duy nhất (DEV ↔ CR)
 
-| Gate | After | Exit condition (machine-checkable) |
-| :--- | :--- | :--- |
-| `G-AI-PLAN` | AI_PLANNER | PRD ở `ai_python/docs/prd/PRD_<slug>.md` + Owner xác nhận option A/B/C |
-| `G-AI-BA` | AI_BA | `ai_python/docs/srs/SRS_AI_TaskXXX_*.md` Approved (SSE events + MCP I/O + eval criteria + HITL flow + ≥1 sample JSON request/response per event) |
-| `G-AI-PM` | AI_PM | `ai_python/TASKS/Task<XXX>.md` chain (Unit + Feature + Eval) + folder task docs; nhãn workflow trong Task file (merge/push do Owner tự VCS) |
-| `G-AI-TL` | AI_TECH_LEAD | `ai_python/docs/adr/ADR-<NNN>-<slug>.md` có 5 NFR mục: p95 latency / cost cap / HITL bypass=0% / file caps / model-provider lock |
-| `G-AI-DEV` | AI_DEVELOPER | `pytest -q` xanh; coverage ≥ 70%; `ruff check` + `mypy` clean theo ADR — **không** yêu cầu branch/commit trong pipeline |
-| `G-AI-CR` | AI_CODE_REVIEWER | `ai_python/docs/taskXXX/05-code-review/CODE_REVIEW_TaskXXX.md` có 0 `Block` + 0 `Major` chưa giải quyết (hoặc có ADR exception) |
-| `G-AI-BRIDGE` | AI_BRIDGE | Bắt buộc khi task tạo/đổi event SSE hoặc MCP tool schema; `ai_python/docs/api/bridge/BRIDGE_AI_TaskXXX_*.md` đầy đủ cột (xem `AI_BRIDGE_AGENT_INSTRUCTIONS.md` §5) |
-| `G-AI-TST` | AI_TESTER | Eval pass ≥ 80% (≥30 prompt cover 4 năng lực Design Doc §6); 0% HITL bypass; MCP guardrail red-team pass; latency/cost trong NFR ADR |
-| `G-AI-DS` | AI_DOC_SYNC | `ai_python/docs/sync_reports/SYNC_REPORT_<sprint>.md` không drift `Block` |
-| `G-AI-OR` (overlay) | AI_ORCHESTRATOR | `ai_python/docs/orchestration/AUDIT_TaskXXX_*.md` không có severity `Block`; `Warn` đã có quyết định Owner |
+- Nếu **CODE_REVIEWER** verdict **BLOCK** (hoặc tương đương): relaunch **AI_DEVELOPER** với `LOOP_FEEDBACK` = path báo cáo CR — tối đa **3** vòng (đếm `loop_count.cr`), sau đó **STOP** escalate Owner.
 
 ---
 
-## 3. Severity rubric (chung cho AI_CODE_REVIEWER + AI_ORCHESTRATOR + AI_BRIDGE + AI_TESTER)
+## §0.3 Chuỗi mở rộng (không chạy trong `/orchestrate` lean)
 
-| Severity | Ý nghĩa | Hành vi runner |
-| :---: | :--- | :--- |
-| `Block` | Vi phạm bất biến (Design Doc §1, §2.3, §6.1) hoặc gate exit fail | Auto-loop về role gốc (DEV) tối đa 3 vòng; vượt → escalate |
-| `Major` | Phải xử trước merge (perf hot path, error model thiếu, contract drift) | Gộp vào loop hiện tại |
-| `Minor` | Follow-up ticket, không chặn (tên biến, comment, micro-perf) | Log + tạo `Task<XXX>-followup.md` |
-| `Info` | Ghi chú quan sát | Log only |
+Chạy **chủ động** khi task đòi hỏi hoặc trước release — **không** gắn mặc định vào lean để tránh eval/test kéo dài.
 
-### 3.1 STOP rules — escalate ngay (KHÔNG auto-loop)
+| Agent | Khi nào |
+| :-- | :-- |
+| `AI_BRIDGE` | Đổi contract SSE/OpenAPI/MCP giữa `ai_python` ↔ Spring/FE — verify drift; có thể handoff ngoài `ai_python/`. |
+| `AI_TESTER` | Eval tự động / red-team / scenario — **tốn thời gian**; định kỳ hoặc pre-merge. |
+| `AI_DOC_SYNC` | Đồng bộ SRS/PRD/README sau khi code ổn định. |
+| `AI_ORCHESTRATOR` | Audit tổng hợp task — WARN/FAIL xử lý theo instruction. |
 
-| Role | STOP nếu | Vì sao |
-| :--- | :--- | :--- |
-| Mọi role | Owner gõ `/stop` hoặc subagent timeout >5min | An toàn |
-| AI_BA | Open Question gắn tag `[CRITICAL]` không có default trong Design Doc / ADR | Quyết định nghiệp vụ thật, không default được |
-| AI_TECH_LEAD | Model/provider chưa cấu hình API key hoặc MCP server chưa cài | Không thể implement |
-| AI_DEVELOPER | Dependency conflict không tự fix; test infrastructure (pytest) hỏng | Không thể tiếp |
-| AI_CODE_REVIEWER | Phát hiện hardcoded secret / API key / `.env` trong code | Security incident |
-| AI_TESTER | Red-team chứng minh HITL bypass thật (mutation không qua `interrupt()`) | Vi phạm bất biến tuyệt đối Design §1 |
-| AI_BRIDGE | Path BE thực tế lệch với spec mà BE đã merge | Data integrity |
-| AI_DOC_SYNC | Code đụng chạm `backend/` hoặc `frontend/` (sai scope) | Vượt boundary repo |
-| AI_ORCHESTRATOR | Phát hiện gate báo green nhưng artifact thiếu/giả | Fake gate |
+Chi tiết từng role: file `*_AGENT_INSTRUCTIONS.md` trong thư mục này.
 
 ---
 
-## 4. Bất biến không được vi phạm
-
-1. **Mutation luôn qua Write Agent + `interrupt()`** — Chat Agent / runner không tự gọi tool ghi DB. Design Doc §1, §2.3.
-2. **Không sửa trực tiếp `main` / `develop`** trong vai trò agent chain — nhánh/merge do Owner quản lý ngoài pipeline; agent chỉ làm việc dưới `ai_python/` theo Task.
-3. **No HITL ngoài AI_PLANNER** trong auto-mode. Nếu role muốn hỏi user → áp default + log assumption hoặc match STOP rule.
-4. **No cross-scope edit** — file Python chỉ trong `ai_python/app/`, doc chỉ trong `ai_python/docs/`. Đụng `backend/` / `frontend/` → STOP.
-5. **No secret in code** — API key qua biến môi trường (xem `ai_python/README.md`).
-6. **No raw SQL** — DB read-only chỉ qua MCP `db-readonly` template (Design §5.1, §6.1).
-7. **No "approve all by text"** — không tool `approve` trong agent runtime; resume chỉ qua endpoint UI `/sessions/.../approve`.
-
----
-
-## 5. Quick-call snippets (manual mode)
+## §1 Prompt mẫu cho Owner
 
 ```text
-WORKFLOW_RULE: read @ai_python/AGENTS/WORKFLOW_RULE.md @ai_python/AGENTS/AGENT_REGISTRY.md
+/orchestrate Brief="..." 
 ```
 
 ```text
-Role: AI_BA. Read @ai_python/AGENTS/AI_BA_AGENT_INSTRUCTIONS.md
-Inputs: PRD=@ai_python/docs/prd/PRD_<slug>.md
-Output: @ai_python/docs/srs/SRS_AI_Task<XXX>_<slug>.md
-```
-
-_(Thay `AI_BA` bằng role khác. Mỗi file role có **§I/O Contract** liệt kê đúng biến cần thay.)_
-
-```text
-Role: AI_ORCHESTRATOR (overlay). Read @ai_python/AGENTS/AI_ORCHESTRATOR_AGENT_INSTRUCTIONS.md
-Mode: spot-check Gate=<G-AI-DEV|...>
-Output: @ai_python/docs/orchestration/AUDIT_Task<XXX>_<gate>.md
+WORKFLOW_RULE ai_python — đọc @ai_python/AGENTS/WORKFLOW_RULE.md — tiếp tục từ PM với SRS path ...
 ```
 
 ---
 
-## 6. Quan hệ với backend / frontend
+## §2 Đồng bộ với repo gốc
 
-- Hợp đồng API SSE: `ai_python` ↔ `backend/smart-erp` (relay) ↔ `frontend/mini-erp/src` chat UI.  
-  AI_BRIDGE chịu trách nhiệm verify cả 2 hop (xem `AI_BRIDGE_AGENT_INSTRUCTIONS.md`).
-- DB: do `backend/` sở hữu. AI_DEVELOPER **không** viết Flyway/JPA/SQL. Khi cần read-only data → MCP `db-readonly` (template_id + params, không raw SQL).
-- Frontend bridge: kết quả AI_BRIDGE có thể link tới `frontend/docs/api/bridge/BRIDGE_*.md` đã có nếu trùng path; không tạo trùng.
-
----
-
-## 7. Context7 (MCP — library docs)
-
-- Dùng khi cần xác nhận API/config của framework Python (FastAPI, LangGraph, OpenAI SDK, pydantic v2, openpyxl, …) cho version đã pin trong [`../requirements.txt`](../requirements.txt).
-- **Sau** khi đã đọc minimal repo code + SRS/ADR. Không thay business truth.
-- Prompt mẫu: `use context7` + 1 câu hỏi hẹp + version (vd "FastAPI 0.115 StreamingResponse with async generator").
+- **AI_PLANNER** toàn repo (methodology PRD): có thể tham chiếu [`../../AGENTS/AI_PLANNER_AGENT_INSTRUCTIONS.md`](../../AGENTS/AI_PLANNER_AGENT_INSTRUCTIONS.md); output **task ai_python** vẫn tuân path trong `ai_python/docs/prd/`.

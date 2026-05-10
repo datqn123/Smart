@@ -1,7 +1,0 @@
-{
-  "code": "DB_QUERY_REJECTED",
-  "message": "Template not allowlisted or params invalid.",
-  "retryable": false,
-  "details": { "template_id": "unknown_tpl" },
-  "correlation_id": "corr_err_001"
-}
