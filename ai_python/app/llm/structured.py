@@ -1,4 +1,10 @@
-"""Structured output: try LangChain native; fallback JSON + parse + retry."""
+"""Structured output via JSON-only prompts (OpenAI-compatible gateways).
+
+We intentionally avoid ``ChatOpenAI.with_structured_output`` here: it attaches a
+``parsed=…`` payload on ``AIMessage`` that LangGraph's JsonPlus checkpoint serde
+cannot round-trip, which breaks streaming / checkpointing with Pydantic warnings
+and runtime failures.
+"""
 
 from __future__ import annotations
 
@@ -23,38 +29,28 @@ def _extract_json_text(raw: str) -> str:
     return raw
 
 
-def _coerce_schema(raw: object, schema: type[T]) -> T:
-    if isinstance(raw, schema):
-        return raw
-    if isinstance(raw, dict):
-        return schema.model_validate(raw)
-    if isinstance(raw, BaseModel):
-        return schema.model_validate(raw.model_dump())
-    raise TypeError(f"Unexpected structured output type: {type(raw)!r}")
-
-
 def structured_invoke(
     chat: BaseChatModel,
     messages: list[BaseMessage],
     schema: type[T],
     *,
     max_retries: int = 3,
+    json_output_contract: str | None = None,
 ) -> T:
-    """Try ``with_structured_output``; on failure use JSON-only prompt path."""
-    last_err: Exception | None = None
-    try:
-        structured = chat.with_structured_output(schema)
-        raw = structured.invoke(messages)
-        return _coerce_schema(raw, schema)
-    except Exception as e:  # noqa: BLE001 — gateway / provider varies
-        last_err = e
+    """Ask the model for **only** JSON matching ``schema``; parse + validate with retries.
 
+    If ``json_output_contract`` is a non-empty string, it replaces the embedded
+    ``model_json_schema()`` text in the final instruction (useful for small models).
+    """
     hint = (
         "Respond with ONLY a single JSON object matching this schema keys; "
         "no markdown, no prose."
     )
-    tail = list(messages)
-    tail.append(HumanMessage(content=hint + f" Schema: {schema.model_json_schema()}"))
+    contract = (json_output_contract or "").strip()
+    schema_instruction = contract if contract else f"Schema: {schema.model_json_schema()}"
+    instruction = f"{hint} {schema_instruction}"
+    tail: list[BaseMessage] = list(messages) + [HumanMessage(content=instruction)]
+    last_err: Exception | None = None
     for _ in range(max_retries):
         try:
             msg: AIMessage = chat.invoke(tail)  # type: ignore[assignment]
@@ -68,6 +64,6 @@ def structured_invoke(
                     content="Your previous reply was not valid JSON for the schema. "
                     "Output ONLY valid JSON."
                 ),
-                HumanMessage(content=f"Parse error: {e}. {hint}"),
+                HumanMessage(content=f"Parse error: {e}. {instruction}"),
             ]
     raise ValueError(f"structured_invoke failed after {max_retries} retries") from last_err

@@ -21,11 +21,13 @@ class FakeLlmClient:
         stream_parts: list[str] | None = None,
         intent: str | None = None,
         sql_review_failures: int = 0,
+        table_pick: list[str] | None = None,
     ) -> None:
         self._reply = reply
         self._stream_parts = stream_parts or ["hel", "lo"]
         self._intent = intent
         self._sql_review_fail_left = sql_review_failures
+        self._table_pick = table_pick
         self.invoke_count = 0
 
     def invoke_text(self, user: str, *, system: str | None = None) -> str:
@@ -41,6 +43,7 @@ class FakeLlmClient:
         schema: type[T],
         *,
         max_retries: int = 3,
+        json_output_contract: str | None = None,
     ) -> T:
         if schema.__name__ == "IntentOutput":
             intent_val = self._intent if self._intent is not None else "general_chat"
@@ -50,4 +53,7 @@ class FakeLlmClient:
                 self._sql_review_fail_left -= 1
                 return schema.model_validate({"ok": False, "issues": ["forced fail"]})  # type: ignore[return-value]
             return schema.model_validate({"ok": True, "issues": []})  # type: ignore[return-value]
+        if schema.__name__ == "SqlTablePickOutput":
+            picks = self._table_pick if self._table_pick else ["customers"]
+            return schema.model_validate({"tables": picks})  # type: ignore[return-value]
         raise NotImplementedError(schema)

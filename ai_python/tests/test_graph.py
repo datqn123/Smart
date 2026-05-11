@@ -8,6 +8,7 @@ from langchain_core.messages import HumanMessage
 from app.config.graph_settings import GraphSettings, load_graph_settings
 from app.graph import compile_agent_graph, default_initial_state
 from app.graph.deps import GraphDeps
+from app.graph.nodes.sql_pipeline import _benign_sql_review_issue
 from app.graph.retry import can_regen_sql
 from app.graph.sql_executor import StubSqlExecutor
 from app.graph.state import AgentState
@@ -39,12 +40,15 @@ def test_route_general_chat() -> None:
     assert out.get("final_answer")
 
 
-def test_route_sql_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_route_sql_happy_path(monkeypatch: pytest.MonkeyPatch, patch_pg_schema_v1: None) -> None:
     monkeypatch.delenv("SQL_ALLOWED_TABLES", raising=False)
     reg = LlmRegistry()
-    reg.register("default", FakeLlmClient(reply="SELECT * FROM t LIMIT 10"))
+    reg.register(
+        "default",
+        FakeLlmClient(reply="SELECT id FROM customers LIMIT 10"),
+    )
     reg.register("intent", FakeLlmClient(intent="system_data_query"))
-    reg.register("sql_gen", FakeLlmClient(reply="SELECT * FROM t LIMIT 10"))
+    reg.register("sql_gen", FakeLlmClient(reply="SELECT id FROM customers LIMIT 10"))
     reg.register("sql_review", FakeLlmClient())
     reg.register("chat", FakeLlmClient())
     reg.register("summarize", FakeLlmClient(reply="stub row _stub=1 returned."))
@@ -61,7 +65,16 @@ def test_route_sql_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "stub" in out["final_answer"].lower() or "_stub" in out["final_answer"]
 
 
-def test_sql_review_retries_then_pass(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_benign_sql_review_issue_limit_with_aggregate() -> None:
+    msg = (
+        "The LIMIT clause is redundant and logically incorrect when used with an aggregate "
+        "function like SUM(), as it will always return a single row."
+    )
+    assert _benign_sql_review_issue(msg) is True
+    assert _benign_sql_review_issue("Missing column revenue in schema") is False
+
+
+def test_sql_review_retries_then_pass(monkeypatch: pytest.MonkeyPatch, patch_pg_schema_v1: None) -> None:
     monkeypatch.delenv("SQL_ALLOWED_TABLES", raising=False)
     reg = LlmRegistry()
     reg.register("default", FakeLlmClient(reply="SELECT 1 LIMIT 10"))
@@ -85,7 +98,7 @@ def test_sql_review_retries_then_pass(monkeypatch: pytest.MonkeyPatch) -> None:
     assert int(out.get("sql_attempt_count") or 0) >= 3
 
 
-def test_max_attempts_sql_review(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_max_attempts_sql_review(monkeypatch: pytest.MonkeyPatch, patch_pg_schema_v1: None) -> None:
     monkeypatch.delenv("SQL_ALLOWED_TABLES", raising=False)
     reg = LlmRegistry()
     reg.register("default", FakeLlmClient(reply="SELECT 1 LIMIT 10"))

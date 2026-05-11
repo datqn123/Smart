@@ -4,7 +4,6 @@ import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URI;
-import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpClient.Version;
 import java.net.http.HttpRequest;
@@ -12,36 +11,50 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
-import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 @RestController
 @RequestMapping("/api/v1/ai")
 public class AiChatRelayController {
 
+	private static final Logger log = LoggerFactory.getLogger(AiChatRelayController.class);
+
+	public record AiChatRelayRequest(String message, String conversationId) {
+	}
+
 	private final String pythonBaseUrl;
 
 	private final HttpClient httpClient;
 
+	private final ObjectMapper objectMapper;
+
 	private final ExecutorService sseIoExecutor = Executors.newCachedThreadPool();
 
-	public AiChatRelayController(@Value("${app.ai.python.base-url}") String pythonBaseUrl) {
+	public AiChatRelayController(@Value("${app.ai.python.base-url}") String pythonBaseUrl, ObjectMapper objectMapper) {
 		this.pythonBaseUrl = normalizePythonBaseUrl(pythonBaseUrl);
 		this.httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+		this.objectMapper = objectMapper;
 	}
 
-	/**
-	 * Avoid {@code URI.create("localhost:9000/...")} (opaque / wrong scheme) and trim trailing slashes.
-	 * Uvicorn expects cleartext HTTP/1.1; {@code https://} to port 9000 causes TLS bytes → "Invalid HTTP request".
-	 */
 	private static String normalizePythonBaseUrl(String raw) {
 		String s = Objects.requireNonNull(raw, "pythonBaseUrl").trim();
 		s = s.replaceAll("/+$", "");
@@ -51,17 +64,101 @@ public class AiChatRelayController {
 		return s;
 	}
 
-	@GetMapping(path = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-	public SseEmitter stream(@RequestParam("q") String q, @RequestParam(value = "cid", required = false) String cid) {
+	/**
+	 * Some JDK {@link Exception}s use a null {@link Exception#getMessage()} (e.g. wrapped IO); avoid a useless
+	 * {@code "Relay error"} in the SSE payload.
+	 */
+	private static String relayErrorDetail(Throwable e) {
+		String m = e.getMessage();
+		if (m != null && !m.isBlank()) {
+			return m;
+		}
+		Throwable c = e.getCause();
+		if (c != null) {
+			String cm = c.getMessage();
+			if (cm != null && !cm.isBlank()) {
+				return e.getClass().getSimpleName() + ": " + cm;
+			}
+			return e.getClass().getSimpleName() + " (" + c.getClass().getSimpleName() + ")";
+		}
+		return e.getClass().getSimpleName()
+				+ " — kiểm tra service Python (uvicorn) và cổng khớp AI_PYTHON_BASE_URL / app.ai.python.base-url (mặc định Spring: 9000).";
+	}
+
+	/**
+	 * Relay authenticated SSE: browser → Spring (JWT) → FastAPI LangGraph (same Bearer).
+	 * Request body: message + optional conversationId (thread). Identity metadata is taken from JWT.
+	 */
+	@PostMapping(path = "/chat/stream", consumes = MediaType.APPLICATION_JSON_VALUE,
+			produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+	public SseEmitter streamPost(@RequestBody AiChatRelayRequest body, @AuthenticationPrincipal Jwt jwt,
+			HttpServletRequest httpRequest) {
 		SseEmitter emitter = new SseEmitter(0L);
-		String encoded = URLEncoder.encode(q, StandardCharsets.UTF_8);
-		String cidParam = cid == null || cid.isBlank() ? "" : ("&cid=" + URLEncoder.encode(cid, StandardCharsets.UTF_8));
-		URI uri = URI.create(pythonBaseUrl + "/v1/chat/stream?q=" + encoded + cidParam);
+		String authz = httpRequest.getHeader("Authorization");
+		if (authz == null || !authz.startsWith("Bearer ")) {
+			sseIoExecutor.execute(() -> {
+				try {
+					emitter.send(SseEmitter.event().name("error").data("Thiếu Authorization Bearer."));
+					emitter.complete();
+				}
+				catch (Exception ignored) {
+					emitter.completeWithError(ignored);
+				}
+			});
+			return emitter;
+		}
+
+		String userId = jwt.getClaimAsString("user_id");
+		if (userId == null || userId.isBlank()) {
+			userId = jwt.getSubject();
+		}
+		String tenantId = jwt.getClaimAsString("tenant_id");
+		if (tenantId == null || tenantId.isBlank()) {
+			tenantId = "1";
+		}
+
+		String correlationId = UUID.randomUUID().toString();
+		String jsonBody;
+		try {
+			ObjectNode root = objectMapper.createObjectNode();
+			root.put("message", body.message());
+			ObjectNode md = objectMapper.createObjectNode();
+			md.put("user_id", userId);
+			md.put("tenant_id", tenantId);
+			if (body.conversationId() != null && !body.conversationId().isBlank()) {
+				md.put("thread_id", body.conversationId());
+			}
+			md.put("schema_version", "v1");
+			root.set("metadata", md);
+			root.putObject("options");
+			jsonBody = objectMapper.writeValueAsString(root);
+		}
+		catch (Exception e) {
+			sseIoExecutor.execute(() -> {
+				try {
+					emitter.send(SseEmitter.event().name("error").data("Không thể dựng payload AI."));
+					emitter.complete();
+				}
+				catch (Exception ignored) {
+					emitter.completeWithError(ignored);
+				}
+			});
+			return emitter;
+		}
+
+		URI uri = URI.create(pythonBaseUrl + "/api/v1/ai/chat/stream");
+		final String relayTarget = uri.toString();
+		final String bodyJson = jsonBody;
 
 		sseIoExecutor.execute(() -> {
 			try {
 				HttpRequest req = HttpRequest.newBuilder(uri).version(Version.HTTP_1_1).timeout(Duration.ofMinutes(5))
-						.header("Accept", "text/event-stream").GET().build();
+						.header("Accept", "text/event-stream")
+						.header("Content-Type", "application/json")
+						.header("Authorization", authz)
+						.header("X-Correlation-Id", correlationId)
+						.POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8))
+						.build();
 
 				HttpResponse<InputStream> res = httpClient.send(req, HttpResponse.BodyHandlers.ofInputStream());
 				int code = res.statusCode();
@@ -73,9 +170,7 @@ public class AiChatRelayController {
 								new String(snippet, StandardCharsets.UTF_8).replace('\r', ' ').replace('\n', ' ');
 					}
 					String msg = "Python AI HTTP " + code
-							+ " — đặt AI_PYTHON_BASE_URL=http://127.0.0.1:9000 (uvicorn chỉ nhận HTTP thường, không "
-							+ "https:// tới cổng 9000 — TLS sẽ gây lỗi \"Invalid HTTP request\" trên Python). Chi tiết: "
-							+ detail;
+							+ " — kiểm tra AI_PYTHON_BASE_URL và service ai_python. Chi tiết: " + detail;
 					emitter.send(SseEmitter.event().name("error").data(msg));
 					emitter.complete();
 					return;
@@ -107,8 +202,6 @@ public class AiChatRelayController {
 							continue;
 						}
 						if (line.startsWith("data:")) {
-							// Preserve leading spaces in streamed deltas.
-							// SSE allows an optional single space after "data:".
 							String chunk = line.substring("data:".length());
 							if (chunk.startsWith(" ")) {
 								chunk = chunk.substring(1);
@@ -122,10 +215,13 @@ public class AiChatRelayController {
 
 					emitter.complete();
 				}
-			} catch (Exception e) {
+			}
+			catch (Exception e) {
+				log.error("AI relay failed: {}", relayTarget, e);
 				try {
-					emitter.send(SseEmitter.event().name("error").data(Objects.toString(e.getMessage(), "Relay error")));
-				} catch (Exception ignored) {
+					emitter.send(SseEmitter.event().name("error").data(relayErrorDetail(e)));
+				}
+				catch (Exception ignored) {
 					// ignore secondary failure
 				}
 				emitter.completeWithError(e);
@@ -135,4 +231,3 @@ public class AiChatRelayController {
 		return emitter;
 	}
 }
-

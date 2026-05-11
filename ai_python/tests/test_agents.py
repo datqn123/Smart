@@ -90,6 +90,28 @@ def test_validate_sql_limit_inject_hybrid() -> None:
     assert any("limit" in n.lower() for n in notes)
 
 
+def test_validate_sql_multiline_limit_not_double_injected() -> None:
+    """LIMIT on its own line must be detected so we do not append LIMIT twice."""
+    s = GraphSettings(sql_limit_max=1000)
+    sql = "SELECT name\nFROM products\nLIMIT 1;"
+    ok, _, out, notes = validate_sql_deterministic(sql, s)
+    assert ok is True, out
+    assert out is not None
+    assert out.upper().count("LIMIT") == 1, out
+    assert not any("injected" in n.lower() for n in notes), notes
+
+
+def test_validate_sql_strips_trailing_semicolon() -> None:
+    """Spring readonly API rejects a trailing ';' in the SQL string."""
+    s = GraphSettings(sql_limit_max=1000)
+    ok, _, out, _ = validate_sql_deterministic(
+        "SELECT SUM(total) FROM orders WHERE DATE(created_at) = CURRENT_DATE LIMIT 1000;",
+        s,
+    )
+    assert ok and out is not None
+    assert not out.rstrip().endswith(";")
+
+
 def test_validate_sql_allowlist_blocks_other_tables() -> None:
     s = GraphSettings()
     al = {"customers"}
@@ -137,6 +159,28 @@ def test_validate_sql_allows_star_select() -> None:
     assert ok is True
 
 
+def test_validate_sql_allows_sum_with_column_allowlist() -> None:
+    """sqlparse may emit SUM as Identifier; must not treat as a physical column."""
+    s = GraphSettings()
+    tc = {
+        "cashtransactions": {"amount", "direction", "status", "transaction_date", "id"},
+    }
+    sql = (
+        "SELECT SUM(amount) AS total_revenue FROM cashtransactions WHERE "
+        "direction = 'Income' AND status = 'Completed' AND "
+        "transaction_date >= DATE_TRUNC('month', CURRENT_DATE) AND "
+        "transaction_date < DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month' "
+        "LIMIT 1000"
+    )
+    ok, detail, _, _ = validate_sql_deterministic(
+        sql,
+        s,
+        allowlist_tables={"cashtransactions"},
+        table_columns=tc,
+    )
+    assert ok is True, detail
+
+
 def test_validate_sql_qualified_column() -> None:
     s = GraphSettings()
     tc = {"customers": {"id", "name", "tenant_id"}}
@@ -168,11 +212,19 @@ def test_normalize_intent_unknown_to_general_chat() -> None:
 
 
 class _EmptyExecutor:
-    def execute(self, sql: str, *, tenant_id: str | None) -> dict:
+    def execute(
+        self,
+        sql: str,
+        *,
+        tenant_id: str | None,
+        correlation_id: str | None = None,
+        schema_version: str | None = None,
+    ) -> dict:
+        _ = correlation_id, schema_version
         return {"rows": [], "meta": {"mode": "empty"}}
 
 
-def test_empty_result_does_not_retry_and_summarizes() -> None:
+def test_empty_result_does_not_retry_and_summarizes(patch_pg_schema_v1: None) -> None:
     reg = LlmRegistry()
     reg.register("default", FakeLlmClient(reply="Không có dữ liệu phù hợp."))
     reg.register("intent", FakeLlmClient(intent="system_data_query"))
@@ -184,7 +236,6 @@ def test_empty_result_does_not_retry_and_summarizes() -> None:
         llm_registry=reg,
         sql_executor=_EmptyExecutor(),
         settings=GraphSettings(),
-        schema_loader=FileSchemaLoader(None),
     )
     g = compile_agent_graph(deps, use_checkpointer=False)
     out = g.invoke(
@@ -202,7 +253,7 @@ def test_empty_result_does_not_retry_and_summarizes() -> None:
 # --- max retries (3 lần) ---
 
 
-def test_max_attempts_with_validate_sql_failure_3_times() -> None:
+def test_max_attempts_with_validate_sql_failure_3_times(patch_pg_schema_v1: None) -> None:
     """Force validate_sql to fail by making sql_gen produce DDL — should retry up to 3."""
     reg = LlmRegistry()
     reg.register("default", FakeLlmClient(reply="DROP TABLE t"))
@@ -215,7 +266,6 @@ def test_max_attempts_with_validate_sql_failure_3_times() -> None:
         llm_registry=reg,
         sql_executor=StubSqlExecutor(),
         settings=GraphSettings(),
-        schema_loader=FileSchemaLoader(None),
     )
     g = compile_agent_graph(deps, use_checkpointer=False)
     out = g.invoke(
@@ -232,7 +282,7 @@ def test_max_attempts_with_validate_sql_failure_3_times() -> None:
 # --- schema load fail — no sql_gen LLM (FR-DBM-02) ---
 
 
-def test_gen_sql_early_fails_on_schema_load_error() -> None:
+def test_gen_sql_early_fails_on_schema_load_error(monkeypatch: pytest.MonkeyPatch) -> None:
     sql_gen = FakeLlmClient(reply="SELECT id FROM customers LIMIT 10")
     reg = LlmRegistry()
     reg.register("default", FakeLlmClient())
@@ -241,11 +291,14 @@ def test_gen_sql_early_fails_on_schema_load_error() -> None:
     reg.register("sql_review", FakeLlmClient())
     reg.register("chat", FakeLlmClient())
     reg.register("summarize", FakeLlmClient(reply="err"))
+    monkeypatch.setattr(
+        "app.graph.pg_schema_context.build_schema_artifact_from_postgres",
+        lambda _settings, _user_q: (None, "forced schema unavailable"),
+    )
     deps = GraphDeps(
         llm_registry=reg,
         sql_executor=StubSqlExecutor(),
         settings=GraphSettings(),
-        schema_loader=FileSchemaLoader(None),
     )
     g = compile_agent_graph(deps, use_checkpointer=False)
     out = g.invoke(

@@ -4,7 +4,7 @@ import { Send, Image as ImageIcon, Mic, X, Paperclip, MessageSquare, Bot, User, 
 import type { ChatMessage } from "../types"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { openAiChatStream } from "../api/aiChatSse"
+import { startAiChatPostStream, type AiChatStreamHandle } from "../api/aiChatSse"
 
 export function ChatBotPage() {
   const { setTitle } = usePageTitle()
@@ -31,7 +31,7 @@ export function ChatBotPage() {
   })
   const chatEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const streamRef = useRef<EventSource | null>(null)
+  const streamRef = useRef<AiChatStreamHandle | null>(null)
 
   const scrollToBottom = () => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -41,7 +41,7 @@ export function ChatBotPage() {
 
   useEffect(() => {
     return () => {
-      streamRef.current?.close()
+      streamRef.current?.abort()
       streamRef.current = null
     }
   }, [])
@@ -102,7 +102,7 @@ export function ChatBotPage() {
       return
     }
 
-    streamRef.current?.close()
+    streamRef.current?.abort()
     streamRef.current = null
 
     const assistantId = (Date.now() + 1).toString()
@@ -117,7 +117,7 @@ export function ChatBotPage() {
     setMessages(prev => [...prev, assistantMsg])
     setIsTyping(true)
 
-    streamRef.current = openAiChatStream({
+    streamRef.current = startAiChatPostStream({
       query: content,
       conversationId,
       onDelta: (delta) => {

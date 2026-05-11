@@ -12,7 +12,6 @@ from app.api.schemas import ChatRequest
 from app.config.graph_settings import load_graph_settings
 from app.config.settings import load_llm_settings
 from app.graph import compile_agent_graph, default_initial_state, iter_graph_stream
-from app.graph.dbmeta import build_schema_loader
 from app.graph.deps import GraphDeps
 from app.graph.sql_executor import build_sql_executor
 from app.llm.registry import LlmRegistry, build_llm_registry
@@ -34,16 +33,13 @@ class LangGraphRuntime:
 
     def invoke(self, request: ChatRequest, *, correlation_id: str) -> dict[str, Any]:
         state = _build_state(request=request, correlation_id=correlation_id)
-        config = _build_graph_config(request)
-        if config:
-            out = self._compiled.invoke(state, config)
-        else:
-            out = self._compiled.invoke(state)
+        config = _build_graph_config(request, correlation_id=correlation_id)
+        out = self._compiled.invoke(state, config)
         return dict(out or {})
 
     def stream(self, request: ChatRequest, *, correlation_id: str) -> Any:
         state = _build_state(request=request, correlation_id=correlation_id)
-        config = _build_graph_config(request)
+        config = _build_graph_config(request, correlation_id=correlation_id)
         return iter_graph_stream(
             self._compiled,
             state,
@@ -56,15 +52,23 @@ def _build_state(*, request: ChatRequest, correlation_id: str) -> dict[str, Any]
     state = dict(default_initial_state())
     state["messages"] = [HumanMessage(content=request.message)]
     state["correlation_id"] = correlation_id
+    state["user_id"] = request.metadata.user_id
     state["tenant_id"] = request.metadata.tenant_id
+    state["thread_id"] = request.metadata.thread_id
     state["schema_version"] = request.metadata.schema_version
     return state
 
 
-def _build_graph_config(request: ChatRequest) -> dict[str, Any]:
-    if not request.metadata.thread_id:
-        return {}
-    return {"configurable": {"thread_id": request.metadata.thread_id}}
+def _build_graph_config(request: ChatRequest, *, correlation_id: str) -> dict[str, Any]:
+    return {
+        "configurable": {
+            "correlation_id": correlation_id,
+            "user_id": request.metadata.user_id,
+            "tenant_id": request.metadata.tenant_id,
+            "thread_id": request.metadata.thread_id,
+            "schema_version": request.metadata.schema_version,
+        },
+    }
 
 
 def _build_graph_deps() -> GraphDeps:
@@ -83,7 +87,6 @@ def _build_graph_deps() -> GraphDeps:
         llm_registry=llm_registry,
         sql_executor=build_sql_executor(graph_settings),
         settings=graph_settings,
-        schema_loader=build_schema_loader(graph_settings),
     )
 
 

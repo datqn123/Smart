@@ -48,8 +48,15 @@ class OpenAICompatibleChatClient:
         schema: type[T],
         *,
         max_retries: int = 3,
+        json_output_contract: str | None = None,
     ) -> T:
-        return structured_invoke(self._chat, list(messages), schema, max_retries=max_retries)
+        return structured_invoke(
+            self._chat,
+            list(messages),
+            schema,
+            max_retries=max_retries,
+            json_output_contract=json_output_contract,
+        )
 
 
 def build_chat_openai(*, settings: LlmSettings) -> ChatOpenAI:
@@ -70,6 +77,7 @@ def build_chat_openai(*, settings: LlmSettings) -> ChatOpenAI:
         kwargs["top_p"] = s.top_p
     if s.send_top_k and s.top_k is not None:
         kwargs["model_kwargs"] = {"top_k": s.top_k}
+    kwargs["timeout"] = float(s.http_request_timeout)
     chat = ChatOpenAI(**kwargs)
     logger.debug("ChatOpenAI built for model=%s", s.model)
     return chat

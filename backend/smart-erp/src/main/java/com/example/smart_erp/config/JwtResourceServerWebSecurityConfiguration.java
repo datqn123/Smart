@@ -62,8 +62,6 @@ public class JwtResourceServerWebSecurityConfiguration {
 			Converter<Jwt, AbstractAuthenticationToken> accessTokenConverter) throws Exception {
 		http.cors(Customizer.withDefaults()).csrf(csrf -> csrf.disable())
 				.authorizeHttpRequests(auth -> auth
-						// SSE chat: MVP permitAll (EventSource cannot attach Authorization header)
-						.requestMatchers("/api/v1/ai/chat/stream").permitAll()
 						// Python AI → JDBC read-only bridge (template-first). Lock down via network / future API key.
 						.requestMatchers("/api/v1/ai/db/**").permitAll()
 						.requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()

@@ -14,3 +14,12 @@ class IntentOutput(BaseModel):
 class SqlReviewOutput(BaseModel):
     ok: bool
     issues: list[str] = Field(default_factory=list)
+
+
+class SqlTablePickOutput(BaseModel):
+    """Structured output for optional table subset selection (Task007)."""
+
+    tables: list[str] = Field(
+        default_factory=list,
+        description="Table names from the allowlist most relevant to the question.",
+    )

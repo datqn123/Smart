@@ -49,6 +49,8 @@ public class JwtTokenService {
 		Map<String, Boolean> menuPerms = MenuPermissionClaims.fromRolePermissionsJson(rolePermissionsJson);
 		var builder = Jwts.builder()
 				.subject(String.valueOf(userId))
+				.claim("user_id", String.valueOf(userId))
+				.claim("tenant_id", "1")
 				.claim("name", username)
 				.claim("role", roleName)
 				.claim(MenuPermissionClaims.CLAIM_NAME, menuPerms)

@@ -18,8 +18,10 @@ import com.example.smart_erp.ai.dbreadonly.dto.McpSqlDtos.SqlQueryReadonlyHttpRe
 import com.example.smart_erp.ai.dbreadonly.templates.DbTemplateUtils;
 
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
+import net.sf.jsqlparser.schema.Table;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.select.Select;
+import net.sf.jsqlparser.util.TablesNamesFinder;
 
 @Service
 public class AiDbReadonlyRawSqlService {
@@ -83,13 +85,9 @@ public class AiDbReadonlyRawSqlService {
 			if (!(st instanceof Select)) {
 				throw reject("DB_QUERY_REJECTED", "Only SELECT statements are allowed", cid);
 			}
-			// Minimal schema guard: disallow explicit non-public schema qualifiers.
-			// (Proper table lineage enforcement can be added later.)
-			for (String schema : extractSchemaQualifiers(low)) {
-				if (!ALLOWED_SCHEMAS.contains(schema)) {
-					throw reject("DB_QUERY_REJECTED", "Schema not allowed: " + schema, cid);
-				}
-			}
+			// Disallow explicit non-public schema qualifiers on Table AST nodes only.
+			// Do not scan raw text for "a.b" — that misclassifies table.column and aliases (e.g. p.name).
+			validateExplicitSchemas((Select) st, cid);
 		}
 		catch (McpToolInvocationException ex) {
 			throw ex;
@@ -99,20 +97,32 @@ public class AiDbReadonlyRawSqlService {
 		}
 	}
 
-	private static List<String> extractSchemaQualifiers(String low) {
-		// Very small heuristic: find tokens like "schema.table".
-		List<String> out = new ArrayList<>();
-		String[] parts = low.split("[^a-z0-9_\\.]+");
-		for (String p : parts) {
-			int dot = p.indexOf('.');
-			if (dot > 0 && dot < p.length() - 1) {
-				String schema = p.substring(0, dot);
-				if (!schema.isBlank()) {
-					out.add(schema);
-				}
+	private static void validateExplicitSchemas(Select select, String correlationId) {
+		TablesNamesFinder<Void> finder = new TablesNamesFinder<>() {
+			@Override
+			public void visit(Table tableName) {
+				assertAllowedTableSchema(tableName, correlationId);
+				super.visit(tableName);
 			}
+
+			@Override
+			public <S> Void visit(Table tableName, S context) {
+				assertAllowedTableSchema(tableName, correlationId);
+				return super.visit(tableName, context);
+			}
+		};
+		finder.getTables((Statement) select);
+	}
+
+	private static void assertAllowedTableSchema(Table tableName, String correlationId) {
+		String schema = tableName.getSchemaName();
+		if (schema == null || schema.isBlank()) {
+			return;
 		}
-		return out;
+		String s = schema.toLowerCase(Locale.ROOT);
+		if (!ALLOWED_SCHEMAS.contains(s)) {
+			throw reject("DB_QUERY_REJECTED", "Schema not allowed: " + schema, correlationId);
+		}
 	}
 
 	private static String ensureLimit(String q, int lim) {

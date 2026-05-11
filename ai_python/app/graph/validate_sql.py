@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 
 import sqlparse
-from sqlparse.sql import Comparison, Identifier, IdentifierList, Statement, Where
+from sqlparse.sql import Comparison, Function, Identifier, IdentifierList, Statement, Where
 
 from app.config.graph_settings import GraphSettings
 
@@ -19,6 +19,23 @@ _SQL_KEYWORDS = frozenset(
     select distinct from where and or not null true false as on in is like
     left right inner outer join cross natural full group by order having limit
     offset union all case when then else end between exists asc desc
+    current_date current_time current_timestamp localtime localtimestamp
+    """.split(),
+)
+
+# sqlparse often emits aggregate / builtin names as Identifier, not Function — do not treat as columns.
+_SQL_BUILTIN_IDENTIFIERS = frozenset(
+    """
+    sum count avg min max stddev stddev_pop stddev_samp variance var_pop var_samp
+    bool_and bool_or every string_agg array_agg json_agg json_object_agg json_build_array json_build_object
+    coalesce nullif greatest least
+    abs round floor ceil sign mod power sqrt exp ln log random
+    concat concat_ws trim ltrim rtrim upper lower replace substring overlay position length left right split_part
+    cast extract date_trunc date_part age make_date make_time
+    clock_timestamp statement_timestamp transaction_timestamp now
+    row_number rank dense_rank percent_rank cume_dist ntile lead lag first_value last_value nth_value
+    generate_series unnest cardinality array_length array_position
+    to_char to_date to_timestamp to_number
     """.split(),
 )
 
@@ -66,6 +83,10 @@ def _end_join_region(tokens: list, fi: int) -> int:
 
 def _rec_ids(token: object) -> list[Identifier]:
     out: list[Identifier] = []
+    if isinstance(token, Function):
+        for p in token.get_parameters():
+            out.extend(_rec_ids(p))
+        return out
     if isinstance(token, Identifier):
         return [token]
     if isinstance(token, IdentifierList):
@@ -170,9 +191,43 @@ def _validate_columns_for_map(
         else:
             if real_l in _SQL_KEYWORDS:
                 continue
+            if real_l in _SQL_BUILTIN_IDENTIFIERS:
+                continue
             if real_l not in union_cols:
                 return f"column not in allowlist: {real_l}"
     return None
+
+
+def _select_has_limit_clause(sql: str) -> bool:
+    """Detect LIMIT regardless of newlines (LLM often emits multi-line SELECT)."""
+    collapsed = re.sub(r"\s+", " ", sql.strip())
+    upper = collapsed.upper()
+    return " LIMIT " in f" {upper} " or upper.rstrip().rstrip(";").endswith("LIMIT")
+
+
+def normalize_llm_sql_output(sql: str | None) -> str:
+    """Strip common markdown fences (```sql … ```) so sqlparse sees a plain SELECT."""
+    if not sql:
+        return ""
+    t = sql.strip()
+    if not t.startswith("```"):
+        return t
+    lines = t.splitlines()
+    if not lines:
+        return ""
+    if lines[0].lstrip().startswith("```"):
+        lines = lines[1:]
+    while lines and lines[-1].strip() == "```":
+        lines.pop()
+    return "\n".join(lines).strip()
+
+
+def strip_trailing_semicolons(sql: str) -> str:
+    """Remove trailing semicolons. Spring readonly executor rejects ';' in the query body."""
+    s = (sql or "").strip()
+    while s.endswith(";"):
+        s = s[:-1].rstrip()
+    return s
 
 
 def validate_sql_deterministic(
@@ -189,7 +244,9 @@ def validate_sql_deterministic(
     notes: list[str] = []
     if not sql or not sql.strip():
         return False, "empty sql", None, notes
-    s = sql.strip()
+    s = normalize_llm_sql_output(sql)
+    if not s:
+        return False, "empty sql", None, notes
     parsed = sqlparse.parse(s)
     if len(parsed) != 1:
         return False, "only single statement allowed", None, notes
@@ -220,10 +277,9 @@ def validate_sql_deterministic(
         if col_err:
             return False, col_err, None, notes
 
-    upper = s.upper()
-    has_limit = " LIMIT " in f" {upper} " or upper.rstrip().rstrip(";").endswith("LIMIT")
-    if not has_limit:
+    if not _select_has_limit_clause(s):
         lim = settings.sql_limit_max
-        s = f"{s.rstrip().rstrip(';')} LIMIT {lim}"
+        s = f"{strip_trailing_semicolons(s)} LIMIT {lim}"
         notes.append("LIMIT injected (was missing)")
+    s = strip_trailing_semicolons(s)
     return True, None, s, notes

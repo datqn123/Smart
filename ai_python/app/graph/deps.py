@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.config.graph_settings import GraphSettings
-from app.graph.dbmeta import SchemaLoader
 from app.graph.sql_executor import SqlExecutor
 from app.llm.registry import LlmRegistry
 
@@ -17,4 +16,3 @@ class GraphDeps:
     llm_registry: LlmRegistry | None
     sql_executor: SqlExecutor
     settings: GraphSettings
-    schema_loader: SchemaLoader | None = None

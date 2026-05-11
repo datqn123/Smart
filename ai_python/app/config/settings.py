@@ -35,6 +35,12 @@ class LlmSettings(BaseSettings):
         default=False,
         description="If true, missing api_key/base_url/model fails at registry build.",
     )
+    http_request_timeout: float = Field(
+        default=120.0,
+        ge=5.0,
+        le=600.0,
+        description="HTTP timeout (s) for each LLM request (ChatOpenAI / OpenAI-compatible).",
+    )
 
     @field_validator("base_url", "model", mode="before")
     @classmethod

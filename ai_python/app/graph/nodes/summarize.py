@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from app.graph.agent_trace import emit_agent_trace
 from app.graph.deps import GraphDeps
 from app.graph.state import AgentState
 
@@ -18,22 +19,41 @@ def make_summarize_answer_node(deps: GraphDeps):
             parts = [f"mã lỗi: {err.get('error')}"]
             if err.get("attempts") is not None:
                 parts.append(f"attempts={err['attempts']}")
-            return {
-                "final_answer": (
-                    f"Xin lỗi, không hoàn tất truy vấn ({', '.join(parts)})."
-                )
-            }
+            msg = f"Xin lỗi, không hoàn tất truy vấn ({', '.join(parts)})."
+            emit_agent_trace(
+                logger,
+                deps.settings,
+                agent="summarize",
+                phase="Không tóm tắt — lỗi pipeline SQL",
+                detail=str(err),
+            )
+            return {"final_answer": msg}
         qr = state.get("query_result")
         empty = state.get("result_empty") or (
             isinstance(qr, dict) and not (qr.get("rows") or [])
         )
         if empty:
+            emit_agent_trace(
+                logger,
+                deps.settings,
+                agent="summarize",
+                phase="Kết quả truy vấn rỗng",
+                detail="Không có rows — trả lời cố định cho user.",
+            )
             return {
                 "final_answer": "Không có dữ liệu phù hợp với câu hỏi của bạn."
             }
         reg = deps.llm_registry
         if reg is None:
-            return {"final_answer": str(qr)[:8000]}
+            stub_ans = str(qr)[:8000]
+            emit_agent_trace(
+                logger,
+                deps.settings,
+                agent="summarize",
+                phase="Tóm tắt stub (không gọi LLM)",
+                detail=stub_ans if len(stub_ans) <= 1500 else stub_ans[:1500] + "…",
+            )
+            return {"final_answer": stub_ans}
         messages_tail = state.get("messages") or []
         user_q = ""
         for m in reversed(messages_tail):
@@ -50,6 +70,14 @@ def make_summarize_answer_node(deps: GraphDeps):
         ans = reg.get("summarize").invoke_text(
             prompt,
             system="Bạn là trợ lý ERP. Tóm tắt số liệu chính xác, không bịa, locale vi-VN.",
+        )
+        preview = ans if len(ans) <= 1200 else ans[:1200] + "…"
+        emit_agent_trace(
+            logger,
+            deps.settings,
+            agent="summarize",
+            phase="Tóm tắt kết quả SQL (LLM)",
+            detail=f"văn_bản_phản_hồi:\n{preview}",
         )
         return {"final_answer": ans}
 

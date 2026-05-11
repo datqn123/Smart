@@ -28,6 +28,11 @@ class LlmClient(Protocol):
         schema: type[T],
         *,
         max_retries: int = 3,
+        json_output_contract: str | None = None,
     ) -> T:
-        """Return a validated Pydantic model (native or JSON fallback)."""
+        """Return a validated Pydantic model (native or JSON fallback).
+
+        When ``json_output_contract`` is set, it replaces the full Pydantic JSON Schema
+        in the user instruction tail (lighter for small models like Gemma).
+        """
         ...
