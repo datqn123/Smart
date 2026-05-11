@@ -8,6 +8,7 @@ from langchain_core.messages import BaseMessage, SystemMessage
 
 from app.graph.agent_trace import emit_agent_trace
 from app.graph.deps import GraphDeps
+from app.graph.message_utils import latest_human_question
 from app.graph.registry import normalize_intent
 from app.graph.state import AgentState
 from app.llm.schemas import IntentOutput
@@ -47,14 +48,12 @@ def _messages_for_intent(state: AgentState) -> list[BaseMessage]:
 
 
 def _user_question_snippet(state: AgentState, max_chars: int = 220) -> str:
-    for m in reversed(state.get("messages") or []):
-        c = getattr(m, "content", "")
-        if c:
-            t = str(c).replace("\n", " ").strip()
-            if len(t) > max_chars:
-                return t[:max_chars] + "…"
-            return t
-    return "(no user text)"
+    t = latest_human_question(state.get("messages")).replace("\n", " ").strip()
+    if not t:
+        return "(no user text)"
+    if len(t) > max_chars:
+        return t[:max_chars] + "…"
+    return t
 
 
 def make_intent_node(deps: GraphDeps):

@@ -1,0 +1,34 @@
+"""message_utils — current user question extraction."""
+
+from __future__ import annotations
+
+from langchain_core.messages import AIMessage, HumanMessage
+
+from app.graph.message_utils import latest_human_question, strip_embedded_chat_transcript
+
+
+def test_latest_human_question_prefers_last_human() -> None:
+    msgs = [
+        HumanMessage(content="câu một"),
+        AIMessage(content="trả lời một"),
+        HumanMessage(content="xuất bao nhiêu lô hàng"),
+    ]
+    assert latest_human_question(msgs) == "xuất bao nhiêu lô hàng"
+
+
+def test_latest_human_question_skips_trailing_ai() -> None:
+    msgs = [
+        HumanMessage(content="hỏi A"),
+        HumanMessage(content="hỏi B"),
+        AIMessage(content="đáp B"),
+    ]
+    assert latest_human_question(msgs) == "hỏi B"
+
+
+def test_strip_embedded_transcript() -> None:
+    blob = (
+        "User: nhập bao nhiêu đơn\n"
+        "Assistant: Trong tháng này đã nhập 103 đơn.\n"
+        "User: xuất bao nhiêu lô hàng"
+    )
+    assert strip_embedded_chat_transcript(blob) == "xuất bao nhiêu lô hàng"

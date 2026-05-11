@@ -9,6 +9,7 @@ from typing import Any, Protocol
 from langchain_core.messages import HumanMessage
 
 from app.api.schemas import ChatRequest
+from app.graph.feedback import empty_feedback
 from app.config.graph_settings import load_graph_settings
 from app.config.settings import load_llm_settings
 from app.graph import compile_agent_graph, default_initial_state, iter_graph_stream
@@ -56,6 +57,22 @@ def _build_state(*, request: ChatRequest, correlation_id: str) -> dict[str, Any]
     state["tenant_id"] = request.metadata.tenant_id
     state["thread_id"] = request.metadata.thread_id
     state["schema_version"] = request.metadata.schema_version
+    # Fresh turn: do not let checkpointed SQL channel bleed into this answer.
+    state["query_result"] = None
+    state["generated_sql"] = None
+    state["final_answer"] = None
+    state["error_payload"] = None
+    state["intent"] = None
+    state["sql_review_ok"] = None
+    state["sql_valid"] = None
+    state["result_ok"] = None
+    state["result_empty"] = None
+    state["runtime_schema_artifact"] = None
+    state["selected_tables"] = None
+    state["sql_gen_mode"] = None
+    state["sql_attempt_history"] = None
+    state["sql_local_pool"] = None
+    state["validation_feedback"] = empty_feedback()
     return state
 
 

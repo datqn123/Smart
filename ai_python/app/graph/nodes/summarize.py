@@ -6,6 +6,7 @@ import logging
 
 from app.graph.agent_trace import emit_agent_trace
 from app.graph.deps import GraphDeps
+from app.graph.message_utils import latest_human_question
 from app.graph.state import AgentState
 
 logger = logging.getLogger(__name__)
@@ -54,22 +55,19 @@ def make_summarize_answer_node(deps: GraphDeps):
                 detail=stub_ans if len(stub_ans) <= 1500 else stub_ans[:1500] + "…",
             )
             return {"final_answer": stub_ans}
-        messages_tail = state.get("messages") or []
-        user_q = ""
-        for m in reversed(messages_tail):
-            c = getattr(m, "content", "")
-            if c:
-                user_q = str(c)
-                break
+        user_q = latest_human_question(state.get("messages"))
         prompt = (
-            f"Câu hỏi: {user_q}\n\n"
+            f"Câu hỏi hiện tại (chỉ trả lời đúng phần này; không lặp số/kết luận từ câu trước nếu không có trong rows): {user_q}\n\n"
             f"Kết quả truy vấn (đừng bịa số ngoài rows):\n{str(qr)[:6000]}\n\n"
             "Tóm tắt ngắn gọn bằng tiếng Việt (vi-VN). Ưu tiên số liệu cụ thể từ kết quả; "
             "không suy diễn ngoài dữ liệu."
         )
         ans = reg.get("summarize").invoke_text(
             prompt,
-            system="Bạn là trợ lý ERP. Tóm tắt số liệu chính xác, không bịa, locale vi-VN.",
+            system=(
+                "Bạn là trợ lý ERP. Tóm tắt số liệu chính xác, không bịa, locale vi-VN. "
+                "Không nhắc lại kết quả của câu hỏi trước trong cùng phiên nếu không được yêu cầu."
+            ),
         )
         preview = ans if len(ans) <= 1200 else ans[:1200] + "…"
         emit_agent_trace(

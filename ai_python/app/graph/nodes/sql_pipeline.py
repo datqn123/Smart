@@ -19,6 +19,7 @@ from app.graph.feedback import (
 )
 from app.graph.retry import can_regen_sql
 from app.graph.state import AgentState
+from app.graph.message_utils import latest_human_question
 from app.graph.logging_policy import safe_log_sql
 from app.graph.sql_prompts import build_gen_sql_user_prompt, format_schema_block
 from app.graph.sql_similarity import max_pool_similarity
@@ -77,11 +78,8 @@ def _benign_sql_review_issue(issue: str) -> bool:
 
 
 def _last_user_message(state: AgentState) -> str:
-    for m in reversed(state.get("messages") or []):
-        c = getattr(m, "content", "")
-        if c:
-            return str(c)
-    return ""
+    """Current user turn only (last HumanMessage), not prior assistant text."""
+    return latest_human_question(state.get("messages"))
 
 
 def _load_schema_artifact(
