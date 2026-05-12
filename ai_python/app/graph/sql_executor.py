@@ -241,6 +241,10 @@ def _failure_category(body: Any) -> str:
 def build_sql_executor(settings: GraphSettings) -> SqlExecutor:
     mode = settings.sql_executor_mode
     if mode == "stub":
+        logger.info(
+            "SQL_EXECUTOR_MODE=stub: results are synthetic. "
+            "Use http_spring + SPRING_SQL_URL for Spring smart-erp read-only SQL."
+        )
         return StubSqlExecutor()
     if mode == "python_ro":
         raise ValueError(

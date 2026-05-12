@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import jwt
@@ -116,6 +117,7 @@ def invoke_chat(
         thread_id=request.metadata.thread_id,
         intent=out.get("intent"),
         final_answer=out.get("final_answer"),
+        chart_spec=out.get("chart_spec_final"),
         usage=InvokeUsage(),
         error=None,
     )
@@ -155,10 +157,19 @@ async def stream_chat(
 
     async def event_gen():
         prev_answer = ""
+        chart_sent = False
         final_error: dict[str, Any] | None = None
         try:
             for chunk in runtime.stream(request, correlation_id=correlation_id):
                 update = _extract_partial_update(chunk)
+                spec = update.get("chart_spec_final")
+                if not chart_sent and isinstance(spec, dict) and spec:
+                    try:
+                        payload = json.dumps(spec, ensure_ascii=False)
+                    except (TypeError, ValueError):
+                        payload = "{}"
+                    yield _sse_ui_event("chart", payload)
+                    chart_sent = True
                 if "final_answer" in update and update["final_answer"]:
                     current = str(update["final_answer"])
                     if current.startswith(prev_answer) and len(current) > len(prev_answer):

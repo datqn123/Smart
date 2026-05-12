@@ -73,6 +73,10 @@ def _build_state(*, request: ChatRequest, correlation_id: str) -> dict[str, Any]
     state["sql_attempt_history"] = None
     state["sql_local_pool"] = None
     state["validation_feedback"] = empty_feedback()
+    state["idea_data_request"] = None
+    state["idea_chart_idea"] = None
+    state["chart_spec_draft"] = None
+    state["chart_spec_final"] = None
     return state
 
 

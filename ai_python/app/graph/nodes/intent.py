@@ -18,22 +18,23 @@ logger = logging.getLogger(__name__)
 # Criteria only — no few-shot utterances; model must judge from conversation.
 _INTENT_CLASSIFY_SYSTEM = (
     "Bạn phân loại một lượt hội thoại trong ứng dụng ERP để hệ thống chọn nhánh xử lý.\n\n"
-    "Hai loại đích:\n"
+    "Ba loại đích:\n"
     "• general_chat — trao đổi thông thường: chào hỏi, giải thích khái niệm, "
     "hướng dẫn thao tác giao diện ở mức chung, ý kiến cá nhân, hoặc nội dung "
     "không yêu cầu đọc dữ liệu vận hành đang lưu trong kho của ứng dụng để khẳng định sự kiện.\n"
     "• system_data_query — người dùng cần câu trả lời bám dữ liệu vận hành thực "
-    "(thống kê, bảng kết quả, đối chiếu, mức số liệu hiện tại trong hệ thống); "
-    "gồm cả lượt tiếp theo vẫn nhắm kiểm tra hoặc sửa sai một kết luận số liệu "
-    "nếu ngữ cảnh quay lại việc tra cứu dữ liệu ứng dụng.\n\n"
+    "(thống kê, bảng kết quả, đối chiếu, mức số liệu hiện tại trong hệ thống) dưới dạng "
+    "chữ / bảng / số, không yêu cầu vẽ biểu đồ.\n"
+    "• system_data_chart — cùng cần dữ liệu vận hành nhưng người dùng muốn báo cáo "
+    "dưới dạng biểu đồ / đồ thị / visualization (doanh thu, dòng tiền, số lượng hàng, xu hướng theo thời gian, …).\n\n"
     "Tự suy luận từ toàn bộ ngữ cảnh được cung cấp. Không liệt kê câu hỏi mẫu. "
     "Không mô tả hay tiết lộ schema hay tên bảng database."
 )
 
 _INTENT_JSON_CONTRACT = (
     'Single JSON object with exactly one key "intent". '
-    'The value must be exactly the string general_chat or exactly the string '
-    "system_data_query (ASCII, lowercase, underscore as shown). "
+    "The value must be exactly one of: general_chat, system_data_query, system_data_chart "
+    "(ASCII, lowercase, underscore as shown). "
     "No markdown fences, no other keys, no explanation text."
 )
 
@@ -107,6 +108,8 @@ def make_intent_node(deps: GraphDeps):
 
 def route_after_intent(state: AgentState) -> str:
     intent = state.get("intent") or "general_chat"
+    if intent == "system_data_chart":
+        return "agent_idea"
     if intent == "system_data_query":
         return "sql_branch"
     return "chat_normal"

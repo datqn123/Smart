@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from "react"
 import { usePageTitle } from "@/context/PageTitleContext"
-import { Send, Image as ImageIcon, Mic, X, Paperclip, MessageSquare, Bot, User, Loader2 } from "lucide-react"
+import { Send, Image as ImageIcon, Mic, Paperclip, MessageSquare, Bot, User } from "lucide-react"
 import type { ChatMessage } from "../types"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { startAiChatPostStream, type AiChatStreamHandle } from "../api/aiChatSse"
+import { AiChatChartCard } from "../components/AiChatChartCard"
 
 export function ChatBotPage() {
   const { setTitle } = usePageTitle()
@@ -14,7 +14,8 @@ export function ChatBotPage() {
     {
       id: "1",
       role: "assistant",
-      content: "Xin chào! Tôi là trợ lý AI của Mini ERP. Tôi có thể giúp bạn kiểm tra tồn kho, xử lý đơn hàng bằng hình ảnh hoặc ghi nhận dữ liệu bằng giọng nói. Bạn cần hỗ trợ gì không?",
+      content:
+        "Xin chào. Tôi là trợ lý AI Mini ERP — trả lời qua Spring và dịch vụ Python (dữ liệu SQL read-only khi bạn hỏi số liệu). Hãy nhập câu hỏi bằng chữ.",
       timestamp: new Date().toISOString(),
       type: "text"
     }
@@ -53,8 +54,8 @@ export function ChatBotPage() {
     const first = delta.slice(0, 1)
 
     // Punctuation rules: no space before closing punctuations, and no space after opening punctuations.
-    const noSpaceBefore = /[,\.\!\?\:\;\)\]\}]/.test(first)
-    const noSpaceAfter = /[\(\[\{]/.test(last)
+    const noSpaceBefore = ",.!?:;)]}".includes(first)
+    const noSpaceAfter = "([{".includes(last)
     if (noSpaceBefore || noSpaceAfter) return `${current}${delta}`
 
     const isLetter = (c: string) => /[A-Za-zÀ-ỹ]/.test(c)
@@ -63,7 +64,7 @@ export function ChatBotPage() {
 
     // Add a space after punctuation when the next chunk starts a word.
     // Example: "Xin chào!" + "Rất vui..." => "Xin chào! Rất vui..."
-    const spaceAfterPunct = /[,\.\!\?\:\;]/.test(last) && isWordish(first)
+    const spaceAfterPunct = ",.!?:;".includes(last) && isWordish(first)
     if (spaceAfterPunct) return `${current} ${delta}`
 
     // Do not insert spaces inside numbers like 2024.
@@ -74,7 +75,7 @@ export function ChatBotPage() {
     return needsSpace ? `${current} ${delta}` : `${current}${delta}`
   }
 
-  const handleSend = (text?: string, type: "text" | "image" | "voice" = "text", metadata?: any) => {
+  const handleSend = (text?: string, type: "text" | "image" | "voice" = "text", metadata?: ChatMessage["metadata"]) => {
     const content = text || inputValue
     if (!content && type === "text") return
 
@@ -124,6 +125,15 @@ export function ChatBotPage() {
         setMessages(prev =>
           prev.map(m =>
             m.id === assistantId ? { ...m, content: appendDeltaSmart(m.content ?? "", delta) } : m
+          )
+        )
+      },
+      onChart: (spec) => {
+        setMessages(prev =>
+          prev.map(m =>
+            m.id === assistantId
+              ? { ...m, metadata: { ...m.metadata, chartSpec: spec } }
+              : m
           )
         )
       },
@@ -219,6 +229,9 @@ export function ChatBotPage() {
                      </div>
                   )}
                   {msg.content}
+                  {msg.role === "assistant" && msg.metadata?.chartSpec && (
+                    <AiChatChartCard spec={msg.metadata.chartSpec} />
+                  )}
                 </div>
                 <div className={`text-[10px] font-bold uppercase tracking-widest text-slate-400 ${msg.role === "user" ? "text-right" : "text-left"}`}>
                   {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -286,7 +299,7 @@ export function ChatBotPage() {
             
             <textarea
               className="flex-1 max-h-32 min-h-[40px] bg-transparent border-none focus:ring-0 text-[15px] py-2 px-3 text-slate-700 placeholder:text-slate-400 resize-none leading-relaxed transition-all"
-              placeholder="Hỏi trợ lý, quét hóa đơn hoặc ra lệnh giọng nói..."
+              placeholder="Hỏi trợ lý bằng chữ (ví dụ: thống kê đơn hàng, tồn kho)..."
               rows={1}
               value={inputValue}
               onChange={(e) => {

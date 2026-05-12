@@ -6,6 +6,8 @@ type OpenAiChatStreamArgs = {
   onDelta: (delta: string) => void
   onDone: () => void
   onError: (message: string) => void
+  /** When FastAPI emits SSE `chart` (JSON one line). */
+  onChart?: (spec: Record<string, unknown>) => void
 }
 
 export type AiChatStreamHandle = { abort: () => void }
@@ -27,7 +29,7 @@ function parseSseBlock(block: string): { event: string; data: string } | null {
 }
 
 /**
- * POST + Bearer → Spring relay → FastAPI; SSE events `delta` / `done` / `error` (same as legacy EventSource).
+ * POST + Bearer → Spring relay → FastAPI; SSE events `delta` | `chart` | `done` | `error`.
  */
 export function startAiChatPostStream(args: OpenAiChatStreamArgs): AiChatStreamHandle {
   const ac = new AbortController()
@@ -82,6 +84,14 @@ export function startAiChatPostStream(args: OpenAiChatStreamArgs): AiChatStreamH
           const parsed = parseSseBlock(block)
           if (!parsed) continue
           if (parsed.event === "delta" && parsed.data.length > 0) args.onDelta(parsed.data)
+          if (parsed.event === "chart" && parsed.data.length > 0 && args.onChart) {
+            try {
+              const spec = JSON.parse(parsed.data) as Record<string, unknown>
+              if (spec && typeof spec === "object") args.onChart(spec)
+            } catch {
+              /* ignore malformed chart payload */
+            }
+          }
           if (parsed.event === "done") args.onDone()
           if (parsed.event === "error") {
             args.onError(parsed.data.length > 0 ? parsed.data : "Không thể kết nối trợ lý AI.")
@@ -93,6 +103,14 @@ export function startAiChatPostStream(args: OpenAiChatStreamArgs): AiChatStreamH
       if (tail) {
         const parsed = parseSseBlock(tail)
         if (parsed?.event === "delta" && parsed.data.length > 0) args.onDelta(parsed.data)
+        if (parsed?.event === "chart" && parsed.data.length > 0 && args.onChart) {
+          try {
+            const spec = JSON.parse(parsed.data) as Record<string, unknown>
+            if (spec && typeof spec === "object") args.onChart(spec)
+          } catch {
+            /* ignore */
+          }
+        }
         if (parsed?.event === "done") args.onDone()
         if (parsed?.event === "error") {
           args.onError(parsed.data.length > 0 ? parsed.data : "Không thể kết nối trợ lý AI.")

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 
@@ -19,7 +20,7 @@ from app.graph.feedback import (
 )
 from app.graph.retry import can_regen_sql
 from app.graph.state import AgentState
-from app.graph.message_utils import latest_human_question
+from app.graph.message_utils import format_dialog_tail_for_sql, latest_human_question
 from app.graph.logging_policy import safe_log_sql
 from app.graph.sql_prompts import build_gen_sql_user_prompt, format_schema_block
 from app.graph.sql_similarity import max_pool_similarity
@@ -153,6 +154,18 @@ def make_gen_sql_node(deps: GraphDeps):
             selected_tables=selected_tables,
             enriched=enriched,
         )
+        dialog_tail = format_dialog_tail_for_sql(
+            state.get("messages"),
+            max_messages=int(deps.settings.sql_dialog_tail_max_messages),
+            max_chars=int(deps.settings.sql_dialog_tail_max_chars),
+        )
+        idea_req = state.get("idea_data_request")
+        planner_json: str | None = None
+        if isinstance(idea_req, dict) and idea_req:
+            try:
+                planner_json = json.dumps(idea_req, ensure_ascii=False)[:8000]
+            except Exception:
+                planner_json = None
         prompt = build_gen_sql_user_prompt(
             mode=mode,  # type: ignore[arg-type]
             schema_block=schema_block,
@@ -160,6 +173,8 @@ def make_gen_sql_node(deps: GraphDeps):
             user_q=user_q,
             seed_sql=seed_sql if mode == "exploit" else None,
             sql_limit_max=int(deps.settings.sql_limit_max),
+            dialog_tail=dialog_tail or None,
+            planner_data_request_json=planner_json,
         )
         if reg is None:
             sql = f"SELECT 1 AS ok LIMIT {deps.settings.sql_limit_max}"

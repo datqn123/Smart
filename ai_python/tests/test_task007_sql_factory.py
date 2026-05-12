@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from app.config.graph_settings import GraphSettings
 from app.graph.dbmeta import ColumnMeta, FileSchemaLoader, SchemaArtifact, TableMeta
-from app.graph.sql_prompts import _truncate_col_desc, format_schema_block
+from app.graph.sql_prompts import _truncate_col_desc, build_gen_sql_user_prompt, format_schema_block
 from app.graph.sql_similarity import hybrid_similarity, max_pool_similarity, sim_tok
 from app.graph.sql_table_selection import expand_fk_neighbors, heuristic_select_tables, select_tables_for_question
 from app.graph.validate_sql import normalize_llm_sql_output, validate_sql_deterministic
@@ -16,6 +16,36 @@ from tests.fake_llm import FakeLlmClient
 
 def _v1() -> SchemaArtifact:
     return FileSchemaLoader(None).load("v1")
+
+
+def test_build_gen_sql_user_prompt_includes_dialog_tail() -> None:
+    p = build_gen_sql_user_prompt(
+        mode="explore",
+        schema_block="t(a)",
+        feedback_render="(none)",
+        user_q="số tiền đơn đó",
+        seed_sql=None,
+        sql_limit_max=10,
+        dialog_tail="User: hôm nay bao nhiêu đơn\n\nAssistant: 1 đơn.",
+    )
+    assert "Recent conversation" in p
+    assert "1 đơn" in p
+    assert "số tiền đơn đó" in p
+
+
+def test_build_gen_sql_user_prompt_includes_planner_json() -> None:
+    p = build_gen_sql_user_prompt(
+        mode="explore",
+        schema_block="t(a)",
+        feedback_render="(none)",
+        user_q="q",
+        seed_sql=None,
+        sql_limit_max=10,
+        dialog_tail=None,
+        planner_data_request_json='{"metric":"revenue"}',
+    )
+    assert "Data planning brief" in p
+    assert "revenue" in p
 
 
 def test_expand_fk_neighbors_adds_referenced_table() -> None:

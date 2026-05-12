@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 
+from langchain_core.messages import AIMessage
+
 from app.graph.agent_trace import emit_agent_trace
 from app.graph.deps import GraphDeps
 from app.graph.state import AgentState
@@ -23,7 +25,8 @@ def make_chat_normal_node(deps: GraphDeps):
                 phase="Stub — không có LLM registry",
                 detail="final_answer cố định",
             )
-            return {"final_answer": "[chat] stub: no LLM registry"}
+            stub = "[chat] stub: no LLM registry"
+            return {"final_answer": stub, "messages": [AIMessage(content=stub)]}
         msgs = state.get("messages") or []
         parts: list[str] = []
         for m in msgs[-20:]:
@@ -49,6 +52,6 @@ def make_chat_normal_node(deps: GraphDeps):
             phase="Trả lời chat chung (LLM)",
             detail=f"văn_bản_phản_hồi:\n{preview}",
         )
-        return {"final_answer": ans}
+        return {"final_answer": ans, "messages": [AIMessage(content=ans)]}
 
     return chat_normal

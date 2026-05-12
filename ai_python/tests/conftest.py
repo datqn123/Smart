@@ -8,6 +8,18 @@ from app.config.graph_settings import GraphSettings
 from app.graph.dbmeta import FileSchemaLoader, SchemaArtifact
 
 
+@pytest.fixture(autouse=True)
+def _pytest_sql_executor_stub(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tests must not require Spring on 8080; default GraphSettings targets http_spring."""
+    monkeypatch.setenv("SQL_EXECUTOR_MODE", "stub")
+    try:
+        from app.api.runtime import get_graph_runtime
+
+        get_graph_runtime.cache_clear()
+    except ImportError:
+        pass
+
+
 @pytest.fixture
 def patch_pg_schema_v1(monkeypatch: pytest.MonkeyPatch) -> None:
     """Stub live Postgres schema builder with packaged v1 YAML (offline graph tests)."""

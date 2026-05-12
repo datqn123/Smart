@@ -29,9 +29,11 @@ class FakeLlmClient:
         self._sql_review_fail_left = sql_review_failures
         self._table_pick = table_pick
         self.invoke_count = 0
+        self.last_invoke_text: str | None = None
 
     def invoke_text(self, user: str, *, system: str | None = None) -> str:
         self.invoke_count += 1
+        self.last_invoke_text = user
         return self._reply
 
     def stream_text(self, user: str, *, system: str | None = None) -> Iterator[str]:
@@ -48,6 +50,27 @@ class FakeLlmClient:
         if schema.__name__ == "IntentOutput":
             intent_val = self._intent if self._intent is not None else "general_chat"
             return schema.model_validate({"intent": intent_val})  # type: ignore[return-value]
+        if schema.__name__ == "IdeaPlannerOutput":
+            return schema.model_validate(  # type: ignore[return-value]
+                {
+                    "data_request": {"entity": "orders", "metric": "count"},
+                    "chart_idea": {"chart_type": "bar", "title_hint": "Thống kê"},
+                },
+            )
+        if schema.__name__ == "ChartSpecDraftOutput":
+            return schema.model_validate(  # type: ignore[return-value]
+                {"chart_type": "bar", "x_key": "_stub", "y_key": "sql_ok", "title": "Test chart"},
+            )
+        if schema.__name__ == "ChartReviewOutput":
+            return schema.model_validate(  # type: ignore[return-value]
+                {
+                    "chart_type": "bar",
+                    "x_key": "_stub",
+                    "y_key": "sql_ok",
+                    "title": "Test chart",
+                    "final_answer": "Biểu đồ từ dữ liệu stub.",
+                },
+            )
         if schema.__name__ == "SqlReviewOutput":
             if self._sql_review_fail_left > 0:
                 self._sql_review_fail_left -= 1

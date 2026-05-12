@@ -17,14 +17,17 @@ class GraphSettings(BaseSettings):
         extra="ignore",
     )
 
-    sql_executor_mode: Literal["stub", "python_ro", "http_spring"] = Field(default="stub")
+    sql_executor_mode: Literal["stub", "python_ro", "http_spring"] = Field(default="http_spring")
     app_env: str = Field(default="dev", description="Environment profile: dev/staging/prod.")
     database_url_ro: str | None = Field(default=None)
     database_url_metadata_ro: str | None = Field(
         default=None,
         description="Read-only Postgres URL for ai_table_description + introspection (optional; falls back to DATABASE_URL_RO).",
     )
-    spring_sql_url: str | None = Field(default=None)
+    spring_sql_url: str | None = Field(
+        default="http://127.0.0.1:8080/api/v1/ai/db/sql/query-readonly-raw",
+        description="Spring AiDbReadonlyController raw SQL endpoint (same host as Mini ERP API by default).",
+    )
     spring_sql_bearer_token: str | None = Field(
         default=None,
         description="Optional Bearer token for Spring SQL endpoint (never logged).",
@@ -106,10 +109,46 @@ class GraphSettings(BaseSettings):
         default=False,
         description="If true, subgraph may insert select_tables before gen_sql (reserved).",
     )
+    sql_dialog_tail_max_messages: int = Field(
+        default=12,
+        ge=0,
+        le=48,
+        description="Max chat messages (Human+AI) appended to gen_sql/summarize prompts; 0 disables tail.",
+    )
+    sql_dialog_tail_max_chars: int = Field(
+        default=2000,
+        ge=0,
+        le=16000,
+        description="Max characters for dialog tail in SQL prompts; 0 disables tail.",
+    )
+    ai_display_timezone: str | None = Field(
+        default="Asia/Ho_Chi_Minh",
+        description="IANA zone for SQL summarize prompts: ISO timestamps with Z/offset → local wall time. Empty = raw.",
+    )
+
+    @field_validator("ai_display_timezone", mode="before")
+    @classmethod
+    def strip_ai_display_timezone(cls, v: object) -> object:
+        if isinstance(v, str) and not v.strip():
+            return None
+        if isinstance(v, str):
+            return v.strip()
+        return v
 
     @field_validator("pg_metadata_schema", "pg_ai_description_table", "pg_ai_column_description_table", mode="before")
     @classmethod
     def strip_pg_identifiers(cls, v: object) -> object:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+    @field_validator("spring_sql_url", mode="before")
+    @classmethod
+    def strip_spring_sql_url(cls, v: object) -> object:
+        if v is None:
+            return None
+        if isinstance(v, str) and not v.strip():
+            return None
         if isinstance(v, str):
             return v.strip()
         return v
@@ -162,10 +201,23 @@ class GraphSettings(BaseSettings):
             return v.strip().lower()
         return v
 
+    @field_validator("sql_dialog_tail_max_messages", "sql_dialog_tail_max_chars", mode="before")
+    @classmethod
+    def coerce_sql_dialog_tail_ints(cls, v: object) -> object:
+        if isinstance(v, str):
+            s = v.strip()
+            try:
+                return int(s)
+            except ValueError:
+                return v
+        return v
+
     @model_validator(mode="after")
     def validate_prod_sql_mode(self) -> "GraphSettings":
         if self.app_env in ("prod", "production") and self.sql_executor_mode != "http_spring":
             raise ValueError("APP_ENV=prod requires SQL_EXECUTOR_MODE=http_spring")
+        if self.sql_executor_mode == "http_spring" and not self.spring_sql_url:
+            raise ValueError("SQL_EXECUTOR_MODE=http_spring requires a non-empty SPRING_SQL_URL")
         return self
 
 

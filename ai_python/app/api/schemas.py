@@ -43,6 +43,7 @@ class InvokeResponse(BaseModel):
     thread_id: str | None = None
     intent: str | None = None
     final_answer: str | None = None
+    chart_spec: dict[str, Any] | None = None
     usage: InvokeUsage | None = None
     error: ErrorObject | None = None
 

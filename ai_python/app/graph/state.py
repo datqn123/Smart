@@ -34,6 +34,11 @@ class AgentState(TypedDict, total=False):
     sql_attempt_history: list[str] | None
     sql_local_pool: list[str] | None
     runtime_schema_artifact: dict[str, Any] | None
+    # Chart pipeline (optional; safe for old checkpoints)
+    idea_data_request: dict[str, Any] | None
+    idea_chart_idea: dict[str, Any] | None
+    chart_spec_draft: dict[str, Any] | None
+    chart_spec_final: dict[str, Any] | None
 
 
 def default_initial_state() -> AgentState:

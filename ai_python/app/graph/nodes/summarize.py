@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import logging
 
+from langchain_core.messages import AIMessage
+
 from app.graph.agent_trace import emit_agent_trace
+from app.graph.datetime_display import localize_query_result_for_display
 from app.graph.deps import GraphDeps
-from app.graph.message_utils import latest_human_question
+from app.graph.message_utils import format_dialog_tail_for_sql, latest_human_question
 from app.graph.state import AgentState
 
 logger = logging.getLogger(__name__)
@@ -28,7 +31,7 @@ def make_summarize_answer_node(deps: GraphDeps):
                 phase="Không tóm tắt — lỗi pipeline SQL",
                 detail=str(err),
             )
-            return {"final_answer": msg}
+            return {"final_answer": msg, "messages": [AIMessage(content=msg)]}
         qr = state.get("query_result")
         empty = state.get("result_empty") or (
             isinstance(qr, dict) and not (qr.get("rows") or [])
@@ -41,12 +44,15 @@ def make_summarize_answer_node(deps: GraphDeps):
                 phase="Kết quả truy vấn rỗng",
                 detail="Không có rows — trả lời cố định cho user.",
             )
+            empty_msg = "Không có dữ liệu phù hợp với câu hỏi của bạn."
             return {
-                "final_answer": "Không có dữ liệu phù hợp với câu hỏi của bạn."
+                "final_answer": empty_msg,
+                "messages": [AIMessage(content=empty_msg)],
             }
         reg = deps.llm_registry
         if reg is None:
-            stub_ans = str(qr)[:8000]
+            qr_stub = localize_query_result_for_display(qr, deps.settings.ai_display_timezone)
+            stub_ans = str(qr_stub)[:8000]
             emit_agent_trace(
                 logger,
                 deps.settings,
@@ -54,19 +60,43 @@ def make_summarize_answer_node(deps: GraphDeps):
                 phase="Tóm tắt stub (không gọi LLM)",
                 detail=stub_ans if len(stub_ans) <= 1500 else stub_ans[:1500] + "…",
             )
-            return {"final_answer": stub_ans}
+            return {
+                "final_answer": stub_ans,
+                "messages": [AIMessage(content=stub_ans)],
+            }
         user_q = latest_human_question(state.get("messages"))
+        dialog_tail = format_dialog_tail_for_sql(
+            state.get("messages"),
+            max_messages=int(deps.settings.sql_dialog_tail_max_messages),
+            max_chars=int(deps.settings.sql_dialog_tail_max_chars),
+        )
+        dialog_block = (
+            f"Recent conversation (resolve pronouns like đơn đó / tháng đó; "
+            f"do not invent numbers not in rows or not stated here):\n{dialog_tail}\n\n"
+            if dialog_tail
+            else ""
+        )
+        qr_prompt = localize_query_result_for_display(qr, deps.settings.ai_display_timezone)
         prompt = (
-            f"Câu hỏi hiện tại (chỉ trả lời đúng phần này; không lặp số/kết luận từ câu trước nếu không có trong rows): {user_q}\n\n"
-            f"Kết quả truy vấn (đừng bịa số ngoài rows):\n{str(qr)[:6000]}\n\n"
+            f"{dialog_block}"
+            f"Câu hỏi hiện tại (ưu tiên trả lời đúng phần này; bám rows cho số liệu): {user_q}\n\n"
+            f"Kết quả truy vấn (đừng bịa số ngoài rows):\n{str(qr_prompt)[:6000]}\n\n"
             "Tóm tắt ngắn gọn bằng tiếng Việt (vi-VN). Ưu tiên số liệu cụ thể từ kết quả; "
             "không suy diễn ngoài dữ liệu."
+        )
+        tz_note = (
+            " Chuỗi thời gian trong block kết quả đã được chuyển sang giờ địa phương (múi giờ cấu hình) "
+            "khi giá trị gốc có timezone (UTC/Z/offset); dùng đúng các mốc đó khi trả lời giờ/ngày."
+            if deps.settings.ai_display_timezone
+            else ""
         )
         ans = reg.get("summarize").invoke_text(
             prompt,
             system=(
                 "Bạn là trợ lý ERP. Tóm tắt số liệu chính xác, không bịa, locale vi-VN. "
-                "Không nhắc lại kết quả của câu hỏi trước trong cùng phiên nếu không được yêu cầu."
+                "Dùng đoạn hội thoại gần nhất (nếu có) chỉ để hiểu đại từ / tham chiếu (vd. đơn đó); "
+                "mọi con số trong câu trả lời phải bám đúng rows, không chép số từ chat nếu không khớp rows."
+                + tz_note
             ),
         )
         preview = ans if len(ans) <= 1200 else ans[:1200] + "…"
@@ -77,6 +107,6 @@ def make_summarize_answer_node(deps: GraphDeps):
             phase="Tóm tắt kết quả SQL (LLM)",
             detail=f"văn_bản_phản_hồi:\n{preview}",
         )
-        return {"final_answer": ans}
+        return {"final_answer": ans, "messages": [AIMessage(content=ans)]}
 
     return summarize_answer

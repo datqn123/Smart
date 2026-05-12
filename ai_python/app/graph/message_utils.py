@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from langchain_core.messages import BaseMessage, HumanMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
 
 def strip_embedded_chat_transcript(text: str) -> str:
@@ -47,3 +47,39 @@ def latest_human_question(messages: list[BaseMessage] | None) -> str:
         if c:
             return strip_embedded_chat_transcript(str(c).strip())
     return ""
+
+
+def format_dialog_tail_for_sql(
+    messages: list[BaseMessage] | None,
+    *,
+    max_messages: int = 12,
+    max_chars: int = 2000,
+) -> str:
+    """
+    Last N Human/AI turns as labeled text for gen_sql / summarize (pronoun resolution).
+    max_messages or max_chars 0 disables (returns empty).
+    """
+    if max_messages <= 0 or max_chars <= 0:
+        return ""
+    raw = list(messages or [])
+    if not raw:
+        return ""
+    tail = raw[-max_messages:]
+    parts: list[str] = []
+    for m in tail:
+        c = getattr(m, "content", None)
+        if c is None:
+            continue
+        text = str(c).strip().replace("\r\n", "\n")
+        if not text:
+            continue
+        if isinstance(m, HumanMessage):
+            parts.append(f"User: {text}")
+        elif isinstance(m, AIMessage):
+            parts.append(f"Assistant: {text}")
+    block = "\n\n".join(parts).strip()
+    if not block:
+        return ""
+    if len(block) <= max_chars:
+        return block
+    return block[-max_chars:].lstrip()

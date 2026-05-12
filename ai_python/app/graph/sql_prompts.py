@@ -85,7 +85,25 @@ def build_gen_sql_user_prompt(
     user_q: str,
     seed_sql: str | None,
     sql_limit_max: int,
+    dialog_tail: str | None = None,
+    planner_data_request_json: str | None = None,
 ) -> str:
+    tail = (dialog_tail or "").strip()
+    dialog_block = (
+        "Recent conversation (resolve pronouns like đơn đó / tháng đó; "
+        "use only to narrow filters — do not invent columns or numbers not in schema / DB):\n"
+        f"{tail}\n\n"
+        if tail
+        else ""
+    )
+    planner_block = ""
+    pj = (planner_data_request_json or "").strip()
+    if pj:
+        planner_block = (
+            "Data planning brief (JSON from Agent_Idea — satisfy this read-only SELECT; "
+            "do not expose or guess secrets; map to allowed tables/columns only):\n"
+            f"{pj}\n\n"
+        )
     if mode == "explore":
         persona = (
             "You are a careful SQL author for a read-only analytics database. "
@@ -93,6 +111,8 @@ def build_gen_sql_user_prompt(
         )
         return (
             f"{persona}\n\n"
+            f"{dialog_block}"
+            f"{planner_block}"
             f"Schema (allowlist tables):\n{schema_block}\n\n"
             f"Prior feedback (only buckets with content):\n{feedback_render}\n\n"
             f"User question: {user_q}\n\n"
@@ -104,6 +124,8 @@ def build_gen_sql_user_prompt(
         "You revise a SQL query for a read-only database. A previous attempt exists; "
         "fix issues implied by feedback while staying faithful to allowed tables/columns. "
         "Do not invent columns outside the schema block or the seed SQL.\n\n"
+        f"{dialog_block}"
+        f"{planner_block}"
         f"Schema (allowlist tables):\n{schema_block}\n\n"
         f"Seed SQL (starting point):\n{seed_block}\n\n"
         f"Prior feedback:\n{feedback_render}\n\n"

@@ -65,6 +65,33 @@ def test_route_sql_happy_path(monkeypatch: pytest.MonkeyPatch, patch_pg_schema_v
     assert "stub" in out["final_answer"].lower() or "_stub" in out["final_answer"]
 
 
+def test_route_chart_pipeline(monkeypatch: pytest.MonkeyPatch, patch_pg_schema_v1: None) -> None:
+    monkeypatch.delenv("SQL_ALLOWED_TABLES", raising=False)
+    fake = FakeLlmClient(reply="SELECT id FROM customers LIMIT 10")
+    reg = LlmRegistry()
+    reg.register("default", fake)
+    reg.register("intent", FakeLlmClient(intent="system_data_chart"))
+    reg.register("idea", fake)
+    reg.register("chart", fake)
+    reg.register("review", fake)
+    reg.register("sql_gen", fake)
+    reg.register("sql_review", FakeLlmClient())
+    reg.register("chat", FakeLlmClient())
+    reg.register("summarize", FakeLlmClient(reply="should not run for chart"))
+    deps = GraphDeps(
+        llm_registry=reg,
+        sql_executor=StubSqlExecutor(),
+        settings=GraphSettings(sql_allowed_tables=None),
+    )
+    g = compile_agent_graph(deps, use_checkpointer=False)
+    base = default_initial_state()
+    base["messages"] = [HumanMessage(content="vẽ biểu đồ doanh thu")]
+    out = g.invoke(base)
+    assert out.get("intent") == "system_data_chart"
+    assert out.get("chart_spec_final")
+    assert out["chart_spec_final"].get("data")
+    assert out.get("final_answer")
+    assert "Data planning brief" in (fake.last_invoke_text or "")
 def test_benign_sql_review_issue_limit_with_aggregate() -> None:
     msg = (
         "The LIMIT clause is redundant and logically incorrect when used with an aggregate "
@@ -160,6 +187,41 @@ def test_checkpoint_sqlite_smoke() -> None:
     cfg = {"configurable": {"thread_id": "t1"}}
     g.invoke({**default_initial_state(), "messages": [HumanMessage(content="a")]}, cfg)
     g.invoke({**default_initial_state(), "messages": [HumanMessage(content="b")]}, cfg)
+
+
+def test_sql_dialog_tail_includes_prior_assistant_turn(
+    monkeypatch: pytest.MonkeyPatch, patch_pg_schema_v1: None
+) -> None:
+    """Second SQL gen prompt must see prior assistant reply from checkpoint (AIMessage)."""
+    monkeypatch.delenv("SQL_ALLOWED_TABLES", raising=False)
+    sql_gen = FakeLlmClient(reply="SELECT id FROM customers LIMIT 10")
+    reg = LlmRegistry()
+    reg.register("default", FakeLlmClient(reply="SELECT 1"))
+    reg.register("intent", FakeLlmClient(intent="system_data_query"))
+    reg.register("sql_gen", sql_gen)
+    reg.register("sql_review", FakeLlmClient())
+    reg.register("chat", FakeLlmClient())
+    reg.register("summarize", FakeLlmClient(reply="Hôm nay 1 đơn."))
+    deps = GraphDeps(
+        llm_registry=reg,
+        sql_executor=StubSqlExecutor(),
+        settings=GraphSettings(),
+    )
+    g = compile_agent_graph(deps, use_checkpointer=True)
+    tid = "thread-dialog-tail-1"
+    cfg = {"configurable": {"thread_id": tid}}
+    g.invoke(
+        {**default_initial_state(), "messages": [HumanMessage(content="hôm nay bán bao nhiêu đơn")]},
+        cfg,
+    )
+    sql_gen.last_invoke_text = None
+    g.invoke(
+        {**default_initial_state(), "messages": [HumanMessage(content="số tiền đơn đó")]},
+        cfg,
+    )
+    assert sql_gen.last_invoke_text is not None
+    assert "Assistant:" in sql_gen.last_invoke_text
+    assert "1 đơn" in sql_gen.last_invoke_text
 
 
 def test_graph_stream_yields() -> None:
