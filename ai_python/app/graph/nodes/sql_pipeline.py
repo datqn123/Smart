@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from typing import Any
 
 from langchain_core.messages import HumanMessage
 
@@ -206,7 +207,7 @@ def make_gen_sql_node(deps: GraphDeps):
             or bool(schema_plan)
             or bool(deps.settings.sql_schema_explorer_enabled)
         )
-        ledger_first = bool(deps.settings.sql_ledger_first_prompts)
+        ledger_first = _effective_ledger_first_prompts(state, deps.settings)
         multi_table_plan = bool(selected_tables and len(selected_tables) > 1)
         schema_block = format_schema_block(
             artifact,
@@ -219,12 +220,17 @@ def make_gen_sql_node(deps: GraphDeps):
             max_chars=int(deps.settings.sql_dialog_tail_max_chars),
         )
         idea_req = state.get("idea_data_request")
+        if not isinstance(idea_req, dict) or not idea_req:
+            brief = state.get("chart_brief")
+            if isinstance(brief, dict) and brief.get("data_request"):
+                idea_req = dict(brief["data_request"])
         planner_json: str | None = None
         if isinstance(idea_req, dict) and idea_req:
             try:
                 planner_json = json.dumps(idea_req, ensure_ascii=False)[:8000]
             except Exception:
                 planner_json = None
+        chart_ctx = (state.get("chart_thread_context") or "").strip() or None
         prompt = build_gen_sql_user_prompt(
             mode=mode,  # type: ignore[arg-type]
             schema_block=schema_block,
@@ -237,6 +243,7 @@ def make_gen_sql_node(deps: GraphDeps):
             schema_plan=schema_plan,
             ledger_first=ledger_first,
             multi_table_plan=multi_table_plan,
+            chart_thread_context=chart_ctx,
         )
         if reg is None:
             sql = f"SELECT 1 AS ok LIMIT {deps.settings.sql_limit_max}"
@@ -574,7 +581,7 @@ def make_fail_max_attempts_node(deps: GraphDeps):
         if existing and existing.get("error") == "schema_load_failed":
             return {}
         n = int(state.get("sql_attempt_count") or 0)
-        return {
+        out: dict = {
             "error_payload": {
                 "error": "max_sql_attempts",
                 "attempts": n,
@@ -582,6 +589,9 @@ def make_fail_max_attempts_node(deps: GraphDeps):
             },
             "query_result": None,
         }
+        if state.get("intent") == "system_data_chart":
+            out["chart_data_ok"] = False
+        return out
 
     return fail_max_attempts
 
@@ -609,7 +619,41 @@ def route_after_validate_sql(state: AgentState) -> str:
     return "fail_max_attempts"
 
 
+def _effective_ledger_first_prompts(state: AgentState, settings: Any) -> bool:
+    if not settings.sql_ledger_first_prompts:
+        return False
+    if state.get("intent") != "system_data_chart":
+        return True
+    req = state.get("idea_data_request")
+    if not isinstance(req, dict) or not req:
+        brief = state.get("chart_brief")
+        if isinstance(brief, dict):
+            req = brief.get("data_request")
+    if not isinstance(req, dict):
+        return False
+    blob = json.dumps(req, ensure_ascii=False).lower()
+    keys = (
+        "financeledger",
+        "ledger",
+        "doanh thu",
+        "chi phí",
+        "chi phi",
+        "revenue",
+        "expense",
+        "cashflow",
+        "sổ cái",
+        "so cai",
+        "salesrevenue",
+    )
+    return any(k in blob for k in keys)
+
+
 def route_after_validate_result(state: AgentState) -> str:
+    from app.graph.nodes.chart_readiness import route_after_sql_subgraph_for_chart
+
+    chart_next = route_after_sql_subgraph_for_chart(state)
+    if chart_next == "chart_readiness":
+        return "chart_readiness"
     if state.get("result_ok"):
         return "done"
     # Belt-and-suspenders: if executor returned rows but result_ok was not set (stale merge), still finish.

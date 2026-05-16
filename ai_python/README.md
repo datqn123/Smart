@@ -56,6 +56,10 @@ SQL_LIMIT_MAX=1000
 # SQL_SCHEMA_EXPLORER_ENABLED=1
 # SQL_LEDGER_FIRST_PROMPTS=1
 # DATABASE_URL_RO=postgresql://...
+
+# Chart: Agent_Idea brief + chart_readiness (shape/LLM critic) before agent_chart
+# CHART_READINESS_ENABLED=1
+# CHART_BRIEF_CATALOG_MAX_TABLES=40
 ```
 
 ---

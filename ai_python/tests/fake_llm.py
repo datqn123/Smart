@@ -53,9 +53,17 @@ class FakeLlmClient:
         if schema.__name__ == "IdeaPlannerOutput":
             return schema.model_validate(  # type: ignore[return-value]
                 {
-                    "data_request": {"entity": "orders", "metric": "count"},
+                    "data_request": {
+                        "entity": "orders",
+                        "metric": "count",
+                        "expected_result_shape": "single_kpi",
+                    },
                     "chart_idea": {"chart_type": "bar", "title_hint": "Thống kê"},
                 },
+            )
+        if schema.__name__ == "ChartReadinessOutput":
+            return schema.model_validate(  # type: ignore[return-value]
+                {"ok": True, "issues": [], "retry_hint": "", "warnings": []},
             )
         if schema.__name__ == "ChartSpecDraftOutput":
             return schema.model_validate(  # type: ignore[return-value]

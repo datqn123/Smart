@@ -9,6 +9,9 @@ from typing import Any
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
 from app.graph.agent_trace import emit_agent_trace
+from app.graph.chart_catalog import chart_catalog_snippet
+from app.graph.chart_data_profile import build_query_result_profile, profile_for_prompt
+from app.graph.chart_thread_context import format_prior_turns_for_chart
 from app.graph.datetime_display import localize_query_result_for_display
 from app.graph.deps import GraphDeps
 from app.graph.display_format import format_display_for_chat_ui
@@ -63,17 +66,17 @@ def compact_query_result_for_chart_prompt(
 
 
 _IDEA_SYSTEM = (
-    "Bạn là Agent_Idea trong ERP đọc hiểu yêu cầu báo cáo / biểu đồ của người dùng.\n"
-    "Doanh thu/chi phí/dòng tiền: data_request nên ghi source=financeledger và transaction_type phù hợp "
-    "(SalesRevenue cho doanh thu), không dùng salesorders làm nguồn tổng hợp.\n"
-    "Trả về JSON đúng schema: data_request (object) mô tả metric, dimension, khoảng thời gian, "
-    "đơn vị thời gian (ngày/tuần/tháng), filter nghiệp vụ — không viết SQL, không đoán tên bảng DB.\n"
-    "chart_idea (object): loại biểu đồ gợi ý (line|bar|area|pie), tiêu đề gợi ý, mô tả trục X/Y "
-    "bằng ngôn ngữ nghiệp vụ.\n"
-    "Phạm vi kênh (quan trọng): chỉ thu hẹp **bán lẻ / POS / walk-in / Retail / kênh lẻ** trong filter "
-    "khi người dùng nói rõ các khái niệm đó. Nếu họ yêu cầu **so sánh theo từng tháng / xu hướng nhiều tháng** "
-    "mà chỉ nói chung **đơn hàng** (không ghi bán lẻ/Retail/POS), đặt filter là **mọi kênh** hoặc mô tả "
-    "\"tất cả đơn hàng\" — tránh ám chỉ Retail — vì đơn sỉ/wholesale có thể chiếm phần lớn theo tháng."
+    "Bạn là Agent_Idea — soạn chart brief (JSON) cho pipeline biểu đồ ERP.\n"
+    "data_request: mô tả metric bằng ngôn ngữ nghiệp vụ (không bắt buộc tên bảng DB). "
+    "Thêm expected_result_shape: time_series | single_kpi | breakdown.\n"
+    "Nếu người dùng muốn xu hướng / nhiều tháng / so sánh theo thời gian → time_series.\n"
+    "Doanh thu/chi phí/dòng tiền: ghi rõ nguồn sổ cái (financeledger, transaction_type) — "
+    "không dùng salesorders làm nguồn tổng hợp thu/chi.\n"
+    "Câu hỏi kho/xuất kho/đơn giao: mô tả entity (đơn xuất, dispatch…) — không ép sổ cái.\n"
+    "chart_idea: chart_type gợi ý (line|bar), trục X/Y bằng ngôn ngữ nghiệp vụ.\n"
+    "Kênh Retail/POS: chỉ thêm filter khi người dùng nói rõ bán lẻ/Retail/POS.\n"
+    "Nếu có prior thread context và câu chart cùng chủ đề với câu trước, brief phải khớp metric/thời gian "
+    "với câu trả lời số trước (không đổi bảng/metric ngầm)."
 )
 
 
@@ -85,9 +88,9 @@ def _idea_json_contract() -> str:
 
 
 _CHART_SYSTEM = (
-    "Bạn là Agent_Chart. Đọc ý tưởng biểu đồ và mẫu dữ liệu (tiêu đề cột + vài dòng).\n"
-    "Chọn chart_type là line hoặc bar. Chọn x_key và y_key là hai tên cột thật trong mẫu/kết quả "
-    "(ASCII key names từ columns list)."
+    "Bạn là Agent_Chart. Đọc chart brief, profile cột và mẫu dữ liệu.\n"
+    "Chọn chart_type line hoặc bar. x_key/y_key phải là tên cột thật trong profile.\n"
+    "Nếu warnings nói chỉ một bucket thời gian, vẫn chọn cột hợp lệ — đừng bịa cột."
 )
 
 
@@ -163,11 +166,22 @@ def make_agent_idea_node(deps: GraphDeps):
     def agent_idea(state: AgentState) -> dict:
         logger.info("node=agent_idea action=start")
         reg = deps.llm_registry
+        user_q = latest_human_question(state.get("messages"))
+        thread_ctx = format_prior_turns_for_chart(
+            state.get("messages"),
+            max_turns=int(deps.settings.chart_thread_context_max_turns),
+        )
+        catalog = ""
+        if deps.settings.chart_brief_catalog_max_tables > 0:
+            catalog = chart_catalog_snippet(deps.settings)
         if reg is None:
-            q = latest_human_question(state.get("messages"))
+            q = user_q
+            dr = {"question_stub": True, "summary": q[:400], "expected_result_shape": "time_series"}
             payload = {
-                "idea_data_request": {"question_stub": True, "summary": q[:400]},
+                "idea_data_request": dr,
                 "idea_chart_idea": {"chartType": "bar", "title": "(stub idea)"},
+                "chart_brief": {"data_request": dr, "chart_idea": {"chartType": "bar", "title": "(stub idea)"}},
+                "chart_thread_context": thread_ctx or None,
             }
             emit_agent_trace(
                 logger,
@@ -177,10 +191,14 @@ def make_agent_idea_node(deps: GraphDeps):
                 detail=json.dumps(payload["idea_data_request"], ensure_ascii=False)[:800],
             )
             return payload
-        user_q = latest_human_question(state.get("messages"))
+        parts = [f"Câu hỏi / yêu cầu hiện tại:\n{user_q}"]
+        if thread_ctx:
+            parts.append(f"\nPrior thread (same topic — stay consistent):\n{thread_ctx}")
+        if catalog:
+            parts.append(f"\nTable catalog (hints only — pick via SQL author, do not invent tables):\n{catalog}")
         messages: list[BaseMessage] = [
             SystemMessage(content=_IDEA_SYSTEM),
-            HumanMessage(content=f"Câu hỏi / yêu cầu hiện tại:\n{user_q}"),
+            HumanMessage(content="\n".join(parts)),
         ]
         client = reg.get("idea")
         try:
@@ -188,13 +206,23 @@ def make_agent_idea_node(deps: GraphDeps):
                 messages,
                 IdeaPlannerOutput,
                 json_output_contract=_idea_json_contract(),
+                max_retries=4,
             )
-            bundle = {"idea_data_request": dict(out.data_request), "idea_chart_idea": dict(out.chart_idea)}
+            dr = dict(out.data_request)
+            ci = dict(out.chart_idea)
+            bundle = {
+                "idea_data_request": dr,
+                "idea_chart_idea": ci,
+                "chart_brief": {"data_request": dr, "chart_idea": ci},
+                "chart_thread_context": thread_ctx or None,
+            }
         except Exception:
             logger.warning("agent_idea structured_predict failed", exc_info=True)
             bundle = {
-                "idea_data_request": {"parse_error": True},
+                "idea_data_request": {"parse_error": True, "expected_result_shape": "time_series"},
                 "idea_chart_idea": {"chartType": "bar", "title": ""},
+                "chart_brief": None,
+                "chart_thread_context": thread_ctx or None,
             }
         emit_agent_trace(
             logger,
@@ -213,8 +241,13 @@ def make_agent_chart_node(deps: GraphDeps):
         logger.info("node=agent_chart action=start")
         reg = deps.llm_registry
         qr_raw = state.get("query_result")
+        profile = state.get("chart_result_profile") or build_query_result_profile(qr_raw)
         compact = compact_query_result_for_chart_prompt(qr_raw)
-        idea = json.dumps(state.get("idea_chart_idea") or {}, ensure_ascii=False)[:2000]
+        brief = state.get("chart_brief") or {}
+        idea = json.dumps(state.get("idea_chart_idea") or brief.get("chart_idea") or {}, ensure_ascii=False)[
+            :2000
+        ]
+        warnings = state.get("chart_warnings") or []
         if reg is None:
             rows = _rows_from_query_result(qr_raw)
             keys = list(rows[0].keys()) if rows else ["x", "y"]
@@ -231,9 +264,12 @@ def make_agent_chart_node(deps: GraphDeps):
             )
             return {"chart_spec_draft": draft}
         human = (
+            f"Chart brief (JSON):\n{json.dumps(brief, ensure_ascii=False)[:2500]}\n\n"
             f"Chart idea (JSON):\n{idea}\n\n"
+            f"Column profile:\n{profile_for_prompt(profile)}\n\n"
             f"Query sample (JSON):\n{compact}\n\n"
-            "Return chart_type, x_key, y_key using actual column names from sample."
+            f"Warnings: {warnings or '(none)'}\n\n"
+            "Return chart_type, x_key, y_key using actual column names from profile/sample."
         )
         messages: list[BaseMessage] = [SystemMessage(content=_CHART_SYSTEM), HumanMessage(content=human)]
         client = reg.get("chart")
@@ -303,10 +339,14 @@ def make_agent_review_node(deps: GraphDeps):
                 "final_answer": fa,
                 "messages": [AIMessage(content=fa)],
             }
+        profile = state.get("chart_result_profile") or build_query_result_profile(qr_raw)
+        warnings = state.get("chart_warnings") or []
         human = (
             f"Câu hỏi người dùng: {user_q}\n\n"
             f"Draft chart spec (JSON):\n{json.dumps(draft, ensure_ascii=False)}\n\n"
+            f"Column profile:\n{profile_for_prompt(profile)}\n\n"
             f"Dữ liệu (cột + sample):\n{compact_query_result_for_chart_prompt(qr_raw)}\n\n"
+            f"Warnings: {warnings or '(none)'}\n\n"
             "Align x_key and y_key to real column names."
         )
         messages: list[BaseMessage] = [SystemMessage(content=_REVIEW_SYSTEM), HumanMessage(content=human)]
@@ -351,7 +391,39 @@ def make_agent_review_node(deps: GraphDeps):
     return agent_review
 
 
+def make_chart_fail_message_node(deps: GraphDeps):
+    def chart_fail_message(state: AgentState) -> dict:
+        logger.info("node=chart_fail_message action=start")
+        issues = state.get("chart_data_issues") or []
+        hint = (state.get("chart_retry_hint") or "").strip()
+        err = state.get("error_payload") if isinstance(state.get("error_payload"), dict) else {}
+        if err.get("error") == "max_sql_attempts":
+            msg = "Không tạo được biểu đồ: đã hết số lần thử SQL."
+        elif issues:
+            msg = "Không tạo được biểu đồ phù hợp: " + "; ".join(str(i) for i in issues[:3])
+        elif hint:
+            msg = f"Không tạo được biểu đồ: {hint}"
+        else:
+            msg = "Không tạo được biểu đồ từ dữ liệu hiện tại."
+        fa = format_display_for_chat_ui(msg)
+        emit_agent_trace(
+            logger,
+            deps.settings,
+            agent="chart_fail",
+            phase="Chart aborted",
+            detail=msg[:800],
+        )
+        return {"final_answer": fa, "messages": [AIMessage(content=fa)]}
+
+    return chart_fail_message
+
+
 def route_after_sql_branch(state: AgentState) -> str:
-    if state.get("intent") == "system_data_chart":
-        return "agent_chart"
-    return "summarize_answer"
+    if state.get("intent") != "system_data_chart":
+        return "summarize_answer"
+    err = state.get("error_payload")
+    if isinstance(err, dict) and err.get("error") == "max_sql_attempts":
+        return "chart_fail_message"
+    if state.get("chart_data_ok") is False:
+        return "chart_fail_message"
+    return "agent_chart"

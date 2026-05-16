@@ -5,6 +5,10 @@ from __future__ import annotations
 from langgraph.graph import END, START, StateGraph
 
 from app.graph.deps import GraphDeps
+from app.graph.nodes.chart_readiness import (
+    make_chart_readiness_node,
+    route_after_chart_readiness_in_sql,
+)
 from app.graph.nodes.schema_explore import make_schema_explore_node, route_sql_subgraph_start
 from app.graph.nodes.sql_pipeline import (
     make_execute_sql_node,
@@ -29,6 +33,7 @@ def build_sql_subgraph(deps: GraphDeps):
     g.add_node("validate_sql", make_validate_sql_node(deps))
     g.add_node("execute_sql", make_execute_sql_node(deps))
     g.add_node("validate_result", make_validate_result_node(deps))
+    g.add_node("chart_readiness", make_chart_readiness_node(deps))
     g.add_node("fail_max_attempts", make_fail_max_attempts_node(deps))
 
     g.add_conditional_edges(
@@ -70,6 +75,16 @@ def build_sql_subgraph(deps: GraphDeps):
     g.add_conditional_edges(
         "validate_result",
         route_after_validate_result,
+        {
+            "done": END,
+            "chart_readiness": "chart_readiness",
+            "gen_sql": "gen_sql",
+            "fail_max_attempts": "fail_max_attempts",
+        },
+    )
+    g.add_conditional_edges(
+        "chart_readiness",
+        route_after_chart_readiness_in_sql,
         {
             "done": END,
             "gen_sql": "gen_sql",

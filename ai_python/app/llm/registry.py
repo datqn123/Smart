@@ -19,6 +19,7 @@ _STRUCTURED_ROLES = (
     "schema_plan",
     "idea",
     "chart",
+    "chart_critic",
     "review",
 )
 
@@ -64,7 +65,7 @@ def build_llm_registry(settings: LlmSettings) -> LlmRegistry:
         structured = OpenAICompatibleChatClient(structured_chat)
         logger.info(
             "LLM registry: primary model=%r (chat, summarize); "
-            "structured model=%r (sql_gen, intent, sql_review, sql_table_pick, schema_plan, idea, chart, review).",
+            "structured model=%r (sql_gen, intent, sql_review, sql_table_pick, schema_plan, idea, chart, chart_critic, review).",
             settings.model,
             fork.model,
         )

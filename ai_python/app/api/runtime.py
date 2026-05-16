@@ -80,6 +80,13 @@ def _build_state(*, request: ChatRequest, correlation_id: str) -> dict[str, Any]
     state["schema_plan"] = None
     state["ledger_metric_id"] = None
     state["schema_join_hints"] = None
+    state["chart_brief"] = None
+    state["chart_thread_context"] = None
+    state["chart_data_ok"] = None
+    state["chart_data_issues"] = None
+    state["chart_warnings"] = None
+    state["chart_retry_hint"] = None
+    state["chart_result_profile"] = None
     return state
 
 

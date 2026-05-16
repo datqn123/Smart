@@ -119,6 +119,7 @@ def build_gen_sql_user_prompt(
     schema_plan: dict | None = None,
     ledger_first: bool = False,
     multi_table_plan: bool = False,
+    chart_thread_context: str | None = None,
 ) -> str:
     tail = (dialog_tail or "").strip()
     dialog_block = (
@@ -128,12 +129,21 @@ def build_gen_sql_user_prompt(
         if tail
         else ""
     )
+    chart_ctx_block = ""
+    ctx = (chart_thread_context or "").strip()
+    if ctx:
+        chart_ctx_block = (
+            "Chart thread context (stay consistent with prior answer in this thread):\n"
+            f"{ctx}\n\n"
+        )
     planner_block = ""
     pj = (planner_data_request_json or "").strip()
     if pj:
         planner_block = (
-            "Data planning brief (JSON from Agent_Idea — satisfy this read-only SELECT; "
-            "do not expose or guess secrets; map to allowed tables/columns only):\n"
+            "Chart/data planning brief (JSON from Agent_Idea — satisfy this read-only SELECT; "
+            "respect expected_result_shape: time_series needs GROUP BY time/category with multiple rows; "
+            "do not add Retail/channel filters unless the brief says so; "
+            "map to allowed tables/columns only):\n"
             f"{pj}\n\n"
         )
     plan_block = _schema_plan_block(schema_plan)
@@ -161,6 +171,7 @@ def build_gen_sql_user_prompt(
         return (
             f"{persona}\n\n"
             f"{dialog_block}"
+            f"{chart_ctx_block}"
             f"{planner_block}"
             f"{plan_block}"
             f"Schema (allowlist tables):\n{schema_block}\n\n"
@@ -179,6 +190,7 @@ def build_gen_sql_user_prompt(
     return (
         f"{persona} Do not invent columns outside the schema block or the seed SQL.\n\n"
         f"{dialog_block}"
+        f"{chart_ctx_block}"
         f"{planner_block}"
         f"{plan_block}"
         f"Schema (allowlist tables):\n{schema_block}\n\n"

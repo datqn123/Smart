@@ -144,6 +144,27 @@ class GraphSettings(BaseSettings):
         default=True,
         description="Policy check: revenue/expense questions must use financeledger.",
     )
+    # --- LLM-first chart pipeline ---
+    chart_readiness_enabled: bool = Field(
+        default=True,
+        description="After SQL for system_data_chart, run shape checks (+ optional LLM critic) before agent_chart.",
+    )
+    chart_readiness_use_llm_critic: bool = Field(
+        default=True,
+        description="Use chart_critic LLM when heuristics warn or fail (requires LLM registry).",
+    )
+    chart_brief_catalog_max_tables: int = Field(
+        default=40,
+        ge=0,
+        le=128,
+        description="Max registry tables in Agent_Idea catalog snippet; 0 disables.",
+    )
+    chart_thread_context_max_turns: int = Field(
+        default=2,
+        ge=0,
+        le=6,
+        description="Prior user/assistant turns passed into chart brief and gen_sql.",
+    )
 
     @field_validator("ai_display_timezone", mode="before")
     @classmethod
@@ -208,6 +229,8 @@ class GraphSettings(BaseSettings):
         "sql_schema_explorer_enabled",
         "sql_ledger_first_prompts",
         "sql_validate_ledger_metric",
+        "chart_readiness_enabled",
+        "chart_readiness_use_llm_critic",
         mode="before",
     )
     @classmethod

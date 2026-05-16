@@ -44,7 +44,7 @@ def test_build_gen_sql_user_prompt_includes_planner_json() -> None:
         dialog_tail=None,
         planner_data_request_json='{"metric":"revenue"}',
     )
-    assert "Data planning brief" in p
+    assert "Chart/data planning brief" in p
     assert "revenue" in p
 
 

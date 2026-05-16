@@ -53,6 +53,7 @@ def _merge_plan_tables(
     dimensions: list[str],
     *,
     max_tables: int,
+    force_financeledger: bool = True,
 ) -> list[str]:
     seed = default_tables_for_metric(metric_id, dimensions)  # type: ignore[arg-type]
     for t in tables_for_dimensions(dimensions):
@@ -61,7 +62,7 @@ def _merge_plan_tables(
     for t in llm_tables:
         if t and t not in seed:
             seed.append(t)
-    if "financeledger" not in {x.lower() for x in seed}:
+    if force_financeledger and "financeledger" not in {x.lower() for x in seed}:
         seed.insert(0, "financeledger")
     return seed[:max_tables]
 
@@ -123,11 +124,13 @@ def make_schema_explore_node(deps: GraphDeps):
             except Exception:
                 logger.warning("schema_plan structured_predict failed; using defaults", exc_info=True)
 
+        is_chart = state.get("intent") == "system_data_chart"
         tables = _merge_plan_tables(
             llm_tables,
             metric_id,
             llm_dims,
             max_tables=int(deps.settings.sql_max_selected_tables),
+            force_financeledger=not is_chart,
         )
         join_hints = join_hints_for_plan(tables=tables, dimensions=llm_dims)
 

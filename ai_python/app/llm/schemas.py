@@ -49,10 +49,34 @@ class SchemaPlanOutput(BaseModel):
 
 
 class IdeaPlannerOutput(BaseModel):
-    """Agent_Idea — brief for SQL + chart direction."""
+    """Chart brief — flexible objects; LLM chooses metric wording (no fixed table names required)."""
 
-    data_request: dict[str, Any] = Field(default_factory=dict)
-    chart_idea: dict[str, Any] = Field(default_factory=dict)
+    data_request: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Business metric in natural language: expected_result_shape "
+            "(time_series|single_kpi|breakdown), time range, filters, aggregation intent."
+        ),
+    )
+    chart_idea: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Visualization: chart_type hint, axis semantics in business language.",
+    )
+
+
+class ChartReadinessOutput(BaseModel):
+    """LLM critic — is query result adequate for the chart brief?"""
+
+    ok: bool
+    issues: list[str] = Field(default_factory=list)
+    retry_hint: str = Field(
+        default="",
+        description="Natural-language hint for gen_sql retry when ok=false.",
+    )
+    warnings: list[str] = Field(
+        default_factory=list,
+        description="Non-fatal issues (e.g. single time bucket) for review/chart UI.",
+    )
 
 
 class ChartSpecDraftOutput(BaseModel):

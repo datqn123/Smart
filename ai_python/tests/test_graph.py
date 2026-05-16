@@ -136,6 +136,7 @@ def test_route_chart_pipeline(monkeypatch: pytest.MonkeyPatch, patch_pg_schema_v
     reg.register("default", fake)
     reg.register("intent", FakeLlmClient(intent="system_data_chart"))
     reg.register("idea", fake)
+    reg.register("chart_critic", fake)
     reg.register("chart", fake)
     reg.register("review", fake)
     reg.register("sql_gen", fake)
@@ -155,7 +156,7 @@ def test_route_chart_pipeline(monkeypatch: pytest.MonkeyPatch, patch_pg_schema_v
     assert out.get("chart_spec_final")
     assert out["chart_spec_final"].get("data")
     assert out.get("final_answer")
-    assert "Data planning brief" in (fake.last_invoke_text or "")
+    assert "Chart/data planning brief" in (fake.last_invoke_text or "")
 def test_benign_sql_review_issue_limit_with_aggregate() -> None:
     msg = (
         "The LIMIT clause is redundant and logically incorrect when used with an aggregate "
