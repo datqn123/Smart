@@ -41,13 +41,58 @@ class LlmSettings(BaseSettings):
         le=600.0,
         description="HTTP timeout (s) for each LLM request (ChatOpenAI / OpenAI-compatible).",
     )
+    structured_model: str = Field(
+        default="",
+        description=(
+            "Optional second model for sql_gen plus structured JSON roles "
+            "(intent, sql_review, sql_table_pick, idea, chart, review). "
+            "Empty = use LLM_MODEL for all roles."
+        ),
+    )
+    structured_base_url: str = Field(
+        default="",
+        description="OpenAI-compatible base URL for structured model; empty inherits LLM_BASE_URL.",
+    )
+    structured_api_key: SecretStr | None = Field(
+        default=None,
+        description="API key for structured model; unset inherits LLM_API_KEY.",
+    )
+    structured_temperature: float | None = Field(
+        default=None,
+        description="Temperature for structured model; unset inherits LLM_TEMPERATURE.",
+    )
 
-    @field_validator("base_url", "model", mode="before")
+    @field_validator("base_url", "model", "structured_base_url", "structured_model", mode="before")
     @classmethod
     def strip_str(cls, v: object) -> object:
         if isinstance(v, str):
             return v.strip()
         return v
+
+    @field_validator("structured_temperature", mode="after")
+    @classmethod
+    def clamp_structured_temperature(cls, v: float | None) -> float | None:
+        if v is None:
+            return None
+        return max(0.0, min(2.0, v))
+
+    def fork_for_structured_chat(self) -> LlmSettings | None:
+        """Return settings for the structured-output LLM, or ``None`` to use primary only."""
+        name = self.structured_model.strip()
+        if not name:
+            return None
+        sk = self.structured_api_key
+        use_key = sk if (sk and sk.get_secret_value().strip()) else self.api_key
+        url = self.structured_base_url.strip() or self.base_url
+        temp = self.temperature if self.structured_temperature is None else self.structured_temperature
+        return self.model_copy(
+            update={
+                "model": name,
+                "base_url": url,
+                "api_key": use_key,
+                "temperature": temp,
+            }
+        )
 
 
 def load_llm_settings() -> LlmSettings:

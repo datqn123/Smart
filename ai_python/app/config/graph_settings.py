@@ -125,6 +125,25 @@ class GraphSettings(BaseSettings):
         default="Asia/Ho_Chi_Minh",
         description="IANA zone for SQL summarize prompts: ISO timestamps with Z/offset → local wall time. Empty = raw.",
     )
+    # --- Ledger-first schema explorer ---
+    sql_schema_explorer_enabled: bool = Field(
+        default=False,
+        description="Insert schema_explore node before gen_sql (list_tables + schema_plan + describe).",
+    )
+    sql_schema_explorer_describe_max_tables: int = Field(
+        default=6,
+        ge=0,
+        le=16,
+        description="Max Spring describe HTTP calls per schema_explore turn.",
+    )
+    sql_ledger_first_prompts: bool = Field(
+        default=True,
+        description="Ledger-first gen_sql prompts even when schema explorer is off.",
+    )
+    sql_validate_ledger_metric: bool = Field(
+        default=True,
+        description="Policy check: revenue/expense questions must use financeledger.",
+    )
 
     @field_validator("ai_display_timezone", mode="before")
     @classmethod
@@ -186,6 +205,9 @@ class GraphSettings(BaseSettings):
         "sql_hybrid_similarity_enabled",
         "sql_exploit_on_retry",
         "sql_separate_select_tables_node",
+        "sql_schema_explorer_enabled",
+        "sql_ledger_first_prompts",
+        "sql_validate_ledger_metric",
         mode="before",
     )
     @classmethod

@@ -8,6 +8,7 @@ from langchain_core.messages import AIMessage
 
 from app.graph.agent_trace import emit_agent_trace
 from app.graph.deps import GraphDeps
+from app.graph.display_format import format_display_for_chat_ui
 from app.graph.state import AgentState
 
 logger = logging.getLogger(__name__)
@@ -41,9 +42,12 @@ def make_chat_normal_node(deps: GraphDeps):
                 "và không nói toàn bộ hệ thống 'không có quyền đọc DB' — quyền đọc nằm ở luồng câu hỏi "
                 "báo cáo/dữ liệu. Nếu user cần số thực tế, gợi ý họ đặt một câu hỏi báo cáo rõ (vd. "
                 "tồn kho SKU X, doanh thu hôm nay). Không tiết lộ schema/tên bảng nội bộ. "
-                "Trả lời gọn, tiếng Việt nếu user dùng tiếng Việt."
+                "Trả lời gọn, tiếng Việt nếu user dùng tiếng Việt. "
+                "Khi có nhiều ý hoặc bước, dùng Markdown (xuống dòng, danh sách `- ` mỗi mục một dòng); "
+                "không bọc fence ```."
             ),
         )
+        ans = format_display_for_chat_ui(ans)
         preview = ans if len(ans) <= 1200 else ans[:1200] + "…"
         emit_agent_trace(
             logger,

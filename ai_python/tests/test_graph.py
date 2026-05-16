@@ -11,9 +11,10 @@ from app.graph.deps import GraphDeps
 from app.graph.nodes.sql_pipeline import _benign_sql_review_issue
 from app.graph.retry import can_regen_sql
 from app.graph.sql_executor import StubSqlExecutor
+from app.graph.dbmeta import ColumnMeta, SchemaArtifact, TableMeta
 from app.graph.state import AgentState
 from app.graph.streaming import iter_graph_stream
-from app.graph.validate_sql import validate_sql_deterministic
+from app.graph.validate_sql import is_llm_select_sql_shape, validate_sql_deterministic
 from app.llm.registry import LlmRegistry
 from tests.fake_llm import FakeLlmClient
 
@@ -63,6 +64,69 @@ def test_route_sql_happy_path(monkeypatch: pytest.MonkeyPatch, patch_pg_schema_v
     out = g.invoke(base)
     assert out.get("final_answer")
     assert "stub" in out["final_answer"].lower() or "_stub" in out["final_answer"]
+
+
+def test_route_sql_schema_explorer(monkeypatch: pytest.MonkeyPatch, patch_pg_schema_v1: None) -> None:
+    monkeypatch.delenv("SQL_ALLOWED_TABLES", raising=False)
+    ledger_art = SchemaArtifact(
+        schema_version="test",
+        tables=[
+            TableMeta(
+                name="financeledger",
+                columns=[
+                    ColumnMeta(name="amount", type="numeric"),
+                    ColumnMeta(name="transaction_type", type="varchar"),
+                    ColumnMeta(name="transaction_date", type="date"),
+                ],
+            ),
+        ],
+    )
+
+    def _fake_list(_settings: GraphSettings) -> tuple[list[dict[str, str]], str | None]:
+        return [
+            {"table_name": "financeledger", "description": "canonical ledger"},
+        ], None
+
+    def _fake_build(
+        _settings: GraphSettings,
+        table_names: list[str],
+        **kwargs: object,
+    ) -> tuple[SchemaArtifact | None, str | None]:
+        _ = table_names, kwargs
+        return ledger_art, None
+
+    monkeypatch.setattr("app.graph.schema_tools.list_tables", _fake_list)
+    monkeypatch.setattr("app.graph.schema_tools.build_artifact_for_tables", _fake_build)
+
+    sql = (
+        "SELECT SUM(amount) FROM financeledger "
+        "WHERE transaction_type = 'SalesRevenue' LIMIT 10"
+    )
+    reg = LlmRegistry()
+    reg.register("default", FakeLlmClient(reply=sql))
+    reg.register("intent", FakeLlmClient(intent="system_data_query"))
+    reg.register("schema_plan", FakeLlmClient())
+    reg.register("sql_gen", FakeLlmClient(reply=sql))
+    reg.register("sql_review", FakeLlmClient())
+    reg.register("summarize", FakeLlmClient(reply="doanh thu từ sổ cái"))
+    deps = GraphDeps(
+        llm_registry=reg,
+        sql_executor=StubSqlExecutor(),
+        settings=GraphSettings(
+            sql_allowed_tables=None,
+            sql_schema_explorer_enabled=True,
+            sql_ledger_first_prompts=True,
+            sql_validate_ledger_metric=True,
+        ),
+    )
+    g = compile_agent_graph(deps, use_checkpointer=False)
+    base = default_initial_state()
+    base["messages"] = [HumanMessage(content="doanh thu tháng 5")]
+    out = g.invoke(base)
+    assert out.get("schema_plan")
+    assert out.get("ledger_metric_id") == "ledger_revenue"
+    gen = (out.get("generated_sql") or "").lower()
+    assert "financeledger" in gen
 
 
 def test_route_chart_pipeline(monkeypatch: pytest.MonkeyPatch, patch_pg_schema_v1: None) -> None:
@@ -147,6 +211,19 @@ def test_max_attempts_sql_review(monkeypatch: pytest.MonkeyPatch, patch_pg_schem
     )
     assert out.get("error_payload", {}).get("error") == "max_sql_attempts"
     assert int(out.get("sql_attempt_count") or 0) == 3
+
+
+def test_is_llm_select_sql_shape_accepts_select() -> None:
+    assert is_llm_select_sql_shape("SELECT 1 FROM customers LIMIT 1") is True
+
+
+def test_is_llm_select_sql_shape_rejects_prose() -> None:
+    assert is_llm_select_sql_shape("Thu nhập bán lẻ hôm nay không có dữ liệu cụ thể.") is False
+
+
+def test_is_llm_select_sql_shape_rejects_empty() -> None:
+    assert is_llm_select_sql_shape("") is False
+    assert is_llm_select_sql_shape(None) is False
 
 
 def test_validate_sql_blocks_insert() -> None:

@@ -9,6 +9,7 @@ from langchain_core.messages import AIMessage
 from app.graph.agent_trace import emit_agent_trace
 from app.graph.datetime_display import localize_query_result_for_display
 from app.graph.deps import GraphDeps
+from app.graph.display_format import format_display_for_chat_ui
 from app.graph.message_utils import format_dialog_tail_for_sql, latest_human_question
 from app.graph.state import AgentState
 
@@ -82,7 +83,11 @@ def make_summarize_answer_node(deps: GraphDeps):
             f"Câu hỏi hiện tại (ưu tiên trả lời đúng phần này; bám rows cho số liệu): {user_q}\n\n"
             f"Kết quả truy vấn (đừng bịa số ngoài rows):\n{str(qr_prompt)[:6000]}\n\n"
             "Tóm tắt ngắn gọn bằng tiếng Việt (vi-VN). Ưu tiên số liệu cụ thể từ kết quả; "
-            "không suy diễn ngoài dữ liệu."
+            "không suy diễn ngoài dữ liệu.\n\n"
+            "Trình bày cho khung chat: dùng Markdown nhẹ (xuống dòng thật, mỗi mục một dòng; "
+            "danh sách bằng `- ` ở đầu dòng cho từng đơn / từng dòng kết quả quan trọng; "
+            "có thể thêm `##` tiêu đề phụ rất ngắn nếu nhiều nhóm). "
+            "Không bọc toàn bộ nội dung trong fence ```."
         )
         tz_note = (
             " Chuỗi thời gian trong block kết quả đã được chuyển sang giờ địa phương (múi giờ cấu hình) "
@@ -95,10 +100,12 @@ def make_summarize_answer_node(deps: GraphDeps):
             system=(
                 "Bạn là trợ lý ERP. Tóm tắt số liệu chính xác, không bịa, locale vi-VN. "
                 "Dùng đoạn hội thoại gần nhất (nếu có) chỉ để hiểu đại từ / tham chiếu (vd. đơn đó); "
-                "mọi con số trong câu trả lời phải bám đúng rows, không chép số từ chat nếu không khớp rows."
+                "mọi con số trong câu trả lời phải bám đúng rows, không chép số từ chat nếu không khớp rows. "
+                "Luôn tách các mục (đơn hàng, bản ghi) bằng dòng trống để dễ đọc."
                 + tz_note
             ),
         )
+        ans = format_display_for_chat_ui(ans)
         preview = ans if len(ans) <= 1200 else ans[:1200] + "…"
         emit_agent_trace(
             logger,

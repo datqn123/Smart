@@ -165,6 +165,12 @@ public class StockDispatchJdbcRepository {
 				rs.getInt("line_unit_id"), rs.getString("sku_code")));
 	}
 
+	public Optional<Integer> findOrderIdByDispatchId(long dispatchId) {
+		List<Integer> ids = namedJdbc.query("SELECT order_id FROM stockdispatches WHERE id = :id",
+				Map.of("id", dispatchId), (rs, rn) -> (Integer) rs.getObject("order_id"));
+		return ids.isEmpty() ? Optional.empty() : Optional.ofNullable(ids.getFirst());
+	}
+
 	public Optional<DispatchLedgerMetaRow> loadDispatchLedgerMeta(long dispatchId) {
 		String sql = """
 				SELECT dispatch_code, dispatch_date, status

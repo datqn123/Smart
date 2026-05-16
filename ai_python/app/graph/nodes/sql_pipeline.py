@@ -26,6 +26,8 @@ from app.graph.sql_prompts import build_gen_sql_user_prompt, format_schema_block
 from app.graph.sql_similarity import max_pool_similarity
 from app.graph.sql_table_selection import select_tables_for_question
 from app.graph.validate_sql import (
+    check_ledger_metric_policy,
+    is_llm_select_sql_shape,
     normalize_llm_sql_output,
     strip_trailing_semicolons,
     validate_sql_deterministic,
@@ -40,6 +42,29 @@ _POLICY_ISSUE_HINT = re.compile(
     r"\b(limit|select|ddl|dml|insert|update|delete|drop)\b",
     re.IGNORECASE,
 )
+# LLM sometimes echoes our structured-retry hint into `issues[]` — do not treat as SQL defects.
+_STRUCTURED_PARSE_ECHO = re.compile(
+    r"^Parse error:\s*Expecting value",
+    re.IGNORECASE,
+)
+
+_SQL_REVIEW_JSON_CONTRACT = (
+    'Return ONLY one JSON object with keys "ok" (boolean) and "issues" (array of strings). '
+    "If the input is not a single SELECT statement (e.g. prose in any language), set ok=false "
+    "and issues explaining that. "
+    "If the SQL is a safe read-only SELECT (allowlisted tables, no DDL/DML), set ok=true and issues=[]. "
+    "If there are real problems (forbidden operations, obvious wrong logic), set ok=false and list short issues. "
+    "No markdown fences, no prose outside the JSON."
+)
+
+
+def _spurious_structured_parse_echo(issue: str) -> bool:
+    t = issue.strip()
+    if not t:
+        return True
+    if _STRUCTURED_PARSE_ECHO.match(t):
+        return True
+    return False
 
 
 def _benign_sql_review_issue(issue: str) -> bool:
@@ -96,6 +121,19 @@ def _load_schema_artifact(
     return None, RuntimeError(msg)
 
 
+def _resolve_schema_artifact(
+    deps: GraphDeps, state: AgentState, *, user_q: str
+) -> tuple[SchemaArtifact | None, Exception | None]:
+    """Prefer runtime_schema_artifact from schema_explore when present."""
+    snap = state.get("runtime_schema_artifact")
+    if isinstance(snap, dict):
+        try:
+            return SchemaArtifact.model_validate(snap), None
+        except Exception as exc:
+            logger.warning("runtime_schema_artifact invalid: %s", exc)
+    return _load_schema_artifact(deps, state, user_q=user_q)
+
+
 def make_gen_sql_node(deps: GraphDeps):
     """TASK-LG-09: increment sql_attempt_count at start of each gen_sql."""
 
@@ -114,7 +152,19 @@ def make_gen_sql_node(deps: GraphDeps):
         reg = deps.llm_registry
         ver = state.get("schema_version")
         user_q = _last_user_message(state)
-        artifact, load_exc = _load_schema_artifact(deps, state, user_q=user_q)
+        pre_err = state.get("error_payload")
+        if isinstance(pre_err, dict) and pre_err.get("error") in (
+            "schema_load_failed",
+            "schema_catalog_failed",
+        ):
+            if not state.get("runtime_schema_artifact"):
+                return {
+                    "sql_attempt_count": prev,
+                    "generated_sql": None,
+                    "error_payload": pre_err,
+                    "validation_feedback": bumped,
+                }
+        artifact, load_exc = _resolve_schema_artifact(deps, state, user_q=user_q)
         if load_exc is not None:
             logger.warning("schema load failed in gen_sql: %s", load_exc)
             fb = append_feedback(state, "policy", f"schema load failed: {load_exc}")
@@ -139,8 +189,10 @@ def make_gen_sql_node(deps: GraphDeps):
         assert artifact is not None  # guaranteed when load_exc is None
         artifact_dump = artifact.model_dump(mode="json")
         selected_tables: list[str] | None = None
-        enriched = bool(deps.settings.sql_enriched_schema_prompt) or True
-        if deps.settings.sql_table_selection_enabled:
+        schema_plan = state.get("schema_plan") if isinstance(state.get("schema_plan"), dict) else None
+        if schema_plan and schema_plan.get("tables"):
+            selected_tables = [str(t) for t in schema_plan["tables"] if str(t).strip()]
+        elif deps.settings.sql_table_selection_enabled and not deps.settings.sql_schema_explorer_enabled:
             selected_tables = select_tables_for_question(
                 deps=deps,
                 user_q=user_q,
@@ -149,6 +201,13 @@ def make_gen_sql_node(deps: GraphDeps):
                 use_llm=bool(deps.settings.sql_table_pick_use_llm),
                 min_tables_for_llm=int(deps.settings.sql_table_pick_min_tables_for_llm),
             )
+        enriched = (
+            bool(deps.settings.sql_enriched_schema_prompt)
+            or bool(schema_plan)
+            or bool(deps.settings.sql_schema_explorer_enabled)
+        )
+        ledger_first = bool(deps.settings.sql_ledger_first_prompts)
+        multi_table_plan = bool(selected_tables and len(selected_tables) > 1)
         schema_block = format_schema_block(
             artifact,
             selected_tables=selected_tables,
@@ -175,6 +234,9 @@ def make_gen_sql_node(deps: GraphDeps):
             sql_limit_max=int(deps.settings.sql_limit_max),
             dialog_tail=dialog_tail or None,
             planner_data_request_json=planner_json,
+            schema_plan=schema_plan,
+            ledger_first=ledger_first,
+            multi_table_plan=multi_table_plan,
         )
         if reg is None:
             sql = f"SELECT 1 AS ok LIMIT {deps.settings.sql_limit_max}"
@@ -195,8 +257,19 @@ def make_gen_sql_node(deps: GraphDeps):
             if selected_tables is not None:
                 out_none["selected_tables"] = selected_tables
             return out_none
+        _gen_sql_system = (
+            "Reply with ONLY one PostgreSQL SELECT (read-only). "
+            "No natural-language before or after the SQL (any language). "
+            "Do not apologize or explain missing data in prose—only as SQL.\n"
+            "Revenue/expense/cashflow: use financeledger with transaction_type filters; "
+            "transaction_date for periods.\n"
+            "Channel semantics (salesorders.order_channel): use WHERE order_channel = 'Retail' only when the "
+            "Agent_Idea data_request filter clearly means retail/POS/walk-in/bán lẻ/kênh lẻ. "
+            "If the brief says all channels / all orders / no retail-only wording, do NOT add a Retail-only filter "
+            "(Wholesale-heavy demo data often carries most months)."
+        )
         client = reg.get("sql_gen")
-        sql = client.invoke_text(prompt, system="SQL only. SELECT-only.")
+        sql = client.invoke_text(prompt, system=_gen_sql_system)
         sql_stripped = normalize_llm_sql_output(sql)
         fb_for_append = bumped
         pool = list(state.get("sql_local_pool") or [])
@@ -262,14 +335,44 @@ def make_sql_review_node(deps: GraphDeps):
                 detail="ok=True (mặc định)",
             )
             return {"sql_review_ok": True}
+        if not is_llm_select_sql_shape(sql):
+            msg = (
+                "Output is not a single PostgreSQL SELECT. "
+                "Return only one SELECT … statement with LIMIT; no Vietnamese/English prose."
+            )
+            emit_agent_trace(
+                logger,
+                deps.settings,
+                agent="sql_review",
+                phase="Từ chối — không phải SELECT (kiểm tra tĩnh)",
+                detail=f"snippet:\n{safe_log_sql(sql, settings=deps.settings)[:800]}",
+            )
+            return {
+                "sql_review_ok": False,
+                "validation_feedback": append_feedback(state, "policy", msg),
+            }
         client = reg.get("sql_review")
+        review_body = (
+            "Review this SELECT-only SQL for safety and relevance. "
+            "Use the JSON contract only in your reply.\n\n"
+            f"```sql\n{sql}\n```"
+        )
         try:
-            out = client.structured_predict([HumanMessage(content=sql)], SqlReviewOutput)
+            out = client.structured_predict(
+                [HumanMessage(content=review_body)],
+                SqlReviewOutput,
+                json_output_contract=_SQL_REVIEW_JSON_CONTRACT,
+                max_retries=5,
+            )
         except Exception:
             logger.warning("sql_review structured_predict failed; passing review", exc_info=True)
             return {"sql_review_ok": True}
         issues_raw = list(out.issues or [])
-        severe = [i for i in issues_raw if not _benign_sql_review_issue(i)]
+        severe = [
+            i
+            for i in issues_raw
+            if not _benign_sql_review_issue(i) and not _spurious_structured_parse_echo(i)
+        ]
         ok = len(severe) == 0
         issues_txt = "\n".join(f"- {i}" for i in issues_raw) if issues_raw else "(no issues)"
         if issues_raw and ok and any(_benign_sql_review_issue(i) for i in issues_raw):
@@ -334,6 +437,20 @@ def make_validate_sql_node(deps: GraphDeps):
             allowlist_tables=allowlist,
             table_columns=table_cols,
         )
+        metric_id = state.get("ledger_metric_id")
+        if isinstance(state.get("schema_plan"), dict) and not metric_id:
+            metric_id = state["schema_plan"].get("metric_id")
+        user_q = _last_user_message(state)
+        check_sql = sanitized if sanitized and ok else (raw or "")
+        pol_ok, pol_detail = check_ledger_metric_policy(
+            check_sql,
+            metric_id=str(metric_id) if metric_id else None,
+            user_q=user_q,
+            enabled=bool(deps.settings.sql_validate_ledger_metric),
+        )
+        if ok and not pol_ok:
+            ok = False
+            detail = pol_detail
         notes_joined = "; ".join(notes) if notes else "(none)"
         final_sql = (sanitized if sanitized and ok else (raw or "")) or ""
         emit_agent_trace(
@@ -471,7 +588,7 @@ def make_fail_max_attempts_node(deps: GraphDeps):
 
 def route_after_gen_sql(state: AgentState) -> str:
     err = state.get("error_payload")
-    if err and err.get("error") == "schema_load_failed":
+    if err and err.get("error") in ("schema_load_failed", "schema_catalog_failed"):
         return "fail_max_attempts"
     return "sql_review"
 

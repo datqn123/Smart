@@ -39,6 +39,10 @@ class AgentState(TypedDict, total=False):
     idea_chart_idea: dict[str, Any] | None
     chart_spec_draft: dict[str, Any] | None
     chart_spec_final: dict[str, Any] | None
+    # Ledger-first schema explorer (optional)
+    schema_plan: dict[str, Any] | None
+    ledger_metric_id: str | None
+    schema_join_hints: list[str] | None
 
 
 def default_initial_state() -> AgentState:

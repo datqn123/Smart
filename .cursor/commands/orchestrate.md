@@ -13,6 +13,7 @@ description: Lean auto-run cho ai_python — Planner → BA → PM → Tech Lead
 
 ```text
 /orchestrate Task=<id?> Brief="<mô tả ngắn>" [Mode=run|dry-run] [Budget=<n=14>] [SkipPlanner=false]
+/orchestrate Task=<id?> Brief="<mô tả ngắn>" [Mode=run ] [Budget=<n=14>] [SkipPlanner=false]
 ```
 
 - `Task` (optional): nếu rỗng → AI_PM tự cấp ID Task tiếp theo.

@@ -34,6 +34,10 @@ LLM_REQUIRED=1
 LLM_BASE_URL=https://your-openai-compatible-host/v1
 LLM_API_KEY=your-llm-api-key
 LLM_MODEL=gemma-4-31B-it
+# Optional: smaller/cheaper model for Vietnamese chat + raw SQL text; stronger model for JSON steps.
+# LLM_MODEL=SaoLa4-small
+# LLM_STRUCTURED_MODEL=Qwen3.6-27B
+# LLM_STRUCTURED_TEMPERATURE=0.1
 LLM_TEMPERATURE=0.2
 LLM_STREAMING_DEFAULT=0
 LLM_SEND_TOP_K=0
@@ -47,6 +51,11 @@ SQL_EXECUTOR_ROW_LIMIT=100
 
 MASK_SQL=0
 SQL_LIMIT_MAX=1000
+
+# Ledger-first: schema_explore + financeledger as revenue/expense fact table
+# SQL_SCHEMA_EXPLORER_ENABLED=1
+# SQL_LEDGER_FIRST_PROMPTS=1
+# DATABASE_URL_RO=postgresql://...
 ```
 
 ---
@@ -59,5 +68,7 @@ cd ai_python
 ```
 
 Kiểm tra: `http://127.0.0.1:9000/health` → `{"status":"ok"}`. Chat từ Mini ERP qua Spring relay tới `http://127.0.0.1:9000/api/v1/ai/chat/stream`.
+
+**Hai model (tuỳ chọn):** đặt `LLM_STRUCTURED_MODEL` (ví dụ `Qwen3.6-27B`) để các bước JSON và **sinh SQL** (`sql_gen`) dùng model đó; `LLM_MODEL` giữ cho `chat` và `summarize`. Cùng `LLM_BASE_URL` / `LLM_API_KEY` với FPT Cloud thường đủ. Sau khi sửa `.env`, **restart** `uvicorn` (runtime cache `lru_cache` — không pick env mới khi đang chạy).
 
 Mẫu đầy đủ biến khác: [`.env.example`](.env.example). Tài liệu kiến trúc: `docs/`, `TASKS/`.

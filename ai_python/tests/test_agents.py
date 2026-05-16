@@ -123,6 +123,37 @@ def test_validate_sql_allowlist_blocks_other_tables() -> None:
     assert ok is False and "allowlist" in (detail or "").lower()
 
 
+def test_validate_sql_allowlist_ignores_extract_from_in_where() -> None:
+    """EXTRACT(YEAR FROM col) must not be parsed as a FROM-clause table (regex false positive)."""
+    s = GraphSettings(sql_limit_max=1000)
+    sql = """
+        SELECT TO_CHAR(created_at, 'YYYY-MM') AS month,
+               COUNT(*) AS number_of_orders
+        FROM salesorders
+        WHERE EXTRACT(YEAR FROM created_at) = 2026
+          AND EXTRACT(MONTH FROM created_at) BETWEEN 1 AND 9
+        GROUP BY TO_CHAR(created_at, 'YYYY-MM')
+        ORDER BY month
+    """
+    allow = {
+        "customers",
+        "orderdetails",
+        "productpricehistory",
+        "products",
+        "productunits",
+        "salesorders",
+        "stockdispatches",
+        "storeprofiles",
+    }
+    ok, detail, sanitized, _ = validate_sql_deterministic(
+        sql,
+        s,
+        allowlist_tables=allow,
+    )
+    assert ok is True, detail
+    assert sanitized and "salesorders" in sanitized.lower()
+
+
 def test_validate_sql_blocks_unknown_column() -> None:
     s = GraphSettings()
     tc = {"customers": {"id", "name", "tenant_id"}}
@@ -198,6 +229,36 @@ def test_validate_sql_qualified_column() -> None:
     )
     assert ok_good is True
     assert ok_bad is False and detail and "column" in detail.lower()
+
+
+def test_validate_sql_allows_group_by_order_by_select_alias() -> None:
+    """GROUP BY / ORDER BY may reference SELECT-list aliases (e.g. AS thang)."""
+    s = GraphSettings()
+    tc = {"salesorders": {"created_at", "order_channel", "id"}}
+    sql = (
+        "SELECT EXTRACT(MONTH FROM created_at) AS thang, COUNT(*) AS so_luong "
+        "FROM salesorders WHERE order_channel = 'Retail' AND EXTRACT(YEAR FROM created_at) = 2026 "
+        "GROUP BY thang ORDER BY thang LIMIT 1000"
+    )
+    ok, detail, _, _ = validate_sql_deterministic(
+        sql,
+        s,
+        allowlist_tables={"salesorders"},
+        table_columns=tc,
+    )
+    assert ok is True, detail
+
+
+def test_validate_sql_rejects_group_by_not_in_select_or_table() -> None:
+    s = GraphSettings()
+    tc = {"customers": {"id", "name"}}
+    ok, detail, _, _ = validate_sql_deterministic(
+        "SELECT id AS x FROM customers GROUP BY mystery LIMIT 10",
+        s,
+        allowlist_tables={"customers"},
+        table_columns=tc,
+    )
+    assert ok is False and detail and "mystery" in detail.lower()
 
 
 # --- registry hardening / unknown intent ---

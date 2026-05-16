@@ -77,6 +77,9 @@ def _build_state(*, request: ChatRequest, correlation_id: str) -> dict[str, Any]
     state["idea_chart_idea"] = None
     state["chart_spec_draft"] = None
     state["chart_spec_final"] = None
+    state["schema_plan"] = None
+    state["ledger_metric_id"] = None
+    state["schema_join_hints"] = None
     return state
 
 

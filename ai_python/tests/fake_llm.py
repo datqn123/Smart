@@ -79,4 +79,13 @@ class FakeLlmClient:
         if schema.__name__ == "SqlTablePickOutput":
             picks = self._table_pick if self._table_pick else ["customers"]
             return schema.model_validate({"tables": picks})  # type: ignore[return-value]
+        if schema.__name__ == "SchemaPlanOutput":
+            return schema.model_validate(  # type: ignore[return-value]
+                {
+                    "metric_id": "ledger_revenue",
+                    "tables": ["financeledger"],
+                    "dimensions": [],
+                    "ambiguity_note": None,
+                },
+            )
         raise NotImplementedError(schema)

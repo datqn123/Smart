@@ -228,7 +228,11 @@ export function ChatBotPage() {
                         <span className="text-[10px] font-bold uppercase tracking-wider">0:05</span>
                      </div>
                   )}
-                  {msg.content}
+                  {msg.role === "assistant" ? (
+                    <span className="whitespace-pre-line break-words">{msg.content}</span>
+                  ) : (
+                    msg.content
+                  )}
                   {msg.role === "assistant" && msg.metadata?.chartSpec && (
                     <AiChatChartCard spec={msg.metadata.chartSpec} />
                   )}

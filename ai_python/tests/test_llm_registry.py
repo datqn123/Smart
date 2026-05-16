@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 from app.config.settings import load_llm_settings, validate_llm_required
@@ -26,6 +28,44 @@ def test_build_llm_registry_requires_credentials(monkeypatch: pytest.MonkeyPatch
     s = load_llm_settings()
     with pytest.raises(ValueError, match="LLM_API_KEY"):
         build_llm_registry(s)
+
+
+@patch("app.llm.registry.build_chat_openai")
+def test_build_llm_registry_dual_model_invokes_factory_twice(
+    mock_build: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_REQUIRED", "0")
+    monkeypatch.setenv("LLM_API_KEY", "secret")
+    monkeypatch.setenv("LLM_BASE_URL", "https://example.com")
+    monkeypatch.setenv("LLM_MODEL", "primary-m")
+    monkeypatch.setenv("LLM_STRUCTURED_MODEL", "structured-m")
+    mock_build.return_value = MagicMock()
+    s = load_llm_settings()
+    reg = build_llm_registry(s)
+    assert mock_build.call_count == 2
+    models = [call.kwargs["settings"].model for call in mock_build.call_args_list]
+    assert models == ["primary-m", "structured-m"]
+    assert reg.get("chat") is not reg.get("intent")
+    assert reg.get("sql_gen") is reg.get("intent")
+
+
+@patch("app.llm.registry.build_chat_openai")
+def test_build_llm_registry_single_model_one_factory_call(
+    mock_build: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_REQUIRED", "0")
+    monkeypatch.setenv("LLM_API_KEY", "secret")
+    monkeypatch.setenv("LLM_BASE_URL", "https://example.com")
+    monkeypatch.setenv("LLM_MODEL", "only-m")
+    monkeypatch.setenv("LLM_STRUCTURED_MODEL", "")
+    mock_build.return_value = MagicMock()
+    s = load_llm_settings()
+    reg = build_llm_registry(s)
+    assert mock_build.call_count == 1
+    assert reg.get("chat") is reg.get("intent")
+    assert reg.get("sql_gen") is reg.get("chat")
 
 
 def test_registry_unknown_role_falls_back_to_default() -> None:

@@ -25,6 +25,29 @@ class SqlTablePickOutput(BaseModel):
     )
 
 
+class SchemaPlanOutput(BaseModel):
+    """Schema explorer — tables and metric before gen_sql."""
+
+    metric_id: Literal[
+        "ledger_revenue",
+        "ledger_expense",
+        "ledger_net_cashflow",
+        "ledger_by_dimension",
+    ] = "ledger_revenue"
+    tables: list[str] = Field(
+        default_factory=list,
+        description="Registry table names to include; must include financeledger for ledger metrics.",
+    )
+    dimensions: list[str] = Field(
+        default_factory=list,
+        description="Optional breakdown: order_channel, customer, product, fund.",
+    )
+    ambiguity_note: str | None = Field(
+        default=None,
+        description="If set, caller may ask user to clarify (MVP: passed to gen_sql prompt).",
+    )
+
+
 class IdeaPlannerOutput(BaseModel):
     """Agent_Idea — brief for SQL + chart direction."""
 

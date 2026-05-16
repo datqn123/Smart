@@ -269,19 +269,6 @@ public class StockReceiptLifecycleJdbcRepository {
 						.addValue("to_loc", toLocationId).addValue("note", referenceNote, Types.VARCHAR));
 	}
 
-	public void insertFinancePurchaseCost(LocalDate transactionDate, int referenceId, BigDecimal amount,
-			String description, int createdBy) {
-		String sql = """
-				INSERT INTO financeledger (transaction_date, transaction_type, reference_type, reference_id, amount, description, created_by, fund_id)
-				VALUES (:td, 'PurchaseCost', 'StockReceipt', :rid, :amount, :desc, :created_by,
-				  (SELECT cf.id FROM cash_funds cf WHERE cf.is_default = TRUE ORDER BY cf.id LIMIT 1))
-				""";
-		namedJdbc.update(sql,
-				new MapSqlParameterSource("td", java.sql.Date.valueOf(transactionDate)).addValue("rid", referenceId)
-						.addValue("amount", amount).addValue("desc", description, Types.VARCHAR)
-						.addValue("created_by", createdBy));
-	}
-
 	public Optional<StockReceiptViewData> loadView(long receiptId) {
 		String hsql = """
 				SELECT

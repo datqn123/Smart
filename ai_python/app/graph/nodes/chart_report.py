@@ -11,6 +11,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from app.graph.agent_trace import emit_agent_trace
 from app.graph.datetime_display import localize_query_result_for_display
 from app.graph.deps import GraphDeps
+from app.graph.display_format import format_display_for_chat_ui
 from app.graph.message_utils import latest_human_question
 from app.graph.state import AgentState
 from app.llm.schemas import (
@@ -40,7 +41,16 @@ def compact_query_result_for_chart_prompt(
     *,
     max_rows: int = 12,
     max_chars: int = 3500,
+    localize_for_llm: bool = False,
+    display_timezone: str | None = None,
 ) -> str:
+    """Build a JSON blob for chart LLM prompts.
+
+    Default ``localize_for_llm=False``: keep timestamp/ISO values from SQL as-is.
+    Localized ``dd/mm/yyyy`` strings confuse models (e.g. 01/05 read as January).
+    """
+    if localize_for_llm and display_timezone and str(display_timezone).strip():
+        qr = localize_query_result_for_display(qr, display_timezone)
     rows = _rows_from_query_result(qr)
     if not rows:
         return "(no rows)"
@@ -54,10 +64,16 @@ def compact_query_result_for_chart_prompt(
 
 _IDEA_SYSTEM = (
     "Bạn là Agent_Idea trong ERP đọc hiểu yêu cầu báo cáo / biểu đồ của người dùng.\n"
+    "Doanh thu/chi phí/dòng tiền: data_request nên ghi source=financeledger và transaction_type phù hợp "
+    "(SalesRevenue cho doanh thu), không dùng salesorders làm nguồn tổng hợp.\n"
     "Trả về JSON đúng schema: data_request (object) mô tả metric, dimension, khoảng thời gian, "
     "đơn vị thời gian (ngày/tuần/tháng), filter nghiệp vụ — không viết SQL, không đoán tên bảng DB.\n"
     "chart_idea (object): loại biểu đồ gợi ý (line|bar|area|pie), tiêu đề gợi ý, mô tả trục X/Y "
-    "bằng ngôn ngữ nghiệp vụ."
+    "bằng ngôn ngữ nghiệp vụ.\n"
+    "Phạm vi kênh (quan trọng): chỉ thu hẹp **bán lẻ / POS / walk-in / Retail / kênh lẻ** trong filter "
+    "khi người dùng nói rõ các khái niệm đó. Nếu họ yêu cầu **so sánh theo từng tháng / xu hướng nhiều tháng** "
+    "mà chỉ nói chung **đơn hàng** (không ghi bán lẻ/Retail/POS), đặt filter là **mọi kênh** hoặc mô tả "
+    "\"tất cả đơn hàng\" — tránh ám chỉ Retail — vì đơn sỉ/wholesale có thể chiếm phần lớn theo tháng."
 )
 
 
@@ -84,7 +100,12 @@ _CHART_JSON_CONTRACT = (
 _REVIEW_SYSTEM = (
     "Bạn là Agent_Review. Căn chỉnh chart_type, x_key, y_key cho đúng với danh sách cột thật; "
     "viết final_answer ngắn tiếng Việt, chỉ dựa trên số liệu trong sample_rows (không bịa).\n"
-    "Nếu dữ liệu không đủ để vẽ biểu đồ, giải thích trong final_answer và vẫn chọn cột hợp lệ nhất."
+    "Khi đọc giá trị trục thời gian (tháng): **bám đúng** chuỗi/ISO trong sample_rows (vd. 2026-05-01…). "
+    "Không đổi sang \"tháng 1\" / \"tháng 4\" trừ khi bucket trong sample_rows thật sự là tháng đó — "
+    "tránh hiểu nhầm định dạng ngày.\n"
+    "Nếu chỉ có **một** bucket thời gian nhưng vẫn có số đếm, vẫn coi là đủ để vẽ một cột/điểm; "
+    "final_answer ghi rõ đúng tháng/năm đó và số liệu, **không** nói \"không đủ dữ liệu\" chỉ vì ít hơn hai tháng "
+    "trừ khi người dùng yêu cầu bắt buộc ≥2 tháng mới có ý nghĩa."
 )
 
 
@@ -191,14 +212,11 @@ def make_agent_chart_node(deps: GraphDeps):
     def agent_chart(state: AgentState) -> dict:
         logger.info("node=agent_chart action=start")
         reg = deps.llm_registry
-        qr_loc = localize_query_result_for_display(
-            state.get("query_result"),
-            deps.settings.ai_display_timezone,
-        )
-        compact = compact_query_result_for_chart_prompt(qr_loc)
+        qr_raw = state.get("query_result")
+        compact = compact_query_result_for_chart_prompt(qr_raw)
         idea = json.dumps(state.get("idea_chart_idea") or {}, ensure_ascii=False)[:2000]
         if reg is None:
-            rows = _rows_from_query_result(qr_loc)
+            rows = _rows_from_query_result(qr_raw)
             keys = list(rows[0].keys()) if rows else ["x", "y"]
             xk, yk = keys[0], keys[min(1, len(keys) - 1)]
             draft = _draft_to_dict(
@@ -228,7 +246,7 @@ def make_agent_chart_node(deps: GraphDeps):
             draft = _draft_to_dict(out)
         except Exception:
             logger.warning("agent_chart structured_predict failed", exc_info=True)
-            rows = _rows_from_query_result(qr_loc)
+            rows = _rows_from_query_result(qr_raw)
             keys = list(rows[0].keys()) if rows else ["_stub", "sql_ok"]
             out = ChartSpecDraftOutput(chart_type="bar", x_key=keys[0], y_key=keys[min(1, len(keys) - 1)], title="")
             draft = _draft_to_dict(out)
@@ -248,11 +266,10 @@ def make_agent_review_node(deps: GraphDeps):
     def agent_review(state: AgentState) -> dict:
         logger.info("node=agent_review action=start")
         reg = deps.llm_registry
-        qr_loc = localize_query_result_for_display(
-            state.get("query_result"),
-            deps.settings.ai_display_timezone,
+        qr_raw = state.get("query_result")
+        rows = _rows_from_query_result(
+            localize_query_result_for_display(qr_raw, deps.settings.ai_display_timezone),
         )
-        rows = _rows_from_query_result(qr_loc)
         draft = state.get("chart_spec_draft")
         if not isinstance(draft, dict):
             draft = {}
@@ -273,6 +290,7 @@ def make_agent_review_node(deps: GraphDeps):
             ans = f"Đã tạo biểu đồ ({final['chartType']}). " + (
                 f"{len(rows)} dòng dữ liệu." if rows else "Không có dữ liệu."
             )
+            fa = format_display_for_chat_ui(ans)
             emit_agent_trace(
                 logger,
                 deps.settings,
@@ -282,13 +300,13 @@ def make_agent_review_node(deps: GraphDeps):
             )
             return {
                 "chart_spec_final": final,
-                "final_answer": ans,
-                "messages": [AIMessage(content=ans)],
+                "final_answer": fa,
+                "messages": [AIMessage(content=fa)],
             }
         human = (
             f"Câu hỏi người dùng: {user_q}\n\n"
             f"Draft chart spec (JSON):\n{json.dumps(draft, ensure_ascii=False)}\n\n"
-            f"Dữ liệu (cột + sample):\n{compact_query_result_for_chart_prompt(qr_loc)}\n\n"
+            f"Dữ liệu (cột + sample):\n{compact_query_result_for_chart_prompt(qr_raw)}\n\n"
             "Align x_key and y_key to real column names."
         )
         messages: list[BaseMessage] = [SystemMessage(content=_REVIEW_SYSTEM), HumanMessage(content=human)]
@@ -323,10 +341,11 @@ def make_agent_review_node(deps: GraphDeps):
             phase="Final chart + answer",
             detail=(out.final_answer or "")[:1200],
         )
+        fa = format_display_for_chat_ui(out.final_answer or "")
         return {
             "chart_spec_final": final,
-            "final_answer": out.final_answer,
-            "messages": [AIMessage(content=out.final_answer)],
+            "final_answer": fa,
+            "messages": [AIMessage(content=fa)],
         }
 
     return agent_review

@@ -5,6 +5,7 @@ from __future__ import annotations
 from langgraph.graph import END, START, StateGraph
 
 from app.graph.deps import GraphDeps
+from app.graph.nodes.schema_explore import make_schema_explore_node, route_sql_subgraph_start
 from app.graph.nodes.sql_pipeline import (
     make_execute_sql_node,
     make_fail_max_attempts_node,
@@ -22,6 +23,7 @@ from app.graph.state import AgentState
 
 def build_sql_subgraph(deps: GraphDeps):
     g = StateGraph(AgentState)
+    g.add_node("schema_explore", make_schema_explore_node(deps))
     g.add_node("gen_sql", make_gen_sql_node(deps))
     g.add_node("sql_review", make_sql_review_node(deps))
     g.add_node("validate_sql", make_validate_sql_node(deps))
@@ -29,7 +31,15 @@ def build_sql_subgraph(deps: GraphDeps):
     g.add_node("validate_result", make_validate_result_node(deps))
     g.add_node("fail_max_attempts", make_fail_max_attempts_node(deps))
 
-    g.add_edge(START, "gen_sql")
+    g.add_conditional_edges(
+        START,
+        route_sql_subgraph_start(deps),
+        {
+            "schema_explore": "schema_explore",
+            "gen_sql": "gen_sql",
+        },
+    )
+    g.add_edge("schema_explore", "gen_sql")
     g.add_conditional_edges(
         "gen_sql",
         route_after_gen_sql,

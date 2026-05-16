@@ -288,3 +288,112 @@ def build_schema_artifact_from_postgres(
 def rank_tables_for_question(user_q: str, rows: list[tuple[str, str]], *, max_tables: int) -> list[str]:
     """Public wrapper for unit tests (same logic as internal ranker)."""
     return _rank_tables(user_q, rows, max_tables=max_tables)
+
+
+def list_registry_tables(settings: GraphSettings) -> tuple[list[tuple[str, str]], str | None]:
+    """Return (table_name, description) rows from ai_table_description."""
+    try:
+        import psycopg2
+    except ImportError:
+        return [], "psycopg2 not installed"
+    dsn = _metadata_dsn(settings)
+    if not dsn:
+        return [], "DATABASE_URL_METADATA_RO or DATABASE_URL_RO is required"
+    schema = (settings.pg_metadata_schema or "public").strip()
+    desc_table = (settings.pg_ai_description_table or "ai_table_description").strip()
+    timeout = int(settings.pg_metadata_connect_timeout_seconds)
+    conn = None
+    try:
+        conn = psycopg2.connect(dsn, connect_timeout=timeout)
+        conn.set_session(readonly=True, autocommit=True)
+        with conn.cursor() as cur:
+            return _fetch_descriptions(cur, schema=schema, table=desc_table), None
+    except Exception as exc:
+        return [], str(exc)
+    finally:
+        if conn is not None:
+            conn.close()
+
+
+def build_schema_artifact_for_table_names(
+    settings: GraphSettings,
+    table_names: list[str],
+) -> tuple[SchemaArtifact | None, str | None]:
+    """Introspect only the given registry tables (schema explorer path)."""
+    try:
+        import psycopg2
+    except ImportError:
+        return None, "psycopg2 not installed"
+    dsn = _metadata_dsn(settings)
+    if not dsn:
+        return None, "DATABASE_URL_METADATA_RO or DATABASE_URL_RO is required"
+    names = [str(t).strip() for t in table_names if str(t).strip()]
+    if not names:
+        return None, "no tables requested"
+    schema = (settings.pg_metadata_schema or "public").strip()
+    desc_table = (settings.pg_ai_description_table or "ai_table_description").strip()
+    col_desc_table = (settings.pg_ai_column_description_table or "ai_column_description").strip()
+    timeout = int(settings.pg_metadata_connect_timeout_seconds)
+    conn = None
+    try:
+        conn = psycopg2.connect(dsn, connect_timeout=timeout)
+        conn.set_session(readonly=True, autocommit=True)
+        with conn.cursor() as cur:
+            rows = _fetch_descriptions(cur, schema=schema, table=desc_table)
+            desc_map = {r[0]: r[1] for r in rows}
+            reg_lower = {r[0].lower(): r[0] for r in rows}
+            tables: list[str] = []
+            for n in names:
+                canon = reg_lower.get(n.lower())
+                if canon and canon not in tables:
+                    tables.append(canon)
+            if not tables:
+                return None, "requested tables not in ai_table_description registry"
+            cols = _introspect_columns(cur, schema, tables)
+            col_desc_map: dict[tuple[str, str], str] = {}
+            try:
+                col_desc_map = _fetch_column_descriptions(
+                    cur, schema=schema, registry_table=col_desc_table, tables=tables
+                )
+            except Exception as exc:
+                logger.warning("ai_column_description registry unavailable: %s", exc)
+            pks = _introspect_pk(cur, schema, tables)
+            fks = _introspect_fks_for_tables(cur, schema, tables)
+            tmeta: list[TableMeta] = []
+            for tname in tables:
+                if tname not in cols:
+                    logger.warning("table %r in registry but no columns in PG — skip", tname)
+                    continue
+                merged_cols: list[ColumnMeta] = []
+                for cm in cols[tname]:
+                    key = (tname.lower(), cm.name.lower())
+                    reg_txt = col_desc_map.get(key)
+                    if reg_txt:
+                        merged_cols.append(cm.model_copy(update={"description": reg_txt}))
+                    else:
+                        merged_cols.append(cm)
+                tmeta.append(
+                    TableMeta(
+                        name=tname,
+                        columns=merged_cols,
+                        pk=pks.get(tname, []),
+                        fks=fks.get(tname, []),
+                        description=desc_map.get(tname),
+                    )
+                )
+            if not tmeta:
+                return None, "no introspected tables"
+            return (
+                SchemaArtifact(
+                    schema_version="postgres_live",
+                    tables=tmeta,
+                    source_mode="postgres_schema_explorer",
+                ),
+                None,
+            )
+    except Exception as exc:
+        logger.warning("pg schema build for tables failed: %s", exc, exc_info=True)
+        return None, str(exc)
+    finally:
+        if conn is not None:
+            conn.close()

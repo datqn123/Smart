@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 
 import sqlparse
-from sqlparse.sql import Comparison, Function, Identifier, IdentifierList, Statement, Where
+from sqlparse.sql import Comparison, Function, Identifier, IdentifierList, Parenthesis, Statement, Where
 
 from app.config.graph_settings import GraphSettings
 
@@ -39,26 +39,108 @@ _SQL_BUILTIN_IDENTIFIERS = frozenset(
     """.split(),
 )
 
+# Names after "AS" in CAST(... AS type) etc. — not SELECT output aliases for GROUP BY.
+_SQL_AS_ALIAS_SKIP_NAMES = frozenset(
+    """
+    int integer bigint smallint serial float real double precision varchar char text boolean
+    date timestamp timestamptz time interval record decimal numeric
+    """.split(),
+)
 
-def _extract_from_join_tables(sql: str) -> set[str]:
+_AS_PROJECTION_ALIAS = re.compile(r"(?is)\bAS\s+([a-zA-Z_][\w]*)")
+
+
+def _join_clause_tokens(stmt: Statement) -> list:
+    """Tokens strictly between the top-level FROM keyword and WHERE / GROUP / ORDER / HAVING."""
+    tks = stmt.tokens
+    fi = _from_keyword_index(tks)
+    if fi < 0:
+        return []
+    ej = _end_join_region(tks, fi)
+    return list(tks[fi + 1 : ej])
+
+
+def _strip_outer_parentheses(s: str) -> str:
+    s = (s or "").strip()
+    if len(s) >= 2 and s[0] == "(" and s[-1] == ")":
+        return s[1:-1].strip()
+    return s
+
+
+def _physical_tables_from_join_token(token: object) -> set[str]:
+    """Table names referenced in FROM/JOIN (not EXTRACT/WHERE false positives)."""
+    if isinstance(token, IdentifierList):
+        out: set[str] = set()
+        for x in token.get_identifiers():
+            out |= _physical_tables_from_join_token(x)
+        return out
+    if isinstance(token, Identifier):
+        for sub in token.tokens:
+            if isinstance(sub, Parenthesis):
+                inner = _strip_outer_parentheses(str(sub))
+                if inner.upper().startswith("SELECT"):
+                    inner_parsed = sqlparse.parse(inner)
+                    if len(inner_parsed) == 1 and (inner_parsed[0].get_type() or "").upper() == "SELECT":
+                        return _extract_from_join_tables_stmt(inner_parsed[0])
+                return set()
+        real = token.get_real_name()
+        if real:
+            return {real.split(".")[-1].lower()}
+        return set()
+    if isinstance(token, Parenthesis):
+        inner = _strip_outer_parentheses(str(token))
+        if inner.upper().startswith("SELECT"):
+            inner_parsed = sqlparse.parse(inner)
+            if len(inner_parsed) == 1 and (inner_parsed[0].get_type() or "").upper() == "SELECT":
+                return _extract_from_join_tables_stmt(inner_parsed[0])
+        return set()
+    return set()
+
+
+def _extract_from_join_tables_stmt(stmt: Statement) -> set[str]:
     names: set[str] = set()
-    for m in re.finditer(r"(?i)\b(?:from|join)\s+([a-zA-Z_][\w.]*)", sql):
-        names.add(m.group(1).split(".")[-1].lower())
+    for t in _join_clause_tokens(stmt):
+        names |= _physical_tables_from_join_token(t)
     return names
 
 
-def _from_join_alias_map(sql: str) -> dict[str, str]:
+def _merge_alias_map_from_join_token(token: object, out: dict[str, str]) -> None:
+    """Populate alias map from FROM/JOIN region only (avoids EXTRACT(... FROM col) in SELECT/WHERE)."""
+    if isinstance(token, IdentifierList):
+        for x in token.get_identifiers():
+            _merge_alias_map_from_join_token(x, out)
+        return
+    if isinstance(token, Identifier):
+        for sub in token.tokens:
+            if isinstance(sub, Parenthesis):
+                inner = _strip_outer_parentheses(str(sub))
+                if inner.upper().startswith("SELECT"):
+                    inner_parsed = sqlparse.parse(inner)
+                    if len(inner_parsed) == 1 and (inner_parsed[0].get_type() or "").upper() == "SELECT":
+                        out.update(_from_join_alias_map_stmt(inner_parsed[0]))
+                return
+        real = token.get_real_name()
+        if not real:
+            return
+        raw_t = real.split(".")[-1].lower()
+        out[raw_t] = raw_t
+        al = token.get_alias()
+        if al:
+            out[al.lower()] = raw_t
+        return
+    if isinstance(token, Parenthesis):
+        inner = _strip_outer_parentheses(str(token))
+        if inner.upper().startswith("SELECT"):
+            inner_parsed = sqlparse.parse(inner)
+            if len(inner_parsed) == 1 and (inner_parsed[0].get_type() or "").upper() == "SELECT":
+                out.update(_from_join_alias_map_stmt(inner_parsed[0]))
+
+
+def _from_join_alias_map_stmt(stmt: Statement) -> dict[str, str]:
     """Map alias or table token → canonical table name (last path segment, lower)."""
     out: dict[str, str] = {}
-    for m in re.finditer(
-        r"(?i)\b(?:from|join)\s+([a-zA-Z_][\w.]*)(?:\s+(?:as\s+)?([a-zA-Z_]\w*))?\b",
-        sql,
-    ):
-        raw_t = m.group(1).split(".")[-1].lower()
-        alias = m.group(2)
-        out[raw_t] = raw_t
-        if alias:
-            out[alias.lower()] = raw_t
+    for t in _join_clause_tokens(stmt):
+        _merge_alias_map_from_join_token(t, out)
     return out
 
 
@@ -67,6 +149,31 @@ def _from_keyword_index(tokens: list) -> int:
         if str(t).upper().strip() == "FROM":
             return i
     return -1
+
+
+def _select_list_text(stmt: Statement) -> str:
+    """Raw text of the SELECT projection (between SELECT and FROM), for alias detection."""
+    tks = stmt.tokens
+    fi = _from_keyword_index(tks)
+    if fi < 0:
+        return ""
+    parts: list[str] = []
+    for t in tks[0:fi]:
+        if str(t).upper().strip() == "SELECT":
+            continue
+        parts.append(str(t))
+    return " ".join(parts)
+
+
+def _select_projection_aliases(select_text: str) -> set[str]:
+    """Lowercase output column names from ``... AS alias`` in the SELECT list (not CAST types)."""
+    out: set[str] = set()
+    for m in _AS_PROJECTION_ALIAS.finditer(select_text or ""):
+        name = m.group(1).lower()
+        if name in _SQL_AS_ALIAS_SKIP_NAMES or name in _SQL_KEYWORDS:
+            continue
+        out.add(name)
+    return out
 
 
 def _end_join_region(tokens: list, fi: int) -> int:
@@ -175,6 +282,8 @@ def _validate_columns_for_map(
     for t in canonical_tables:
         union_cols |= table_columns.get(t, set())
 
+    proj_aliases = _select_projection_aliases(_select_list_text(stmt))
+
     for ident in _collect_column_identifiers(stmt):
         parent = ident.get_parent_name()
         real = ident.get_real_name()
@@ -192,6 +301,8 @@ def _validate_columns_for_map(
             if real_l in _SQL_KEYWORDS:
                 continue
             if real_l in _SQL_BUILTIN_IDENTIFIERS:
+                continue
+            if real_l in proj_aliases:
                 continue
             if real_l not in union_cols:
                 return f"column not in allowlist: {real_l}"
@@ -220,6 +331,23 @@ def normalize_llm_sql_output(sql: str | None) -> str:
     while lines and lines[-1].strip() == "```":
         lines.pop()
     return "\n".join(lines).strip()
+
+
+def is_llm_select_sql_shape(sql: str | None) -> bool:
+    """True iff ``sql`` parses as a single SELECT without DDL/DML (shape only; not allowlist)."""
+    s = normalize_llm_sql_output(sql)
+    if not s.strip():
+        return False
+    try:
+        parsed = sqlparse.parse(s)
+    except Exception:
+        return False
+    if len(parsed) != 1:
+        return False
+    stype = (parsed[0].get_type() or "").upper()
+    if stype != "SELECT":
+        return False
+    return _DDL_DML.search(s) is None
 
 
 def strip_trailing_semicolons(sql: str) -> str:
@@ -266,13 +394,13 @@ def validate_sql_deterministic(
         else:
             allow = None
 
-    tables = _extract_from_join_tables(s)
+    tables = _extract_from_join_tables_stmt(stmt)
     if allow is not None:
         if tables and not tables <= allow:
             return False, f"table not in allowlist {sorted(allow)}", None, notes
 
     if table_columns is not None:
-        alias_map = _from_join_alias_map(s)
+        alias_map = _from_join_alias_map_stmt(stmt)
         col_err = _validate_columns_for_map(stmt, table_columns=table_columns, alias_map=alias_map)
         if col_err:
             return False, col_err, None, notes
@@ -283,3 +411,38 @@ def validate_sql_deterministic(
         notes.append("LIMIT injected (was missing)")
     s = strip_trailing_semicolons(s)
     return True, None, s, notes
+
+
+def check_ledger_metric_policy(
+    sql: str | None,
+    *,
+    metric_id: str | None,
+    user_q: str | None,
+    enabled: bool,
+) -> tuple[bool, str | None]:
+    """
+    Returns (ok, detail). When enabled, revenue/expense metrics require financeledger in SQL.
+    """
+    if not enabled or not metric_id or not sql:
+        return True, None
+    low = sql.lower()
+    if metric_id in ("ledger_revenue", "ledger_expense", "ledger_net_cashflow", "ledger_by_dimension"):
+        if "financeledger" not in low:
+            return False, (
+                "policy: metric requires financeledger as fact table "
+                f"(metric_id={metric_id})"
+            )
+    if metric_id in ("ledger_revenue", "ledger_expense") and "financeledger" in low:
+        if metric_id == "ledger_revenue" and "salesrevenue" not in low.replace(" ", "").replace("_", ""):
+            if "transaction_type" in low and "salesrevenue" not in low:
+                return False, "policy: ledger_revenue should filter transaction_type SalesRevenue"
+    if "salesorders" in low and "financeledger" in low:
+        from app.graph.reference_joins import salesorders_join_requires_reference_type
+
+        if salesorders_join_requires_reference_type(sql):
+            return False, (
+                "policy: when joining salesorders from financeledger, "
+                "include reference_type = 'SalesOrder' (and reference_id match)"
+            )
+    _ = user_q
+    return True, None
