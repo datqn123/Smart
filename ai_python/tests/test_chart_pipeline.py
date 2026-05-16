@@ -7,8 +7,11 @@ from langchain_core.messages import AIMessage, HumanMessage
 from app.config.graph_settings import GraphSettings
 from app.graph.chart_data_profile import build_query_result_profile
 from app.graph.chart_thread_context import format_prior_turns_for_chart
+from app.graph.chart_schema_merge import infer_tables_from_chart_context
+from app.graph.chart_sql_shape import sql_has_time_grouping
 from app.graph.nodes.chart_readiness import _heuristic_readiness
 from app.graph.nodes.sql_pipeline import _effective_ledger_first_prompts
+from app.graph.pg_schema_context import rank_tables_for_question
 
 
 def test_build_query_result_profile_time_columns() -> None:
@@ -23,10 +26,31 @@ def test_build_query_result_profile_time_columns() -> None:
     assert "month" in p.get("time_like_columns", [])
 
 
-def test_heuristic_time_series_needs_multiple_rows() -> None:
-    ok, issues, _ = _heuristic_readiness({"row_count": 1, "time_like_columns": []}, expected_shape="time_series")
+def test_heuristic_time_series_one_row_without_groupby_fails() -> None:
+    ok, issues, warnings = _heuristic_readiness(
+        {"row_count": 1, "time_like_columns": []},
+        expected_shape="time_series",
+        generated_sql="SELECT COUNT(*) FROM salesorders",
+    )
     assert not ok
     assert issues
+    assert not warnings
+
+
+def test_heuristic_time_series_one_row_with_groupby_ok_warning() -> None:
+    sql = (
+        "SELECT DATE_TRUNC('month', created_at) AS month, COUNT(*) AS n "
+        "FROM salesorders GROUP BY DATE_TRUNC('month', created_at)"
+    )
+    assert sql_has_time_grouping(sql)
+    ok, issues, warnings = _heuristic_readiness(
+        {"row_count": 1, "time_like_columns": ["month"]},
+        expected_shape="time_series",
+        generated_sql=sql,
+    )
+    assert ok
+    assert not issues
+    assert warnings
 
 
 def test_effective_ledger_first_off_for_warehouse_chart_brief() -> None:
@@ -49,6 +73,27 @@ def test_effective_ledger_first_on_for_revenue_chart() -> None:
         "idea_data_request": {"metric": "doanh thu", "source": "financeledger"},
     }
     assert _effective_ledger_first_prompts(state, s) is True
+
+
+def test_infer_tables_retail_orders() -> None:
+    q = "Hãy vẽ biểu đồ báo cáo tình hành đơn hàng bán lẻ từ đầu năm 2026"
+    dr = {"metric": "Đếm đơn hàng bán lẻ", "filter": {"channel": "Retail"}}
+    tables = infer_tables_from_chart_context(q, dr)
+    assert "salesorders" in tables
+
+
+def test_rank_tables_boosts_salesorders_for_retail_orders() -> None:
+    rows = [
+        ("stockdispatches", "Phiếu xuất kho"),
+        ("salesorders", "Đơn bán kênh bán lẻ"),
+        ("customers", "Khách hàng"),
+    ]
+    ranked = rank_tables_for_question(
+        "đơn hàng bán lẻ từ 2026",
+        rows,
+        max_tables=2,
+    )
+    assert ranked[0] == "salesorders"
 
 
 def test_format_prior_turns_for_chart() -> None:

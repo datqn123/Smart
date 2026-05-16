@@ -173,7 +173,7 @@ def make_agent_idea_node(deps: GraphDeps):
         )
         catalog = ""
         if deps.settings.chart_brief_catalog_max_tables > 0:
-            catalog = chart_catalog_snippet(deps.settings)
+            catalog = chart_catalog_snippet(deps.settings, user_q)
         if reg is None:
             q = user_q
             dr = {"question_stub": True, "summary": q[:400], "expected_result_shape": "time_series"}
@@ -421,6 +421,8 @@ def make_chart_fail_message_node(deps: GraphDeps):
 def route_after_sql_branch(state: AgentState) -> str:
     if state.get("intent") != "system_data_chart":
         return "summarize_answer"
+    if state.get("chart_data_ok") or state.get("chart_degraded"):
+        return "agent_chart"
     err = state.get("error_payload")
     if isinstance(err, dict) and err.get("error") == "max_sql_attempts":
         return "chart_fail_message"

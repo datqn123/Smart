@@ -87,6 +87,7 @@ def _build_state(*, request: ChatRequest, correlation_id: str) -> dict[str, Any]
     state["chart_warnings"] = None
     state["chart_retry_hint"] = None
     state["chart_result_profile"] = None
+    state["chart_degraded"] = None
     return state
 
 

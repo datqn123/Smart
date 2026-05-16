@@ -57,18 +57,53 @@ def _rank_tables(user_q: str, rows: list[tuple[str, str]], *, max_tables: int) -
     if not rows:
         return []
     q = user_q.lower()
+    order_boost = 0.0
+    if any(
+        p in q
+        for p in (
+            "đơn hàng",
+            "don hang",
+            "đơn bán",
+            "don ban",
+            "bán lẻ",
+            "ban le",
+            "retail",
+            "pos",
+            "kênh bán",
+        )
+    ):
+        order_boost = 25.0
+    dispatch_boost = 0.0
+    if any(p in q for p in ("xuất kho", "xuat kho", "dispatch", "giao hàng", "giao hang")):
+        dispatch_boost = 22.0
+    ledger_boost = 0.0
+    if any(p in q for p in ("doanh thu", "chi phí", "chi phi", "sổ cái", "so cai", "financeledger")):
+        ledger_boost = 22.0
+
     scored: list[tuple[float, str]] = []
     for name, desc in rows:
         score = 0.0
         nl = name.lower()
+        if nl == "salesorders" and order_boost:
+            score += order_boost
+        if nl == "stockdispatches" and dispatch_boost:
+            score += dispatch_boost
+        if nl == "financeledger" and ledger_boost:
+            score += ledger_boost
         if nl in q:
             score += 12.0
-        for tok in re.findall(r"\w+", desc.lower()):
+        if nl == "salesorders" and ("đơn" in q or "don" in q) and ("hàng" in q or "hang" in q or "bán" in q):
+            score += 15.0
+        desc_l = desc.lower()
+        if nl == "salesorders" and ("đơn bán" in desc_l or "đơn hàng" in desc_l):
+            if "đơn" in q or "hàng" in q or "bán" in q:
+                score += 8.0
+        for tok in re.findall(r"\w+", desc_l):
             if len(tok) > 2 and tok in q:
                 score += 2.0
         for part in re.findall(r"\w+", q):
             pl = part.lower()
-            if len(pl) > 2 and pl in desc.lower():
+            if len(pl) > 2 and pl in desc_l:
                 score += 2.5
         for tok in re.findall(r"\w+", nl):
             if len(tok) > 2 and tok in q:

@@ -120,6 +120,7 @@ def build_gen_sql_user_prompt(
     ledger_first: bool = False,
     multi_table_plan: bool = False,
     chart_thread_context: str | None = None,
+    allowed_tables_line: str | None = None,
 ) -> str:
     tail = (dialog_tail or "").strip()
     dialog_block = (
@@ -147,6 +148,10 @@ def build_gen_sql_user_prompt(
             f"{pj}\n\n"
         )
     plan_block = _schema_plan_block(schema_plan)
+    allow_block = ""
+    al = (allowed_tables_line or "").strip()
+    if al:
+        allow_block = f"{al}\n\n"
     if ledger_first:
         persona = (
             "You are a careful SQL author for a read-only ERP analytics database. "
@@ -174,12 +179,13 @@ def build_gen_sql_user_prompt(
             f"{chart_ctx_block}"
             f"{planner_block}"
             f"{plan_block}"
+            f"{allow_block}"
             f"Schema (allowlist tables):\n{schema_block}\n\n"
             f"Prior feedback (only buckets with content):\n{feedback_render}\n\n"
             f"User question: {user_q}\n\n"
             "Hard rules: Your entire reply must be that ONE SELECT only (PostgreSQL). "
             "No Vietnamese/English sentences, no markdown except optional ```sql fences around the query. "
-            "If unsure, still output a valid SELECT on the allowlist (aggregates/filters), never prose.\n"
+            "If unsure, still output a valid SELECT using ONLY tables listed above, never prose.\n"
             "Match the Agent_Idea brief for filters: add order_channel = 'Retail' only when the brief explicitly "
             "targets retail/POS/bán lẻ; for company-wide monthly order counts, omit channel filter unless the brief "
             "says all channels still need a breakdown (then GROUP BY order_channel, month).\n\n"
@@ -193,6 +199,7 @@ def build_gen_sql_user_prompt(
         f"{chart_ctx_block}"
         f"{planner_block}"
         f"{plan_block}"
+        f"{allow_block}"
         f"Schema (allowlist tables):\n{schema_block}\n\n"
         f"Seed SQL (starting point):\n{seed_block}\n\n"
         f"Prior feedback:\n{feedback_render}\n\n"

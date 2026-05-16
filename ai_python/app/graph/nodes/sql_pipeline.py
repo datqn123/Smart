@@ -19,10 +19,20 @@ from app.graph.feedback import (
     empty_feedback,
     render_for_prompt,
 )
-from app.graph.retry import can_regen_sql
+from app.graph.retry_policy import (
+    RetryAction,
+    chart_degrade_eligible,
+    chart_degrade_state_patch,
+    decide_sql_retry,
+)
 from app.graph.state import AgentState
 from app.graph.message_utils import format_dialog_tail_for_sql, latest_human_question
 from app.graph.logging_policy import safe_log_sql
+from app.graph.chart_schema_merge import (
+    allowed_tables_prompt_line,
+    infer_tables_from_chart_context,
+    merge_tables_into_artifact,
+)
 from app.graph.sql_prompts import build_gen_sql_user_prompt, format_schema_block
 from app.graph.sql_similarity import max_pool_similarity
 from app.graph.sql_table_selection import select_tables_for_question
@@ -122,6 +132,34 @@ def _load_schema_artifact(
     return None, RuntimeError(msg)
 
 
+def _build_gen_sql_system(allow_names: set[str], *, ledger_first: bool) -> str:
+    parts = [
+        "Reply with ONLY one PostgreSQL SELECT (read-only). ",
+        "No natural-language before or after the SQL (any language). ",
+        "Do not apologize or explain missing data in prose—only as SQL.\n",
+        "Use ONLY table names present in the user prompt schema block — never invent tables.\n",
+    ]
+    if ledger_first and "financeledger" in allow_names:
+        parts.append(
+            "Revenue/expense/cashflow: use financeledger with transaction_type filters; "
+            "transaction_date for periods.\n"
+        )
+    if "salesorders" in allow_names:
+        parts.append(
+            "Order counts by channel: use salesorders; filter order_channel = 'Retail' only when the "
+            "brief explicitly targets retail/POS/bán lẻ. Use created_at for order date unless schema "
+            "shows another date column.\n"
+        )
+    elif "stockdispatches" in allow_names:
+        parts.append(
+            "Shipment/dispatch metrics: use stockdispatches (e.g. dispatch_date), not salesorders.\n"
+        )
+    parts.append(
+        "If a table is not in the schema block, you must not reference it — pick the closest allowed table."
+    )
+    return "".join(parts)
+
+
 def _resolve_schema_artifact(
     deps: GraphDeps, state: AgentState, *, user_q: str
 ) -> tuple[SchemaArtifact | None, Exception | None]:
@@ -146,9 +184,9 @@ def make_gen_sql_node(deps: GraphDeps):
         bumped = bump_attempts(state)
         prev_fb = state.get("validation_feedback")
         if not isinstance(prev_fb, dict):
-            fb_render = render_for_prompt(empty_feedback())
+            fb_render = render_for_prompt(empty_feedback(), latest_only=True)
         else:
-            fb_render = render_for_prompt(prev_fb)
+            fb_render = render_for_prompt(prev_fb, latest_only=True)
         mode: str = "explore" if nxt == 1 else ("exploit" if deps.settings.sql_exploit_on_retry else "explore")
         reg = deps.llm_registry
         ver = state.get("schema_version")
@@ -188,11 +226,21 @@ def make_gen_sql_node(deps: GraphDeps):
                 "runtime_schema_artifact": None,
             }
         assert artifact is not None  # guaranteed when load_exc is None
+        idea_req = state.get("idea_data_request")
+        if not isinstance(idea_req, dict) or not idea_req:
+            brief = state.get("chart_brief")
+            if isinstance(brief, dict) and brief.get("data_request"):
+                idea_req = dict(brief["data_request"])
+        extra_tables = infer_tables_from_chart_context(user_q, idea_req if isinstance(idea_req, dict) else None)
+        if extra_tables or state.get("intent") == "system_data_chart":
+            artifact = merge_tables_into_artifact(deps.settings, artifact, extra_tables)
         artifact_dump = artifact.model_dump(mode="json")
         selected_tables: list[str] | None = None
         schema_plan = state.get("schema_plan") if isinstance(state.get("schema_plan"), dict) else None
         if schema_plan and schema_plan.get("tables"):
             selected_tables = [str(t) for t in schema_plan["tables"] if str(t).strip()]
+        elif extra_tables or state.get("intent") == "system_data_chart":
+            selected_tables = [t.name for t in artifact.tables]
         elif deps.settings.sql_table_selection_enabled and not deps.settings.sql_schema_explorer_enabled:
             selected_tables = select_tables_for_question(
                 deps=deps,
@@ -219,11 +267,6 @@ def make_gen_sql_node(deps: GraphDeps):
             max_messages=int(deps.settings.sql_dialog_tail_max_messages),
             max_chars=int(deps.settings.sql_dialog_tail_max_chars),
         )
-        idea_req = state.get("idea_data_request")
-        if not isinstance(idea_req, dict) or not idea_req:
-            brief = state.get("chart_brief")
-            if isinstance(brief, dict) and brief.get("data_request"):
-                idea_req = dict(brief["data_request"])
         planner_json: str | None = None
         if isinstance(idea_req, dict) and idea_req:
             try:
@@ -231,6 +274,7 @@ def make_gen_sql_node(deps: GraphDeps):
             except Exception:
                 planner_json = None
         chart_ctx = (state.get("chart_thread_context") or "").strip() or None
+        allow_line = allowed_tables_prompt_line(artifact)
         prompt = build_gen_sql_user_prompt(
             mode=mode,  # type: ignore[arg-type]
             schema_block=schema_block,
@@ -244,6 +288,7 @@ def make_gen_sql_node(deps: GraphDeps):
             ledger_first=ledger_first,
             multi_table_plan=multi_table_plan,
             chart_thread_context=chart_ctx,
+            allowed_tables_line=allow_line,
         )
         if reg is None:
             sql = f"SELECT 1 AS ok LIMIT {deps.settings.sql_limit_max}"
@@ -264,17 +309,8 @@ def make_gen_sql_node(deps: GraphDeps):
             if selected_tables is not None:
                 out_none["selected_tables"] = selected_tables
             return out_none
-        _gen_sql_system = (
-            "Reply with ONLY one PostgreSQL SELECT (read-only). "
-            "No natural-language before or after the SQL (any language). "
-            "Do not apologize or explain missing data in prose—only as SQL.\n"
-            "Revenue/expense/cashflow: use financeledger with transaction_type filters; "
-            "transaction_date for periods.\n"
-            "Channel semantics (salesorders.order_channel): use WHERE order_channel = 'Retail' only when the "
-            "Agent_Idea data_request filter clearly means retail/POS/walk-in/bán lẻ/kênh lẻ. "
-            "If the brief says all channels / all orders / no retail-only wording, do NOT add a Retail-only filter "
-            "(Wholesale-heavy demo data often carries most months)."
-        )
+        allow_names = artifact.allowlist_table_names()
+        _gen_sql_system = _build_gen_sql_system(allow_names, ledger_first=ledger_first)
         client = reg.get("sql_gen")
         sql = client.invoke_text(prompt, system=_gen_sql_system)
         sql_stripped = normalize_llm_sql_output(sql)
@@ -482,11 +518,13 @@ def make_validate_sql_node(deps: GraphDeps):
         for note in notes:
             synthetic["validation_feedback"] = append_feedback(synthetic, "policy", note)
         if not ok:
-            synthetic["validation_feedback"] = append_feedback(
-                synthetic,
-                "policy",
-                detail or "invalid sql",
-            )
+            msg = detail or "invalid sql"
+            if allowlist is not None and detail and "allowlist" in detail.lower():
+                msg = (
+                    f"{msg}. Rewrite using ONLY these tables: {', '.join(sorted(allowlist))}. "
+                    "Do not reference any other table name."
+                )
+            synthetic["validation_feedback"] = append_feedback(synthetic, "policy", msg)
         if notes or not ok:
             upd["validation_feedback"] = synthetic["validation_feedback"]
         return upd
@@ -581,6 +619,18 @@ def make_fail_max_attempts_node(deps: GraphDeps):
         if existing and existing.get("error") == "schema_load_failed":
             return {}
         n = int(state.get("sql_attempt_count") or 0)
+        if chart_degrade_eligible(state):
+            emit_agent_trace(
+                logger,
+                deps.settings,
+                agent="fail_max_attempts",
+                phase="Chart degrade (giữ query_result)",
+                detail=f"attempts={n}",
+            )
+            return chart_degrade_state_patch(
+                state,
+                reason="Hết lượt thử SQL — vẽ biểu đồ từ kết quả truy vấn cuối.",
+            )
         out: dict = {
             "error_payload": {
                 "error": "max_sql_attempts",
@@ -603,20 +653,27 @@ def route_after_gen_sql(state: AgentState) -> str:
     return "sql_review"
 
 
+def _route_sql_retry(state: AgentState, kind: str) -> str:
+    decision = decide_sql_retry(state, kind=kind)  # type: ignore[arg-type]
+    if decision.action == RetryAction.REGEN_SQL:
+        return "gen_sql"
+    if decision.action == RetryAction.CHART_DEGRADE:
+        if state.get("intent") == "system_data_chart":
+            return "chart_readiness"
+        return "done"
+    return "fail_max_attempts"
+
+
 def route_after_sql_review(state: AgentState) -> str:
     if state.get("sql_review_ok"):
         return "validate_sql"
-    if can_regen_sql(state):
-        return "gen_sql"
-    return "fail_max_attempts"
+    return _route_sql_retry(state, "intent_review")
 
 
 def route_after_validate_sql(state: AgentState) -> str:
     if state.get("sql_valid"):
         return "execute_sql"
-    if can_regen_sql(state):
-        return "gen_sql"
-    return "fail_max_attempts"
+    return _route_sql_retry(state, "policy")
 
 
 def _effective_ledger_first_prompts(state: AgentState, settings: Any) -> bool:
@@ -666,6 +723,4 @@ def route_after_validate_result(state: AgentState) -> str:
         rc = meta.get("row_count")
         if isinstance(rc, int) and rc > 0:
             return "done"
-    if can_regen_sql(state):
-        return "gen_sql"
-    return "fail_max_attempts"
+    return _route_sql_retry(state, "result")

@@ -46,6 +46,7 @@ class AgentState(TypedDict, total=False):
     chart_warnings: list[str] | None
     chart_retry_hint: str | None
     chart_result_profile: dict[str, Any] | None
+    chart_degraded: bool | None
     # Ledger-first schema explorer (optional)
     schema_plan: dict[str, Any] | None
     ledger_metric_id: str | None

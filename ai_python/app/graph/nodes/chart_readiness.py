@@ -9,10 +9,15 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.graph.agent_trace import emit_agent_trace
 from app.graph.chart_data_profile import build_query_result_profile, profile_for_prompt
+from app.graph.chart_sql_shape import sql_has_time_grouping
 from app.graph.deps import GraphDeps
 from app.graph.feedback import append_feedback
 from app.graph.message_utils import latest_human_question
-from app.graph.retry import can_regen_sql
+from app.graph.retry_policy import (
+    RetryAction,
+    chart_degrade_state_patch,
+    decide_chart_readiness_retry,
+)
 from app.graph.state import AgentState
 from app.llm.schemas import ChartReadinessOutput
 
@@ -21,10 +26,11 @@ logger = logging.getLogger(__name__)
 _READINESS_SYSTEM = (
     "You judge whether SQL query results are adequate to draw the user's chart.\n"
     "You do NOT prescribe specific table names. Use the chart brief and the data profile only.\n"
-    "If the user asked for a trend / multiple months / breakdown over time, results need multiple "
-    "rows or clear categories — a single aggregate row is usually insufficient unless "
-    "expected_result_shape is single_kpi.\n"
-    "If results contradict the brief or prior assistant answer in context, set ok=false with retry_hint.\n"
+    "If executed SQL already has GROUP BY time bucketing (date_trunc/extract) and profile shows a "
+    "time-like column but only one row, set ok=true with a warning — the database may only have one "
+    "period of data; do NOT ask to rewrite SQL.\n"
+    "Set ok=false with retry_hint only when SQL is clearly wrong (no time bucket, wrong metric, "
+    "contradicts brief) — not merely because row_count is small.\n"
     "warnings: non-fatal (e.g. only one month of data but chart can still render one bar)."
 )
 
@@ -47,6 +53,7 @@ def _heuristic_readiness(
     profile: dict,
     *,
     expected_shape: str,
+    generated_sql: str | None = None,
 ) -> tuple[bool, list[str], list[str]]:
     """Lightweight shape checks — no table-name rules."""
     issues: list[str] = []
@@ -57,18 +64,26 @@ def _heuristic_readiness(
         return False, issues, warnings
 
     shape = expected_shape or ""
+    time_cols = profile.get("time_like_columns") or []
+    grouped = sql_has_time_grouping(generated_sql)
+
     if shape == "time_series" or shape == "breakdown":
-        if rc < 2:
-            issues.append(
-                f"expected multiple rows for {shape}, got row_count={rc} "
-                "(likely missing GROUP BY time/category)"
-            )
-        elif rc == 1:
-            warnings.append("only one row/bucket — chart will be a single bar/point")
+        if rc == 1:
+            if grouped or time_cols:
+                warnings.append(
+                    "only one time bucket in result — chart will be a single bar; "
+                    "SQL grouping looks correct (sparse data)"
+                )
+            else:
+                issues.append(
+                    f"expected multiple rows for {shape}, got row_count=1 "
+                    "(no time bucket in SQL — add GROUP BY period)"
+                )
+        elif rc < 2:
+            issues.append(f"expected rows for {shape}, got row_count={rc}")
     elif shape == "single_kpi" and rc > 1:
         warnings.append("multiple rows but brief expected single_kpi — chart may pick one series")
 
-    time_cols = profile.get("time_like_columns") or []
     if shape == "time_series" and rc >= 2 and not time_cols:
         warnings.append("no obvious time-like column in profile — verify x axis choice")
 
@@ -94,7 +109,12 @@ def make_chart_readiness_node(deps: GraphDeps):
         qr = state.get("query_result")
         profile = build_query_result_profile(qr)
         shape = _expected_shape(brief)
-        ok_h, issues_h, warnings_h = _heuristic_readiness(profile, expected_shape=shape)
+        sql_text = state.get("generated_sql")
+        ok_h, issues_h, warnings_h = _heuristic_readiness(
+            profile,
+            expected_shape=shape,
+            generated_sql=str(sql_text) if sql_text else None,
+        )
 
         issues = list(issues_h)
         warnings = list(warnings_h)
@@ -103,7 +123,8 @@ def make_chart_readiness_node(deps: GraphDeps):
 
         reg = deps.llm_registry
         use_critic = bool(deps.settings.chart_readiness_use_llm_critic and reg is not None)
-        if use_critic and (not ok_h or warnings_h or shape in ("time_series", "breakdown")):
+        # Critic only when heuristics fail — avoid overriding ok+warning for thin real data.
+        if use_critic and not ok_h:
             user_q = latest_human_question(state.get("messages"))
             prior = (state.get("chart_thread_context") or "")[:2000]
             sql = (state.get("generated_sql") or "")[:3000]
@@ -147,13 +168,19 @@ def make_chart_readiness_node(deps: GraphDeps):
             "chart_warnings": warnings,
             "chart_result_profile": profile,
         }
-        if not ok and retry_hint:
-            upd["chart_retry_hint"] = retry_hint
-            syn: AgentState = dict(state)
-            syn["validation_feedback"] = append_feedback(
-                syn, "result", f"chart readiness: {retry_hint}"
-            )
-            upd["validation_feedback"] = syn["validation_feedback"]
+        if not ok:
+            probe: AgentState = {**state, **upd}
+            decision = decide_chart_readiness_retry(probe)
+            if decision.action == RetryAction.CHART_DEGRADE:
+                upd.update(chart_degrade_state_patch(probe, reason=decision.reason))
+                upd["chart_data_issues"] = issues
+            elif decision.action == RetryAction.REGEN_SQL and retry_hint:
+                upd["chart_retry_hint"] = retry_hint
+                syn: AgentState = dict(state)
+                syn["validation_feedback"] = append_feedback(
+                    syn, "result", f"chart readiness: {retry_hint}"
+                )
+                upd["validation_feedback"] = syn["validation_feedback"]
         return upd
 
     return chart_readiness
@@ -179,6 +206,6 @@ def _has_usable_rows(state: AgentState) -> bool:
 def route_after_chart_readiness_in_sql(state: AgentState) -> str:
     if state.get("chart_data_ok"):
         return "done"
-    if can_regen_sql(state):
+    if decide_chart_readiness_retry(state).action == RetryAction.REGEN_SQL:
         return "gen_sql"
     return "fail_max_attempts"
