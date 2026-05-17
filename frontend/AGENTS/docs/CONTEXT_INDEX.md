@@ -21,6 +21,7 @@
 | **API_BRIDGE (nối FE ↔ BE)** | [`FE_API_CONNECTION_GUIDE.md`](FE_API_CONNECTION_GUIDE.md) **trước**, rồi [`backend/AGENTS/API_BRIDGE_AGENT_INSTRUCTIONS.md`](../../../backend/AGENTS/API_BRIDGE_AGENT_INSTRUCTIONS.md) + **một** `docs/api/API_TaskXXX_*.md` | Chỉ `grep`/`read` thêm file trong `mini-erp/src` hoặc BE theo agent; output `docs/api/bridge/BRIDGE_*.md` |
 | **PM / PM_RUN** | [`../PM_AGENT_INSTRUCTIONS.md`](../PM_AGENT_INSTRUCTIONS.md), `docs/srs/SRS_TaskXXX_*.md` đã Approved | — |
 | **Điều phối agent (meta)** | [`../AGENT_REGISTRY.md`](../AGENT_REGISTRY.md) | Chi tiết → [`../FLOW_GUIDE.md`](../FLOW_GUIDE.md) |
+| **Activity diagram (Mermaid)** | [`../ACTIVITY_DIAGRAM_AGENT_INSTRUCTIONS.md`](../ACTIVITY_DIAGRAM_AGENT_INSTRUCTIONS.md) | Có `@file` / code → chỉ đọc hàm & nhánh liên quan; lệnh Cursor `/activity-diagram` |
 | **Bug investigation (RCA, không code)** | [`backend/AGENTS/BUG_INVESTIGATOR_AGENT_INSTRUCTIONS.md`](../../../backend/AGENTS/BUG_INVESTIGATOR_AGENT_INSTRUCTIONS.md) **§4.1** — output `backend/docs/bugs/Bug_TaskNNN.md` | Trần: ≤5 `read` × ≤120 dòng, ≤3 `grep` có path hẹp, cấm explore/Glob root; index: [`FEATURES_UI_INDEX.md`](../../mini-erp/src/features/FEATURES_UI_INDEX.md) hoặc CONTEXT (một); Context7 ≤1 câu; sau Owner chốt → [`DEVELOPER_AGENT_INSTRUCTIONS.md`](../../../backend/AGENTS/DEVELOPER_AGENT_INSTRUCTIONS.md) |
 
 ---

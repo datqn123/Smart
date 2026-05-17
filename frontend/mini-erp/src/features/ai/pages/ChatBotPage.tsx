@@ -1,10 +1,40 @@
 import { useState, useRef, useEffect } from "react"
 import { usePageTitle } from "@/context/PageTitleContext"
-import { Send, Image as ImageIcon, Mic, X, Paperclip, MessageSquare, Bot, User, Loader2 } from "lucide-react"
-import type { ChatMessage } from "../types"
+import { Send, Image as ImageIcon, Mic, Paperclip, MessageSquare, Bot, User, Loader2, Volume2, StopCircle } from "lucide-react"
+import type { AiInteractionMode, ChatMessage } from "../types"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { openAiChatStream } from "../api/aiChatSse"
+import {
+  startAiChatPostStream,
+  transcribeAudio,
+  TranscribeAudioError,
+  type AiChatStreamHandle,
+} from "../api/aiChatSse"
+import {
+  convertToWav,
+  MAX_RECORDING_MS,
+  MIN_PEAK_AMPLITUDE,
+  MIN_RECORDING_SEC,
+} from "../utils/audioUtils"
+import { AiChatChartCard } from "../components/AiChatChartCard"
+import { AiChatDraftTableCard } from "../components/AiChatDraftTableCard"
+import { AiChatReceiptDraftCard } from "../components/AiChatReceiptDraftCard"
+import { AiChatQueryTableCard } from "../components/AiChatQueryTableCard"
+import { AiChatClarifyCard } from "../components/AiChatClarifyCard"
+import type { CatalogDraftTablePayload } from "../api/aiCatalogDraftApi"
+import type { DomainClarifyPayload } from "../api/aiDomainClarifyTypes"
+import type { InventoryReceiptDraftPayload } from "../api/aiInventoryDraftApi"
+import type { QueryTablePayload } from "../api/aiQueryTableTypes"
+import { cn } from "@/lib/utils"
+import { useTextToSpeech } from "../hooks/useTextToSpeech"
+
+const INTERACTION_MODES: { id: AiInteractionMode; label: string }[] = [
+  { id: "auto", label: "Tự động" },
+  { id: "data_query", label: "Hỏi dữ liệu" },
+  { id: "data_table", label: "Bảng kết quả" },
+  { id: "chart", label: "Biểu đồ" },
+  { id: "catalog_draft", label: "Tạo bảng nhập" },
+  { id: "inventory_draft", label: "Phiếu nhập kho" },
+]
 
 export function ChatBotPage() {
   const { setTitle } = usePageTitle()
@@ -14,17 +44,36 @@ export function ChatBotPage() {
     {
       id: "1",
       role: "assistant",
-      content: "Xin chào! Tôi là trợ lý AI của Mini ERP. Tôi có thể giúp bạn kiểm tra tồn kho, xử lý đơn hàng bằng hình ảnh hoặc ghi nhận dữ liệu bằng giọng nói. Bạn cần hỗ trợ gì không?",
+      content:
+        "Xin chào. Tôi là trợ lý AI Mini ERP — trả lời qua Spring và dịch vụ Python (dữ liệu SQL read-only khi bạn hỏi số liệu). Hãy nhập câu hỏi bằng chữ.",
       timestamp: new Date().toISOString(),
       type: "text"
     }
   ])
   const [inputValue, setInputValue] = useState("")
+  const [interactionMode, setInteractionMode] = useState<AiInteractionMode>("auto")
   const [isTyping, setIsTyping] = useState(false)
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null)
+  const { speak, stop, isSpeaking, isLoading: isTtsLoading, supported: ttsSupported } = useTextToSpeech()
   const [isRecording, setIsRecording] = useState(false)
+  const [isTranscribing, setIsTranscribing] = useState(false)
+  const [progressText, setProgressText] = useState("")
+  const [recordingSeconds, setRecordingSeconds] = useState(0)
+  const [conversationId] = useState(() => {
+    const fromStorage = window.sessionStorage.getItem("ai_chat_conversation_id")
+    if (fromStorage && fromStorage.trim().length > 0) return fromStorage
+    const cid = crypto.randomUUID()
+    window.sessionStorage.setItem("ai_chat_conversation_id", cid)
+    return cid
+  })
   const chatEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const streamRef = useRef<EventSource | null>(null)
+  const streamRef = useRef<AiChatStreamHandle | null>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
+  const micStreamRef = useRef<MediaStream | null>(null)
+  const recordingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const recordingTickRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const scrollToBottom = () => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -33,9 +82,30 @@ export function ChatBotPage() {
   useEffect(() => { scrollToBottom() }, [messages])
 
   useEffect(() => {
+    if (isTyping && speakingMessageId) {
+      stop()
+      setSpeakingMessageId(null)
+    }
+  }, [isTyping, speakingMessageId, stop])
+
+  const handleSpeak = (msg: ChatMessage) => {
+    if (speakingMessageId === msg.id && (isSpeaking || isTtsLoading)) {
+      stop()
+      setSpeakingMessageId(null)
+    } else {
+      setSpeakingMessageId(msg.id)
+      void speak(msg.content)
+    }
+  }
+
+  useEffect(() => {
     return () => {
-      streamRef.current?.close()
+      streamRef.current?.abort()
       streamRef.current = null
+      if (recordingTimerRef.current) clearTimeout(recordingTimerRef.current)
+      if (recordingTickRef.current) clearInterval(recordingTickRef.current)
+      mediaRecorderRef.current?.stop()
+      micStreamRef.current?.getTracks().forEach((t) => t.stop())
     }
   }, [])
 
@@ -46,8 +116,8 @@ export function ChatBotPage() {
     const first = delta.slice(0, 1)
 
     // Punctuation rules: no space before closing punctuations, and no space after opening punctuations.
-    const noSpaceBefore = /[,\.\!\?\:\;\)\]\}]/.test(first)
-    const noSpaceAfter = /[\(\[\{]/.test(last)
+    const noSpaceBefore = ",.!?:;)]}".includes(first)
+    const noSpaceAfter = "([{".includes(last)
     if (noSpaceBefore || noSpaceAfter) return `${current}${delta}`
 
     const isLetter = (c: string) => /[A-Za-zÀ-ỹ]/.test(c)
@@ -56,7 +126,7 @@ export function ChatBotPage() {
 
     // Add a space after punctuation when the next chunk starts a word.
     // Example: "Xin chào!" + "Rất vui..." => "Xin chào! Rất vui..."
-    const spaceAfterPunct = /[,\.\!\?\:\;]/.test(last) && isWordish(first)
+    const spaceAfterPunct = ",.!?:;".includes(last) && isWordish(first)
     if (spaceAfterPunct) return `${current} ${delta}`
 
     // Do not insert spaces inside numbers like 2024.
@@ -67,37 +137,11 @@ export function ChatBotPage() {
     return needsSpace ? `${current} ${delta}` : `${current}${delta}`
   }
 
-  const handleSend = (text?: string, type: "text" | "image" | "voice" = "text", metadata?: any) => {
-    const content = text || inputValue
-    if (!content && type === "text") return
-
-    const newMessage: ChatMessage = {
-      id: Date.now().toString(),
-      role: "user",
-      content,
-      timestamp: new Date().toISOString(),
-      type,
-      metadata
-    }
-
-    setMessages(prev => [...prev, newMessage])
-    if (type === "text") setInputValue("")
-    
-    if (type !== "text") {
-      const assistantMsg: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: "Phiên bản hiện tại chỉ hỗ trợ chat text.",
-        timestamp: new Date().toISOString(),
-        type: "text",
-      }
-      setMessages(prev => [...prev, assistantMsg])
-      return
-    }
-
-    streamRef.current?.close()
+  const startAssistantStream = (query: string, options?: { autoSpeakOnComplete?: boolean }) => {
+    streamRef.current?.abort()
     streamRef.current = null
 
+    const autoSpeak = options?.autoSpeakOnComplete ?? false
     const assistantId = (Date.now() + 1).toString()
     const assistantMsg: ChatMessage = {
       id: assistantId,
@@ -109,28 +153,257 @@ export function ChatBotPage() {
 
     setMessages(prev => [...prev, assistantMsg])
     setIsTyping(true)
+    setProgressText("Đang xử lý...")
 
-    streamRef.current = openAiChatStream({
-      query: content,
+    let firstDeltaReceived = false
+    streamRef.current = startAiChatPostStream({
+      query,
+      conversationId,
+      interactionMode,
+      onProgress: (text) => {
+        setProgressText(text)
+      },
       onDelta: (delta) => {
+        if (!firstDeltaReceived) {
+          firstDeltaReceived = true
+          setProgressText("")
+        }
         setMessages(prev =>
           prev.map(m =>
             m.id === assistantId ? { ...m, content: appendDeltaSmart(m.content ?? "", delta) } : m
           )
         )
       },
+      onChart: (spec) => {
+        setProgressText("")
+        setMessages(prev =>
+          prev.map(m =>
+            m.id === assistantId
+              ? { ...m, metadata: { ...m.metadata, chartSpec: spec } }
+              : m
+          )
+        )
+      },
+      onDraft: (payload: CatalogDraftTablePayload) => {
+        setProgressText("")
+        setMessages(prev =>
+          prev.map(m =>
+            m.id === assistantId
+              ? { ...m, metadata: { ...m.metadata, draftTable: payload } }
+              : m
+          )
+        )
+      },
+      onInventoryDraft: (payload: InventoryReceiptDraftPayload) => {
+        setProgressText("")
+        setMessages(prev =>
+          prev.map(m =>
+            m.id === assistantId
+              ? { ...m, metadata: { ...m.metadata, inventoryDraft: payload } }
+              : m
+          )
+        )
+      },
+      onDataTable: (payload: QueryTablePayload) => {
+        setProgressText("")
+        setMessages(prev =>
+          prev.map(m =>
+            m.id === assistantId
+              ? { ...m, metadata: { ...m.metadata, queryTable: payload } }
+              : m
+          )
+        )
+      },
+      onClarify: (payload: DomainClarifyPayload) => {
+        setProgressText("")
+        const intro = (payload.assistantIntro || "").trim().replace(/\*\*/g, "")
+        setMessages(prev =>
+          prev.map(m =>
+            m.id === assistantId
+              ? {
+                  ...m,
+                  content: m.content?.trim() ? m.content : intro,
+                  metadata: { ...m.metadata, domainClarify: payload },
+                }
+              : m
+          )
+        )
+      },
       onDone: () => {
         setIsTyping(false)
+        setProgressText("")
         streamRef.current = null
+        if (autoSpeak) {
+          setMessages((prev) => {
+            const msg = prev.find((m) => m.id === assistantId)
+            if (msg?.content?.trim() && ttsSupported) {
+              setSpeakingMessageId(assistantId)
+              void speak(msg.content)
+            }
+            return prev
+          })
+        }
       },
       onError: (message) => {
         setIsTyping(false)
+        setProgressText("")
         setMessages(prev =>
           prev.map(m => (m.id === assistantId ? { ...m, content: message || "Không thể kết nối trợ lý AI." } : m))
         )
         streamRef.current = null
       },
     })
+  }
+
+  const handleSend = (text?: string, type: "text" | "image" | "voice" = "text", metadata?: ChatMessage["metadata"]) => {
+    const content = (text ?? inputValue).trim()
+    if (!content && type === "text") return
+    if (!content && type === "voice") return
+
+    if (speakingMessageId) {
+      stop()
+      setSpeakingMessageId(null)
+    }
+    setProgressText("")
+
+    const newMessage: ChatMessage = {
+      id: Date.now().toString(),
+      role: "user",
+      content,
+      timestamp: new Date().toISOString(),
+      type,
+      metadata,
+    }
+
+    setMessages((prev) => [...prev, newMessage])
+    if (type === "text") setInputValue("")
+
+    const autoSpeakReply = type === "voice"
+
+    if (type === "image") {
+      const assistantMsg: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: "Phiên bản hiện tại chỉ hỗ trợ chat text.",
+        timestamp: new Date().toISOString(),
+        type: "text",
+      }
+      setMessages((prev) => [...prev, assistantMsg])
+      return
+    }
+
+    startAssistantStream(content, { autoSpeakOnComplete: autoSpeakReply })
+  }
+
+  const stopRecordingTimers = () => {
+    if (recordingTimerRef.current) {
+      clearTimeout(recordingTimerRef.current)
+      recordingTimerRef.current = null
+    }
+    if (recordingTickRef.current) {
+      clearInterval(recordingTickRef.current)
+      recordingTickRef.current = null
+    }
+  }
+
+  const toggleRecording = async () => {
+    if (isTranscribing || isTyping) return
+
+    if (isRecording) {
+      mediaRecorderRef.current?.stop()
+      setIsRecording(false)
+      stopRecordingTimers()
+      return
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      micStreamRef.current = stream
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : "audio/webm"
+      const recorder = new MediaRecorder(stream, { mimeType })
+      audioChunksRef.current = []
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data)
+      }
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop())
+        micStreamRef.current = null
+        stopRecordingTimers()
+        setRecordingSeconds(0)
+        const chunks = audioChunksRef.current
+        audioChunksRef.current = []
+        if (chunks.length === 0) return
+        setIsTranscribing(true)
+        try {
+          const webmBlob = new Blob(chunks, { type: mimeType })
+          const { wav: wavBlob, durationSec, peak } = await convertToWav(webmBlob)
+          if (durationSec < MIN_RECORDING_SEC) {
+            throw new TranscribeAudioError(
+              "validation",
+              "Ghi âm quá ngắn. Hãy giữ nút mic và nói ít nhất 1 giây."
+            )
+          }
+          if (peak < MIN_PEAK_AMPLITUDE) {
+            throw new TranscribeAudioError(
+              "validation",
+              "Không phát hiện giọng nói. Hãy nói rõ hơn, gần microphone hơn."
+            )
+          }
+          const { transcript } = await transcribeAudio(wavBlob, { language: "vi" })
+          const voiceUrl = URL.createObjectURL(wavBlob)
+          handleSend(transcript, "voice", { voiceUrl })
+        } catch (err) {
+          const message =
+            err instanceof TranscribeAudioError
+              ? err.message
+              : err instanceof DOMException && err.name === "NotAllowedError"
+                ? "Vui lòng cấp quyền truy cập microphone để sử dụng tính năng ghi âm."
+                : "Không thể chuyển giọng thành văn bản. Vui lòng thử lại."
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: (Date.now() + 1).toString(),
+              role: "assistant",
+              content: message,
+              timestamp: new Date().toISOString(),
+              type: "text",
+            },
+          ])
+        } finally {
+          setIsTranscribing(false)
+        }
+      }
+      recorder.start()
+      mediaRecorderRef.current = recorder
+      setIsRecording(true)
+      setRecordingSeconds(0)
+      recordingTickRef.current = setInterval(() => {
+        setRecordingSeconds((s) => s + 1)
+      }, 1000)
+      recordingTimerRef.current = setTimeout(() => {
+        if (mediaRecorderRef.current?.state === "recording") {
+          mediaRecorderRef.current.stop()
+          setIsRecording(false)
+        }
+      }, MAX_RECORDING_MS)
+    } catch (err) {
+      const message =
+        err instanceof DOMException && err.name === "NotAllowedError"
+          ? "Vui lòng cấp quyền truy cập microphone để sử dụng tính năng ghi âm."
+          : "Không thể bắt đầu ghi âm. Vui lòng thử lại."
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          role: "assistant",
+          content: message,
+          timestamp: new Date().toISOString(),
+          type: "text",
+        },
+      ])
+    }
   }
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -145,14 +418,7 @@ export function ChatBotPage() {
     }
   }
 
-  const toggleRecording = () => {
-    if (isRecording) {
-      setIsRecording(false)
-      handleSend("Nhập kho 50 thùng sữa Vinamilk lô A kệ B2", "voice")
-    } else {
-      setIsRecording(true)
-    }
-  }
+  const inputBusy = isTyping || isTranscribing || isRecording
 
   return (
     <div className="flex flex-col h-full bg-slate-50 overflow-hidden relative">
@@ -179,18 +445,36 @@ export function ChatBotPage() {
 
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 scroll-smooth scrollbar-hide">
-        {messages.map((msg) => (
-          <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-            <div className={`flex gap-3 max-w-[85%] sm:max-w-[70%] ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
-              {/* Avatar */}
+        {messages.map((msg) => {
+          const hasChart = msg.role === "assistant" && Boolean(msg.metadata?.chartSpec)
+          const hasDraft = msg.role === "assistant" && Boolean(msg.metadata?.draftTable)
+          const hasInventoryDraft = msg.role === "assistant" && Boolean(msg.metadata?.inventoryDraft)
+          const hasQueryTable = msg.role === "assistant" && Boolean(msg.metadata?.queryTable)
+          const hasClarify = msg.role === "assistant" && Boolean(msg.metadata?.domainClarify)
+          const hasArtifact =
+            hasChart || hasDraft || hasInventoryDraft || hasQueryTable || hasClarify
+          const fullBleedArtifact =
+            msg.role === "assistant" &&
+            (hasDraft || hasInventoryDraft || hasQueryTable || hasChart)
+          const layoutClass = fullBleedArtifact
+            ? "w-full max-w-[min(1100px,100%)]"
+            : hasArtifact
+              ? "max-w-[96%] sm:max-w-[min(720px,92%)]"
+              : "max-w-[85%] sm:max-w-[70%]"
+          const assistantText = (msg.content ?? "").replace(/\*\*/g, "")
+          return (
+          <div key={msg.id} className={`flex w-full ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+            <div className={`flex gap-3 min-w-0 ${layoutClass} ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
+              {!fullBleedArtifact ? (
               <div className={`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
                 msg.role === "assistant" ? "bg-blue-600 text-white" : "bg-slate-200 text-slate-600"
               }`}>
                 {msg.role === "assistant" ? <Bot className="h-5 w-5" /> : <User className="h-5 w-5" />}
               </div>
+              ) : null}
 
               {/* Message Content */}
-              <div className="space-y-1">
+              <div className="min-w-0 flex-1 space-y-2">
                 <div className={`px-4 py-3 rounded-2xl text-[15px] leading-relaxed shadow-sm ${
                   msg.role === "user" 
                     ? "bg-blue-600 text-white rounded-tr-none" 
@@ -210,15 +494,75 @@ export function ChatBotPage() {
                         <span className="text-[10px] font-bold uppercase tracking-wider">0:05</span>
                      </div>
                   )}
-                  {msg.content}
+                  {msg.role === "assistant" && !hasClarify ? (
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="whitespace-pre-line break-words flex-1">{assistantText}</span>
+                      {ttsSupported && msg.content.trim() && !isTyping ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleSpeak(msg)}
+                          disabled={isTtsLoading && speakingMessageId !== msg.id}
+                          className={cn(
+                            "shrink-0 min-h-[44px] min-w-[44px] rounded-lg",
+                            speakingMessageId === msg.id && (isSpeaking || isTtsLoading)
+                              ? "bg-blue-100 text-blue-600 animate-pulse"
+                              : "text-slate-400 hover:bg-slate-100 hover:text-blue-600"
+                          )}
+                          title={
+                            speakingMessageId === msg.id && (isSpeaking || isTtsLoading)
+                              ? "Dừng đọc"
+                              : "Đọc tin nhắn"
+                          }
+                          aria-label={
+                            speakingMessageId === msg.id && (isSpeaking || isTtsLoading)
+                              ? "Dừng đọc"
+                              : "Đọc tin nhắn"
+                          }
+                        >
+                          {speakingMessageId === msg.id && isTtsLoading ? (
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                          ) : speakingMessageId === msg.id && isSpeaking ? (
+                            <StopCircle className="h-5 w-5" />
+                          ) : (
+                            <Volume2 className="h-5 w-5" />
+                          )}
+                        </Button>
+                      ) : null}
+                    </div>
+                  ) : msg.role === "assistant" && hasClarify ? null : (
+                    msg.content
+                  )}
                 </div>
+                {hasChart ? (
+                  <AiChatChartCard spec={msg.metadata!.chartSpec as Record<string, unknown>} />
+                ) : null}
+                {hasDraft && msg.metadata?.draftTable ? (
+                  <AiChatDraftTableCard initial={msg.metadata.draftTable} />
+                ) : null}
+                {hasInventoryDraft && msg.metadata?.inventoryDraft ? (
+                  <AiChatReceiptDraftCard initial={msg.metadata.inventoryDraft} />
+                ) : null}
+                {hasQueryTable && msg.metadata?.queryTable ? (
+                  <AiChatQueryTableCard payload={msg.metadata.queryTable} />
+                ) : null}
+                {hasClarify && msg.metadata?.domainClarify ? (
+                  <AiChatClarifyCard
+                    payload={msg.metadata.domainClarify}
+                    onPickSuggestion={(text) => {
+                      setInputValue(text)
+                      handleSend(text)
+                    }}
+                  />
+                ) : null}
                 <div className={`text-[10px] font-bold uppercase tracking-widest text-slate-400 ${msg.role === "user" ? "text-right" : "text-left"}`}>
                   {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </div>
               </div>
             </div>
           </div>
-        ))}
+        )})}
 
         {isTyping && (
           <div className="flex justify-start">
@@ -240,15 +584,51 @@ export function ChatBotPage() {
       {/* Input Area */}
       <div className="p-4 md:p-6 bg-white border-t border-slate-200 z-10">
         <div className="max-w-4xl mx-auto flex flex-col gap-3">
+           <div className="flex flex-wrap gap-2">
+             {INTERACTION_MODES.map((mode) => (
+               <button
+                 key={mode.id}
+                 type="button"
+                 disabled={inputBusy}
+                 onClick={() => setInteractionMode(mode.id)}
+                 className={cn(
+                   "rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
+                   interactionMode === mode.id
+                     ? "border-blue-600 bg-blue-600 text-white shadow-sm"
+                     : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                 )}
+               >
+                 {mode.label}
+               </button>
+             ))}
+           </div>
            {isRecording && (
               <div className="flex items-center justify-between px-4 py-2 bg-rose-50 border border-rose-100 rounded-xl animate-pulse">
                 <div className="flex items-center gap-3">
                    <div className="h-2 w-2 bg-rose-500 rounded-full shadow-[0_0_8px_rgba(244,63,94,0.6)]" />
                    <span className="text-xs font-bold text-rose-600 uppercase tracking-widest">Đang thu âm...</span>
                 </div>
-                <span className="text-xs font-mono font-bold text-rose-500">0:04</span>
+                <span className="text-xs font-mono font-bold text-rose-500">
+                  {Math.floor(recordingSeconds / 60)}:{String(recordingSeconds % 60).padStart(2, "0")}
+                </span>
               </div>
            )}
+           {isTranscribing && (
+               <div className="flex items-center gap-3 px-4 py-2 bg-blue-50 border border-blue-100 rounded-xl">
+                 <Loader2 className="h-4 w-4 text-blue-600 animate-spin" />
+                 <span className="text-xs font-bold text-blue-700 uppercase tracking-widest">
+                   Đang chuyển giọng thành văn bản...
+                 </span>
+               </div>
+            )}
+            {progressText && (
+               <div className="flex items-center gap-3 px-4 py-2 bg-amber-50 border border-amber-100 rounded-xl">
+                 <Loader2 className="h-4 w-4 text-amber-600 animate-spin" />
+                 <span className="text-xs font-semibold text-amber-700">
+                   {progressText}
+                 </span>
+               </div>
+            )}
            
            <div className="flex items-end gap-2 bg-slate-50 border border-slate-200 rounded-2xl p-2 focus-within:ring-1 focus-within:ring-blue-500/20 focus-within:border-blue-400/50 transition-all duration-300">
             <div className="flex items-center">
@@ -278,8 +658,9 @@ export function ChatBotPage() {
             
             <textarea
               className="flex-1 max-h-32 min-h-[40px] bg-transparent border-none focus:ring-0 text-[15px] py-2 px-3 text-slate-700 placeholder:text-slate-400 resize-none leading-relaxed transition-all"
-              placeholder="Hỏi trợ lý, quét hóa đơn hoặc ra lệnh giọng nói..."
+              placeholder="Hỏi trợ lý bằng chữ (ví dụ: thống kê đơn hàng, tồn kho)..."
               rows={1}
+              disabled={inputBusy}
               value={inputValue}
               onChange={(e) => {
                 setInputValue(e.target.value);
@@ -300,12 +681,21 @@ export function ChatBotPage() {
                <Button 
                  variant="ghost" 
                  size="icon" 
+                 disabled={inputBusy && !isRecording}
                  className={`h-10 w-10 transition-all rounded-xl ${
-                   isRecording ? "bg-rose-100 text-rose-600 animate-pulse" : "text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                   isRecording
+                     ? "bg-rose-100 text-rose-600 animate-pulse"
+                     : isTranscribing
+                       ? "bg-blue-100 text-blue-600"
+                       : "text-slate-400 hover:text-rose-600 hover:bg-rose-50"
                  }`}
                  onClick={toggleRecording}
                >
-                 <Mic className="h-5 w-5" />
+                 {isTranscribing ? (
+                   <Loader2 className="h-5 w-5 animate-spin" />
+                 ) : (
+                   <Mic className="h-5 w-5" />
+                 )}
                </Button>
                <Button 
                  size="icon" 
@@ -313,7 +703,7 @@ export function ChatBotPage() {
                    inputValue.trim() ? "bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200" : "bg-slate-200 text-slate-400 shadow-none cursor-not-allowed"
                  }`}
                  onClick={() => handleSend()}
-                 disabled={!inputValue.trim()}
+                 disabled={!inputValue.trim() || inputBusy}
                >
                  <Send className="h-5 w-5" />
                </Button>

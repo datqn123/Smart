@@ -309,11 +309,11 @@ public class SalesOrderJdbcRepository {
 	/** Sau PATCH — lấy số tiều và kênh để ghi sổ cái khớp DB. */
 	public Optional<OrderFinancialRow> loadOrderFinancialForLedger(int id) {
 		String sql = """
-				SELECT id, order_channel, order_code, payment_status, total_amount, discount_amount
+				SELECT id, order_channel, order_code, status, payment_status, total_amount, discount_amount
 				FROM salesorders WHERE id = :id
 				""";
 		List<OrderFinancialRow> rows = namedJdbc.query(sql, Map.of("id", id), (rs, rn) -> new OrderFinancialRow(
-				rs.getInt("id"), rs.getString("order_channel"), rs.getString("order_code"),
+				rs.getInt("id"), rs.getString("order_channel"), rs.getString("order_code"), rs.getString("status"),
 				rs.getString("payment_status"), rs.getBigDecimal("total_amount"), rs.getBigDecimal("discount_amount")));
 		return rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst());
 	}
@@ -413,7 +413,7 @@ public class SalesOrderJdbcRepository {
 			BigDecimal totalAmount, BigDecimal discountAmount, Instant cancelledAt, Integer cancelledBy, Integer voucherId) {
 	}
 
-	public record OrderFinancialRow(int id, String orderChannel, String orderCode, String paymentStatus,
+	public record OrderFinancialRow(int id, String orderChannel, String orderCode, String status, String paymentStatus,
 			BigDecimal totalAmount, BigDecimal discountAmount) {
 	}
 

@@ -23,6 +23,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.smart_erp.auth.repository.SystemLogJdbcRepository;
 import com.example.smart_erp.common.api.ApiErrorCode;
 import com.example.smart_erp.common.exception.BusinessException;
+import com.example.smart_erp.finance.ledger.BusinessFinanceLedgerPostingService;
 import com.example.smart_erp.inventory.receipts.lifecycle.StockReceiptLifecycleJdbcRepository.ReceiptHeaderLockRow;
 import com.example.smart_erp.inventory.receipts.response.StockReceiptViewData;
 
@@ -41,13 +42,16 @@ public class StockReceiptLifecycleService {
 
 	private final StockReceiptNotifier stockReceiptNotifier;
 
+	private final BusinessFinanceLedgerPostingService financeLedgerPostingService;
+
 	public StockReceiptLifecycleService(StockReceiptLifecycleJdbcRepository repo,
 			SystemLogJdbcRepository systemLogJdbcRepository, ObjectMapper objectMapper,
-			StockReceiptNotifier stockReceiptNotifier) {
+			StockReceiptNotifier stockReceiptNotifier, BusinessFinanceLedgerPostingService financeLedgerPostingService) {
 		this.repo = repo;
 		this.systemLogJdbcRepository = systemLogJdbcRepository;
 		this.objectMapper = objectMapper;
 		this.stockReceiptNotifier = stockReceiptNotifier;
+		this.financeLedgerPostingService = financeLedgerPostingService;
 	}
 
 	@Transactional
@@ -202,9 +206,9 @@ public class StockReceiptLifecycleService {
 			String note = "Phiếu " + h.receiptCode();
 			repo.insertInventoryLog(d.productId(), baseQty, baseUnitId, approverId, id, req.inboundLocationId(), note);
 		}
-		BigDecimal ledgerAmount = h.totalAmount().negate();
-		repo.insertFinancePurchaseCost(h.receiptDate(), (int) id, ledgerAmount, "Nhập kho " + h.receiptCode(), approverId);
 		repo.updateApprove(id, approverId);
+		financeLedgerPostingService.postStockReceiptPurchaseCostIfAbsent(h.receiptDate(), (int) id, h.totalAmount(),
+				h.receiptCode(), approverId);
 		writeStockReceiptAudit(approverId, "STOCK_RECEIPT_APPROVE", "Phê duyệt phiếu nhập kho " + h.receiptCode(),
 				Map.of("receiptId", id, "receiptCode", h.receiptCode(), "inboundLocationId", req.inboundLocationId()));
 		return loadOrThrow(id);

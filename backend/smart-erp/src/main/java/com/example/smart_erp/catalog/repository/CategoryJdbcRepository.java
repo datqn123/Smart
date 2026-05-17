@@ -50,6 +50,40 @@ public class CategoryJdbcRepository {
 		return namedJdbc.query(sql.toString(), p, FLAT_ROW_MAPPER);
 	}
 
+	/** Exact name match (case-insensitive); empty if none or ambiguous. */
+	public Optional<Long> findActiveIdByExactNameIgnoreCase(String name) {
+		if (name == null || name.isBlank()) {
+			return Optional.empty();
+		}
+		String sql = """
+				SELECT id FROM categories
+				WHERE deleted_at IS NULL AND status = 'Active'
+				  AND LOWER(TRIM(name)) = LOWER(TRIM(:name))
+				""";
+		List<Long> ids = namedJdbc.query(sql, Map.of("name", name.trim()), (rs, rowNum) -> rs.getLong("id"));
+		if (ids.size() == 1) {
+			return Optional.of(ids.getFirst());
+		}
+		return Optional.empty();
+	}
+
+	/** Exact category_code match among active (non-deleted) rows. */
+	public Optional<Long> findActiveIdByExactCode(String categoryCode) {
+		if (categoryCode == null || categoryCode.isBlank()) {
+			return Optional.empty();
+		}
+		String sql = """
+				SELECT id FROM categories
+				WHERE deleted_at IS NULL AND status = 'Active' AND category_code = :code
+				""";
+		List<Long> ids = namedJdbc.query(sql, Map.of("code", categoryCode.trim()), (rs, rowNum) -> rs.getLong("id"));
+		return ids.isEmpty() ? Optional.empty() : Optional.of(ids.getFirst());
+	}
+
+	public boolean existsActiveWithNameIgnoreCase(String name) {
+		return findActiveIdByExactNameIgnoreCase(name).isPresent();
+	}
+
 	public Optional<CategoryFlatRow> findActiveById(long id) {
 		String sql = """
 				SELECT c.id, c.category_code, c.name, c.description, c.parent_id, c.sort_order, c.status,

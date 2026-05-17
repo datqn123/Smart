@@ -23,8 +23,10 @@ import com.example.smart_erp.inventory.dispatch.response.StockDispatchDetailData
 import com.example.smart_erp.inventory.dispatch.response.StockDispatchDetailLineData;
 import com.example.smart_erp.inventory.dispatch.response.StockDispatchListItemData;
 import com.example.smart_erp.inventory.dispatch.response.StockDispatchListPageData;
+import com.example.smart_erp.finance.ledger.BusinessFinanceLedgerPostingService;
 import com.example.smart_erp.finance.ledger.dispatch.DispatchLedgerPostingService;
 import com.example.smart_erp.inventory.receipts.lifecycle.StockReceiptAccessPolicy;
+import com.example.smart_erp.sales.repository.SalesOrderJdbcRepository;
 import com.example.smart_erp.sales.stock.RetailStockJdbcRepository;
 
 @Service
@@ -35,12 +37,20 @@ public class ManualStockDispatchService {
 	private final StockDispatchNotifier dispatchNotifier;
 	private final DispatchLedgerPostingService dispatchLedgerPostingService;
 
+	private final BusinessFinanceLedgerPostingService financeLedgerPostingService;
+
+	private final SalesOrderJdbcRepository salesOrderJdbcRepository;
+
 	public ManualStockDispatchService(StockDispatchJdbcRepository dispatchRepo, RetailStockJdbcRepository retailStockRepo,
-			StockDispatchNotifier dispatchNotifier, DispatchLedgerPostingService dispatchLedgerPostingService) {
+			StockDispatchNotifier dispatchNotifier, DispatchLedgerPostingService dispatchLedgerPostingService,
+			BusinessFinanceLedgerPostingService financeLedgerPostingService,
+			SalesOrderJdbcRepository salesOrderJdbcRepository) {
 		this.dispatchRepo = dispatchRepo;
 		this.retailStockRepo = retailStockRepo;
 		this.dispatchNotifier = dispatchNotifier;
 		this.dispatchLedgerPostingService = dispatchLedgerPostingService;
+		this.financeLedgerPostingService = financeLedgerPostingService;
+		this.salesOrderJdbcRepository = salesOrderJdbcRepository;
 	}
 
 	@Transactional(readOnly = true)
@@ -405,6 +415,8 @@ public class ManualStockDispatchService {
 		}
 		dispatchRepo.updateDispatchStatus(dispatchId, ManualDispatchStatuses.DELIVERED);
 		dispatchLedgerPostingService.postPrimaryCogsIfAbsent(dispatchId, userId);
+		dispatchRepo.findOrderIdByDispatchId(dispatchId).flatMap(salesOrderJdbcRepository::loadOrderFinancialForLedger)
+				.ifPresent(fin -> financeLedgerPostingService.tryPostOrderLedgerOnFinancialState(fin, userId));
 	}
 
 	private static boolean isManualForwardAllowed(String curr, String next) {
