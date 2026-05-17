@@ -130,6 +130,18 @@ def _build_state(
     state["catalog_draft_payload"] = None
     state["catalog_draft_id"] = None
     state["catalog_draft_sse"] = None
+    state["inventory_doc_type"] = None
+    state["inventory_line_count_hint"] = None
+    state["inventory_draft_payload"] = None
+    state["inventory_draft_id"] = None
+    state["inventory_draft_sse"] = None
+    state["interaction_mode"] = request.options.interaction_mode
+    state["show_query_table"] = None
+    state["query_table_sse"] = None
+    state["domain_guard_action"] = None
+    state["normalized_user_question"] = None
+    state["domain_context"] = None
+    state["domain_clarify_sse"] = None
     state["spring_bearer_token"] = bearer_token
     return state
 

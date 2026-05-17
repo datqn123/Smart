@@ -160,6 +160,9 @@ async def stream_chat(
         prev_answer = ""
         chart_sent = False
         draft_sent = False
+        inventory_draft_sent = False
+        data_table_sent = False
+        clarify_sent = False
         bearer = authorization
         final_error: dict[str, Any] | None = None
         try:
@@ -169,6 +172,14 @@ async def stream_chat(
                 bearer_token=bearer,
             ):
                 update = _extract_partial_update(chunk)
+                clarify_spec = update.get("domain_clarify_sse")
+                if not clarify_sent and isinstance(clarify_spec, dict) and clarify_spec:
+                    try:
+                        clarify_payload = json.dumps(clarify_spec, ensure_ascii=False)
+                    except (TypeError, ValueError):
+                        clarify_payload = "{}"
+                    yield _sse_ui_event("clarify", clarify_payload)
+                    clarify_sent = True
                 spec = update.get("chart_spec_final")
                 if not chart_sent and isinstance(spec, dict) and spec:
                     try:
@@ -185,7 +196,23 @@ async def stream_chat(
                         draft_payload = "{}"
                     yield _sse_ui_event("draft", draft_payload)
                     draft_sent = True
-                if "final_answer" in update and update["final_answer"]:
+                inv_draft_spec = update.get("inventory_draft_sse")
+                if not inventory_draft_sent and isinstance(inv_draft_spec, dict) and inv_draft_spec:
+                    try:
+                        inv_payload = json.dumps(inv_draft_spec, ensure_ascii=False)
+                    except (TypeError, ValueError):
+                        inv_payload = "{}"
+                    yield _sse_ui_event("inventory_draft", inv_payload)
+                    inventory_draft_sent = True
+                table_spec = update.get("query_table_sse")
+                if not data_table_sent and isinstance(table_spec, dict) and table_spec:
+                    try:
+                        table_payload = json.dumps(table_spec, ensure_ascii=False)
+                    except (TypeError, ValueError):
+                        table_payload = "{}"
+                    yield _sse_ui_event("data_table", table_payload)
+                    data_table_sent = True
+                if "final_answer" in update and update["final_answer"] and not clarify_sent:
                     current = str(update["final_answer"])
                     if current.startswith(prev_answer) and len(current) > len(prev_answer):
                         delta = current[len(prev_answer) :]

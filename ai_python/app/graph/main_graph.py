@@ -13,12 +13,17 @@ from app.graph.nodes.chart_report import (
     make_agent_idea_node,
     make_agent_review_node,
     make_chart_fail_message_node,
+)
+from app.graph.nodes.query_table import (
+    make_emit_query_table_node,
     route_after_sql_branch,
 )
 from app.graph.nodes.chat_normal import make_chat_normal_node
+from app.graph.nodes.domain_guard import make_domain_guard_node, route_after_domain_guard
 from app.graph.nodes.intent import make_intent_node, route_after_intent
 from app.graph.nodes.summarize import make_summarize_answer_node
 from app.graph.catalog_draft_subgraph import build_catalog_draft_subgraph
+from app.graph.inventory_draft_subgraph import build_inventory_draft_subgraph
 from app.graph.sql_subgraph import build_sql_subgraph
 from app.graph.state import AgentState
 
@@ -27,17 +32,29 @@ def build_main_graph(deps: GraphDeps):
     g = StateGraph(AgentState)
     sql_inner = build_sql_subgraph(deps)
     catalog_inner = build_catalog_draft_subgraph(deps)
+    inventory_inner = build_inventory_draft_subgraph(deps)
+    g.add_node("domain_guard", make_domain_guard_node(deps))
     g.add_node("classify_intent", make_intent_node(deps))
     g.add_node("chat_normal", make_chat_normal_node(deps))
     g.add_node("catalog_draft_branch", catalog_inner.compile())
+    g.add_node("inventory_draft_branch", inventory_inner.compile())
     g.add_node("agent_idea", make_agent_idea_node(deps))
     g.add_node("sql_branch", sql_inner.compile())
     g.add_node("agent_chart", make_agent_chart_node(deps))
     g.add_node("agent_review", make_agent_review_node(deps))
     g.add_node("chart_fail_message", make_chart_fail_message_node(deps))
+    g.add_node("emit_query_table", make_emit_query_table_node(deps))
     g.add_node("summarize_answer", make_summarize_answer_node(deps))
 
-    g.add_edge(START, "classify_intent")
+    g.add_edge(START, "domain_guard")
+    g.add_conditional_edges(
+        "domain_guard",
+        route_after_domain_guard,
+        {
+            "continue": "classify_intent",
+            "stop": END,
+        },
+    )
     g.add_conditional_edges(
         "classify_intent",
         route_after_intent,
@@ -46,10 +63,12 @@ def build_main_graph(deps: GraphDeps):
             "sql_branch": "sql_branch",
             "agent_idea": "agent_idea",
             "catalog_draft_branch": "catalog_draft_branch",
+            "inventory_draft_branch": "inventory_draft_branch",
         },
     )
     g.add_edge("chat_normal", END)
     g.add_edge("catalog_draft_branch", END)
+    g.add_edge("inventory_draft_branch", END)
     g.add_edge("agent_idea", "sql_branch")
     g.add_conditional_edges(
         "sql_branch",
@@ -57,9 +76,11 @@ def build_main_graph(deps: GraphDeps):
         {
             "agent_chart": "agent_chart",
             "chart_fail_message": "chart_fail_message",
+            "emit_query_table": "emit_query_table",
             "summarize_answer": "summarize_answer",
         },
     )
+    g.add_edge("emit_query_table", "summarize_answer")
     g.add_edge("agent_chart", "agent_review")
     g.add_edge("agent_review", END)
     g.add_edge("chart_fail_message", END)

@@ -2,9 +2,18 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+InteractionMode = Literal[
+    "auto",
+    "data_query",
+    "data_table",
+    "chart",
+    "catalog_draft",
+    "inventory_draft",
+]
 
 
 class ChatMetadata(BaseModel):
@@ -17,6 +26,7 @@ class ChatMetadata(BaseModel):
 class ChatOptions(BaseModel):
     stream: bool = False
     locale: str | None = None
+    interaction_mode: InteractionMode = "auto"
 
 
 class ChatRequest(BaseModel):

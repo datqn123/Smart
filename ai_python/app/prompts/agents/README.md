@@ -24,6 +24,12 @@ Each `.md` file = **system prompt** for one LLM node in the graph. Loaded via `a
 
 **Catalog draft:** the `generate_catalog_draft` node does **not** call `load_agent_prompt("catalog_draft")` directly — it uses `load_catalog_draft_system_prompt(entity_type)` to concatenate the base prompt + the entity-specific playbook.
 
-Everything after the `## JSON output contract` heading = JSON constraints (kept in the same file; only `catalog_draft.md` for the catalog branch).
+| `inventory_entity_pick.md` | `classify_inventory_doc` | — |
+| `inventory_draft.md` | `generate_inventory_draft` (base) | — |
+| `inventory_draft_stock_receipt.md` | (playbook, appended at runtime) | — |
+
+**Inventory draft:** use `load_inventory_draft_system_prompt(doc_type)`; SSE event `inventory_draft`. Commit creates one `stock_receipt` (Draft/Pending only in v1).
+
+Everything after the `## JSON output contract` heading = JSON constraints (kept in the same file; `catalog_draft.md` / `inventory_draft.md` for JSON contracts).
 
 **Deterministic** rules (allowlists, enum casing, CTEs, retries) remain in the Python code — not duplicated at length in MD.

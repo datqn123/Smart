@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 _TEXT_ROLES = ("chat", "summarize")
 _STRUCTURED_ROLES = (
     "intent",
+    "domain_guard",
     "sql_review",
     "sql_table_pick",
     "schema_plan",

@@ -8,7 +8,8 @@ from langchain_core.messages import BaseMessage, SystemMessage
 
 from app.graph.agent_trace import emit_agent_trace
 from app.graph.deps import GraphDeps
-from app.graph.message_utils import latest_human_question
+from app.graph.message_utils import effective_user_question, latest_human_question
+from app.graph.interaction_mode import resolve_mode_override
 from app.graph.registry import normalize_intent
 from app.graph.state import AgentState
 from app.llm.schemas import IntentOutput
@@ -30,7 +31,9 @@ def _messages_for_intent(state: AgentState) -> list[BaseMessage]:
 
 
 def _user_question_snippet(state: AgentState, max_chars: int = 220) -> str:
-    t = latest_human_question(state.get("messages")).replace("\n", " ").strip()
+    t = effective_user_question(
+        state.get("messages"), state.get("normalized_user_question")
+    ).replace("\n", " ").strip()
     if not t:
         return "(no user text)"
     if len(t) > max_chars:
@@ -41,6 +44,22 @@ def _user_question_snippet(state: AgentState, max_chars: int = 220) -> str:
 def make_intent_node(deps: GraphDeps):
     def intent(state: AgentState) -> dict:
         logger.info("node=intent action=start")
+        mode_patch = resolve_mode_override(state.get("interaction_mode"))
+        if mode_patch is not None:
+            normalized = str(mode_patch["intent"])
+            emit_agent_trace(
+                logger,
+                deps.settings,
+                agent="intent",
+                phase="Override theo interaction_mode",
+                detail=(
+                    f"interaction_mode={state.get('interaction_mode')}\n"
+                    f"intent={normalized}\n"
+                    f"show_query_table={mode_patch.get('show_query_table')}\n"
+                    f"câu_hỏi={_user_question_snippet(state)}"
+                ),
+            )
+            return mode_patch
         reg = deps.llm_registry
         if reg is None:
             emit_agent_trace(
@@ -91,6 +110,8 @@ def route_after_intent(state: AgentState) -> str:
     intent = state.get("intent") or "general_chat"
     if intent == "catalog_data_entry":
         return "catalog_draft_branch"
+    if intent == "inventory_data_entry":
+        return "inventory_draft_branch"
     if intent == "system_data_chart":
         return "agent_idea"
     if intent == "system_data_query":

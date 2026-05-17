@@ -380,14 +380,3 @@ def make_chart_fail_message_node(deps: GraphDeps):
     return chart_fail_message
 
 
-def route_after_sql_branch(state: AgentState) -> str:
-    if state.get("intent") != "system_data_chart":
-        return "summarize_answer"
-    if state.get("chart_data_ok") or state.get("chart_degraded"):
-        return "agent_chart"
-    err = state.get("error_payload")
-    if isinstance(err, dict) and err.get("error") == "max_sql_attempts":
-        return "chart_fail_message"
-    if state.get("chart_data_ok") is False:
-        return "chart_fail_message"
-    return "agent_chart"

@@ -26,7 +26,12 @@ from app.graph.retry_policy import (
     decide_sql_retry,
 )
 from app.graph.state import AgentState
-from app.graph.message_utils import format_dialog_tail_for_sql, latest_human_question
+from app.graph.erp_guide.format_context import format_domain_context_block
+from app.graph.message_utils import (
+    effective_user_question,
+    format_dialog_tail_for_sql,
+    latest_human_question,
+)
 from app.graph.logging_policy import safe_log_sql
 from app.graph.chart_calendar import resolve_month_calendar
 from app.graph.enum_literals import enum_literals_prompt_block
@@ -113,7 +118,9 @@ def _benign_sql_review_issue(issue: str) -> bool:
 
 def _last_user_message(state: AgentState) -> str:
     """Current user turn only (last HumanMessage), not prior assistant text."""
-    return latest_human_question(state.get("messages"))
+    return effective_user_question(
+        state.get("messages"), state.get("normalized_user_question")
+    )
 
 
 def _load_schema_artifact(
@@ -280,6 +287,9 @@ def make_gen_sql_node(deps: GraphDeps):
             idea_req if isinstance(idea_req, dict) else None,
         )
         allow_line = allowed_tables_prompt_line(artifact)
+        domain_block = format_domain_context_block(
+            state.get("domain_context") if isinstance(state.get("domain_context"), dict) else None
+        )
         prompt = build_gen_sql_user_prompt(
             mode=mode,  # type: ignore[arg-type]
             schema_block=schema_block,
@@ -295,6 +305,7 @@ def make_gen_sql_node(deps: GraphDeps):
             chart_thread_context=chart_ctx,
             allowed_tables_line=allow_line,
             month_calendar=month_cal,
+            domain_context_block=domain_block,
         )
         if reg is None:
             sql = f"SELECT 1 AS ok LIMIT {deps.settings.sql_limit_max}"

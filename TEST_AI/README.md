@@ -119,9 +119,27 @@ Browser/Script → POST /api/v1/auth/login (Spring 8080)
                → POST /api/v1/ai/chat/stream (Spring 8080)
                → SSE relay → Python FastAPI (9000)
                → LangGraph → SSE response
-               → Parse: delta, done, error, chart
+               → Parse: delta, done, error, chart, draft, data_table
                → Ghi kết quả vào file .md
 ```
+
+## Chế độ tương tác (Task111)
+
+Trên UI chat Mini ERP, chọn chip trước khi gửi câu hỏi:
+
+| Chip | `interactionMode` | Kỳ vọng |
+|------|-------------------|---------|
+| Tự động | `auto` | AI tự phân loại |
+| Hỏi dữ liệu | `data_query` | Text tóm tắt SQL |
+| Bảng kết quả | `data_table` | Text ngắn + SSE `data_table` |
+| Biểu đồ | `chart` | SSE `chart` |
+| Tạo bảng nhập | `catalog_draft` | SSE `draft` |
+
+Ví dụ thủ công: chọn **Bảng kết quả**, gửi *"Hiển thị danh sách sản phẩm gần hết hạn"* — phải thấy bảng read-only dưới bubble assistant (không chỉ bullet text).
+
+API: `frontend/docs/api/API_Task111_ai_chat_interaction_mode.md`
+
+**Domain guard (Task112):** Mọi câu qua `domain_guard` trước intent. Ví dụ: *"phiếu xuất khẩu"* → SSE `clarify` + gợi ý *phiếu xuất kho*. Doc: `frontend/docs/api/API_Task112_erp_domain_guard.md`
 
 ## Kết quả test
 

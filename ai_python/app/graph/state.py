@@ -57,7 +57,22 @@ class AgentState(TypedDict, total=False):
     catalog_draft_payload: dict[str, Any] | None
     catalog_draft_id: str | None
     catalog_draft_sse: dict[str, Any] | None
+    # Inventory document draft HITL (Task111)
+    inventory_doc_type: str | None
+    inventory_line_count_hint: int | None
+    inventory_draft_payload: dict[str, Any] | None
+    inventory_draft_id: str | None
+    inventory_draft_sse: dict[str, Any] | None
     spring_bearer_token: str | None
+    # Task111 — explicit UI interaction mode
+    interaction_mode: str | None
+    show_query_table: bool | None
+    query_table_sse: dict[str, Any] | None
+    # Task112 — ERP domain guard
+    domain_guard_action: str | None
+    normalized_user_question: str | None
+    domain_context: dict[str, Any] | None
+    domain_clarify_sse: dict[str, Any] | None
 
 
 def default_initial_state() -> AgentState:

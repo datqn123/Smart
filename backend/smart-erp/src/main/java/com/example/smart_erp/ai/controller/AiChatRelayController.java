@@ -38,7 +38,7 @@ public class AiChatRelayController {
 
 	private static final Logger log = LoggerFactory.getLogger(AiChatRelayController.class);
 
-	public record AiChatRelayRequest(String message, String conversationId) {
+	public record AiChatRelayRequest(String message, String conversationId, String interactionMode) {
 	}
 
 	private final String pythonBaseUrl;
@@ -130,7 +130,11 @@ public class AiChatRelayController {
 			}
 			md.put("schema_version", "v1");
 			root.set("metadata", md);
-			root.putObject("options");
+			ObjectNode options = root.putObject("options");
+			String mode = body.interactionMode();
+			if (mode != null && !mode.isBlank() && !"auto".equalsIgnoreCase(mode.trim())) {
+				options.put("interaction_mode", mode.trim().toLowerCase());
+			}
 			jsonBody = objectMapper.writeValueAsString(root);
 		}
 		catch (Exception e) {

@@ -9,6 +9,7 @@ from sqlparse.sql import Comparison, Function, Identifier, IdentifierList, Paren
 
 from app.config.graph_settings import GraphSettings
 from app.graph.enum_literals import fix_enum_literals_in_sql
+from app.graph.name_filters import fix_name_equality_to_ilike
 
 _DDL_DML = re.compile(
     r"\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE|GRANT|REVOKE)\b",
@@ -420,6 +421,8 @@ def validate_sql_deterministic(
         return False, "empty sql", None, notes
     s, enum_notes = fix_enum_literals_in_sql(s)
     notes.extend(enum_notes)
+    s, name_notes = fix_name_equality_to_ilike(s)
+    notes.extend(name_notes)
     parsed = sqlparse.parse(s)
     if len(parsed) != 1:
         return False, "only single statement allowed", None, notes

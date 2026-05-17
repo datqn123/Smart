@@ -4,7 +4,9 @@ Dịch vụ FastAPI cho chat AI (LangGraph). Chạy **một luồng duy nhất**
 
 **Trước khi bật Python:** PostgreSQL + Spring Boot (`smart-erp`) đã chạy trên `8080`, JWT và relay đã cấu hình (`JWT_SECRET` trùng `JWT_HS256_SECRET` bên dưới, `APP_SECURITY_MODE=jwt-api`, `AI_PYTHON_BASE_URL=http://127.0.0.1:9000`). Frontend (Vite) proxy `/api` tới Spring.
 
-**Luồng chat:** `mini-erp` gọi `POST {Spring}/api/v1/ai/chat/stream` (Bearer) → `AiChatRelayController` dựng JSON (message + metadata `user_id`/`tenant_id` từ JWT, `thread_id` từ `conversationId`) → `POST {ai_python}/api/v1/ai/chat/stream` → LangGraph. Truy vấn SQL: Python gọi `POST {Spring}/api/v1/ai/db/sql/query-readonly-raw` khi `SQL_EXECUTOR_MODE=http_spring` (mặc định trong code; pytest ép `stub`).
+**Luồng chat:** `mini-erp` gọi `POST {Spring}/api/v1/ai/chat/stream` (Bearer) → `AiChatRelayController` dựng JSON (message + metadata `user_id`/`tenant_id` từ JWT, `thread_id` từ `conversationId`) → `POST {ai_python}/api/v1/ai/chat/stream` → LangGraph (`domain_guard` → intent → nhánh SQL/chart/draft). Truy vấn SQL: Python gọi `POST {Spring}/api/v1/ai/db/sql/query-readonly-raw` khi `SQL_EXECUTOR_MODE=http_spring` (mặc định trong code; pytest ép `stub`).
+
+**Domain guard (Task112):** Index nén từ `GUID_ERP.md` — rebuild: `python scripts/build_erp_domain_index.py` (ghi `app/data/erp/`).
 
 ---
 

@@ -10,7 +10,11 @@ from app.graph.agent_trace import emit_agent_trace
 from app.graph.datetime_display import localize_query_result_for_display
 from app.graph.deps import GraphDeps
 from app.graph.display_format import format_display_for_chat_ui
-from app.graph.message_utils import format_dialog_tail_for_sql, latest_human_question
+from app.graph.message_utils import (
+    effective_user_question,
+    format_dialog_tail_for_sql,
+    latest_human_question,
+)
 from app.graph.state import AgentState
 from app.prompts.load import load_agent_prompt
 
@@ -48,11 +52,63 @@ def make_summarize_answer_node(deps: GraphDeps):
                 phase="Kết quả truy vấn rỗng",
                 detail="Không có rows — trả lời cố định cho user.",
             )
-            empty_msg = "Không có dữ liệu phù hợp với câu hỏi của bạn."
+            empty_msg = (
+                "Không có dữ liệu phù hợp với câu hỏi của bạn. "
+                "Nếu bạn lọc theo tên danh mục/sản phẩm, hãy thử đúng chữ hoa như trên màn hình "
+                "hoặc hỏi theo mã SKU."
+            )
             return {
                 "final_answer": empty_msg,
                 "messages": [AIMessage(content=empty_msg)],
             }
+        table_sse = state.get("query_table_sse")
+        if isinstance(table_sse, dict) and table_sse:
+            row_count = table_sse.get("rowCount", 0)
+            truncated = bool(table_sse.get("truncated"))
+            trunc_note = (
+                f" (hiển thị tối đa {table_sse.get('maxDisplayRows', 200)} dòng)"
+                if truncated
+                else ""
+            )
+            user_q = effective_user_question(
+                state.get("messages"), state.get("normalized_user_question")
+            )
+            reg = deps.llm_registry
+            if reg is None:
+                intro = (
+                    f"Đã tìm thấy {row_count} dòng phù hợp{trunc_note}. "
+                    "Xem bảng chi tiết bên dưới."
+                )
+            else:
+                dialog_tail = format_dialog_tail_for_sql(
+                    state.get("messages"),
+                    max_messages=int(deps.settings.sql_dialog_tail_max_messages),
+                    max_chars=int(deps.settings.sql_dialog_tail_max_chars),
+                )
+                dialog_block = (
+                    f"Recent conversation:\n{dialog_tail}\n\n" if dialog_tail else ""
+                )
+                prompt = (
+                    f"{dialog_block}"
+                    f"Câu hỏi: {user_q}\n"
+                    f"Số dòng kết quả: {row_count}{trunc_note}.\n"
+                    "Bảng chi tiết đã hiển thị riêng bên dưới UI — "
+                    "chỉ viết 1–2 câu tiếng Việt giới thiệu ngắn (không liệt kê từng dòng, không bullet dài)."
+                )
+                intro = reg.get("summarize").invoke_text(
+                    prompt,
+                    system=_SUMMARIZE_SYSTEM
+                    + "\n\nKhi có bảng UI: tối đa 2 câu, không markdown list dài.",
+                )
+                intro = format_display_for_chat_ui(intro)
+            emit_agent_trace(
+                logger,
+                deps.settings,
+                agent="summarize",
+                phase="Tóm tắt ngắn (có bảng UI)",
+                detail=intro[:800],
+            )
+            return {"final_answer": intro, "messages": [AIMessage(content=intro)]}
         reg = deps.llm_registry
         if reg is None:
             qr_stub = localize_query_result_for_display(qr, deps.settings.ai_display_timezone)
@@ -68,7 +124,9 @@ def make_summarize_answer_node(deps: GraphDeps):
                 "final_answer": stub_ans,
                 "messages": [AIMessage(content=stub_ans)],
             }
-        user_q = latest_human_question(state.get("messages"))
+        user_q = effective_user_question(
+            state.get("messages"), state.get("normalized_user_question")
+        )
         dialog_tail = format_dialog_tail_for_sql(
             state.get("messages"),
             max_messages=int(deps.settings.sql_dialog_tail_max_messages),

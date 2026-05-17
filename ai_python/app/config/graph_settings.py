@@ -169,6 +169,21 @@ class GraphSettings(BaseSettings):
         le=6,
         description="Prior user/assistant turns passed into chart brief and gen_sql.",
     )
+    # --- ERP domain guard (Task112) ---
+    erp_domain_guard_enabled: bool = Field(
+        default=True,
+        description="Run domain_guard before intent (scope, terminology, clarify).",
+    )
+    erp_guide_data_dir: str | None = Field(
+        default=None,
+        description="Override path to app/data/erp; default package data dir.",
+    )
+    erp_guide_retrieve_max_chunks: int = Field(
+        default=3,
+        ge=0,
+        le=8,
+        description="Max GUID chunks retrieved per turn for domain_guard.",
+    )
 
     @field_validator("ai_display_timezone", mode="before")
     @classmethod

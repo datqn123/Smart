@@ -1,0 +1,231 @@
+"""Inventory document draft: pick doc → generate → persist Spring."""
+
+from __future__ import annotations
+
+import logging
+
+from langchain_core.messages import AIMessage, SystemMessage
+
+from app.graph.agent_trace import emit_agent_trace
+from app.graph.deps import GraphDeps
+from app.graph.inventory_draft_schema import (
+    default_line_columns,
+    default_receipt_header,
+    enrich_receipt_header,
+    enrich_receipt_lines,
+    normalize_lines,
+    validate_receipt_draft,
+)
+from app.graph.message_utils import latest_human_question
+from app.graph.spring_inventory_draft_client import post_inventory_draft
+from app.graph.state import AgentState
+from app.llm.schemas import InventoryDraftGenerateOutput, InventoryEntityPickOutput
+from app.prompts.load import (
+    load_agent_json_contract,
+    load_agent_prompt,
+    load_inventory_draft_json_contract,
+    load_inventory_draft_system_prompt,
+)
+
+logger = logging.getLogger(__name__)
+
+_ENTITY_PICK_SYSTEM = load_agent_prompt("inventory_entity_pick")
+_ENTITY_PICK_CONTRACT = load_agent_json_contract("inventory_entity_pick") or ""
+_DRAFT_CONTRACT = load_inventory_draft_json_contract() or ""
+
+
+def make_classify_inventory_doc_node(deps: GraphDeps):
+    def classify_inventory_doc(state: AgentState) -> dict:
+        logger.info("node=classify_inventory_doc action=start")
+        question = latest_human_question(state.get("messages"))
+        doc_type = "stock_receipt"
+        line_hint = 1
+        reg = deps.llm_registry
+        if reg is not None:
+            client = reg.get("intent")
+            prompt = f"{_ENTITY_PICK_SYSTEM}\n\nCâu người dùng:\n{question}"
+            try:
+                out = client.structured_predict(
+                    [SystemMessage(content=prompt)],
+                    InventoryEntityPickOutput,
+                    json_output_contract=_ENTITY_PICK_CONTRACT,
+                )
+                doc_type = out.doc_type
+                line_hint = max(1, min(20, out.line_count_hint))
+            except Exception:
+                logger.warning("inventory doc pick failed; default stock_receipt", exc_info=True)
+        emit_agent_trace(
+            logger,
+            deps.settings,
+            agent="inventory_entity",
+            phase="Chọn loại chứng từ kho",
+            detail=f"doc_type={doc_type} lines≈{line_hint}",
+        )
+        return {"inventory_doc_type": doc_type, "inventory_line_count_hint": line_hint}
+
+    return classify_inventory_doc
+
+
+def make_generate_inventory_draft_node(deps: GraphDeps):
+    def generate_inventory_draft(state: AgentState) -> dict:
+        logger.info("node=generate_inventory_draft action=start")
+        doc_type = state.get("inventory_doc_type") or "stock_receipt"
+        line_hint = int(state.get("inventory_line_count_hint") or 1)
+        question = latest_human_question(state.get("messages"))
+        header = default_receipt_header()
+        line_columns = default_line_columns(doc_type)
+        lines: list[dict] = []
+        reg = deps.llm_registry
+        if reg is not None:
+            try:
+                client = reg.get("chat")
+            except KeyError:
+                client = reg.get("default")
+            draft_system = load_inventory_draft_system_prompt(doc_type)
+            user_block = (
+                f"doc_type={doc_type}\nline_count_hint={line_hint}\n\n"
+                f"Câu người dùng:\n{question}"
+            )
+            try:
+                out = client.structured_predict(
+                    [SystemMessage(content=draft_system), SystemMessage(content=user_block)],
+                    InventoryDraftGenerateOutput,
+                    json_output_contract=_DRAFT_CONTRACT,
+                )
+                if out.header:
+                    header = {**header, **out.header}
+                if out.lineColumns:
+                    line_columns = [c.model_dump() for c in out.lineColumns]
+                raw = [ln.model_dump() for ln in out.lines]
+                lines = enrich_receipt_lines(
+                    normalize_lines(raw),
+                    user_prompt=question,
+                    header=header,
+                )
+            except Exception:
+                logger.warning("inventory draft LLM failed; using stub", exc_info=True)
+        if not lines:
+            lines = _stub_receipt_lines(line_hint, question)
+        header = enrich_receipt_header(header, user_prompt=question)
+        lines = enrich_receipt_lines(lines, user_prompt=question, header=header)
+        payload = {
+            "entityType": doc_type,
+            "header": header,
+            "lineColumns": line_columns,
+            "lines": lines,
+            "meta": {"sourcePrompt": question[:500]},
+        }
+        emit_agent_trace(
+            logger,
+            deps.settings,
+            agent="inventory_draft",
+            phase="Sinh nháp phiếu kho",
+            detail=f"doc={doc_type} line_count={len(lines)}",
+        )
+        return {"inventory_draft_payload": payload}
+
+    return generate_inventory_draft
+
+
+def make_persist_inventory_draft_node(deps: GraphDeps):
+    def persist_inventory_draft(state: AgentState) -> dict:
+        logger.info("node=persist_inventory_draft action=start")
+        payload = state.get("inventory_draft_payload") or {}
+        doc_type = payload.get("entityType") or state.get("inventory_doc_type") or "stock_receipt"
+        header = payload.get("header") if isinstance(payload.get("header"), dict) else {}
+        lines = payload.get("lines") or []
+        if isinstance(lines, list):
+            issues = validate_receipt_draft(header, lines)
+        else:
+            issues = ["lines không hợp lệ"]
+        if issues:
+            msg = "Không thể tạo nháp: " + "; ".join(issues[:5])
+            return {
+                "final_answer": msg,
+                "messages": [AIMessage(content=msg)],
+                "error_payload": {"code": "INVENTORY_DRAFT_INVALID", "message": msg},
+            }
+        line_columns = payload.get("lineColumns") or default_line_columns(doc_type)
+        bearer = state.get("spring_bearer_token")
+        conversation_id = state.get("thread_id")
+        try:
+            saved = post_inventory_draft(
+                deps.settings,
+                bearer_token=bearer,
+                entity_type=doc_type,
+                header=header,
+                line_columns=line_columns if isinstance(line_columns, list) else default_line_columns(doc_type),
+                lines=lines,
+                conversation_id=conversation_id,
+                meta=payload.get("meta") if isinstance(payload.get("meta"), dict) else None,
+            )
+        except Exception as exc:
+            logger.warning("persist inventory draft failed", exc_info=True)
+            msg = f"Không lưu được nháp trên server: {exc}"
+            return {
+                "final_answer": msg,
+                "messages": [AIMessage(content=msg)],
+                "error_payload": {"code": "INVENTORY_DRAFT_PERSIST", "message": msg},
+            }
+        draft_id = str(saved.get("id") or "")
+        sse_payload = {
+            "draftId": draft_id,
+            "entityType": doc_type,
+            "header": saved.get("header") or header,
+            "lineColumns": saved.get("lineColumns") or line_columns,
+            "lines": saved.get("lines") or lines,
+            "status": saved.get("status"),
+            "previewMessage": _preview_message(doc_type, lines, header),
+        }
+        answer = (
+            "Đã tạo nháp phiếu nhập kho. Chỉnh sửa bên dưới → **Lưu nháp** → **Xác nhận tạo phiếu** "
+            "(Draft/Pending). Duyệt và chọn vị trí nhập tại màn **Nhập kho**."
+        )
+        emit_agent_trace(
+            logger,
+            deps.settings,
+            agent="inventory_draft",
+            phase="Lưu nháp Spring",
+            detail=f"draftId={draft_id}",
+        )
+        return {
+            "inventory_draft_id": draft_id,
+            "inventory_draft_sse": sse_payload,
+            "final_answer": answer,
+            "messages": [AIMessage(content=answer)],
+        }
+
+    return persist_inventory_draft
+
+
+def _preview_message(doc_type: str, lines: list, header: dict) -> str:
+    if doc_type == "stock_receipt":
+        total_qty = 0
+        for ln in lines:
+            v = ln.get("values") if isinstance(ln.get("values"), dict) else ln
+            try:
+                total_qty += int(v.get("quantity") or 0)
+            except (TypeError, ValueError):
+                pass
+        ncc = header.get("supplierName") or header.get("supplierCode") or "NCC"
+        return f"Phiếu nhập — {len(lines)} dòng, ~{total_qty} SP ({ncc})"
+    return f"{doc_type} — {len(lines)} dòng"
+
+
+def _stub_receipt_lines(count: int, question: str) -> list[dict]:
+    n = max(1, min(count, 3))
+    lines: list[dict] = []
+    for i in range(n):
+        idx = i + 1
+        lines.append(
+            {
+                "lineId": f"l{idx}",
+                "values": {
+                    "skuCode": f"AI-{idx:03d}",
+                    "productName": f"Hàng AI {idx}",
+                    "quantity": 1,
+                    "costPrice": 0,
+                },
+            }
+        )
+    return enrich_receipt_lines(lines, user_prompt=question)

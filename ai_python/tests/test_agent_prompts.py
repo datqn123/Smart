@@ -10,6 +10,7 @@ from app.prompts.load import (
     load_agent_json_contract,
     load_agent_prompt,
     load_catalog_draft_system_prompt,
+    load_inventory_draft_system_prompt,
 )
 
 _EXPECTED_IDS = frozenset(
@@ -31,6 +32,9 @@ _EXPECTED_IDS = frozenset(
         "catalog_draft_category",
         "catalog_draft_supplier",
         "catalog_draft_customer",
+        "inventory_entity_pick",
+        "inventory_draft",
+        "inventory_draft_stock_receipt",
     }
 )
 
@@ -43,6 +47,8 @@ _CATALOG_DRAFT_ENTITY_PLAYBOOKS = frozenset(
         "catalog_draft_customer",
     }
 )
+
+_INVENTORY_DRAFT_PLAYBOOKS = frozenset({"inventory_draft_stock_receipt"})
 
 
 def test_all_agent_prompt_files_exist() -> None:
@@ -62,6 +68,7 @@ def test_load_agent_prompt_non_empty(agent_id: str) -> None:
         _EXPECTED_IDS
         - {"chat_normal", "summarize", "gen_sql"}
         - _CATALOG_DRAFT_ENTITY_PLAYBOOKS
+        - _INVENTORY_DRAFT_PLAYBOOKS
     ),
 )
 def test_load_agent_json_contract_non_empty(agent_id: str) -> None:
@@ -97,3 +104,10 @@ def test_load_catalog_draft_system_prompt_includes_entity_playbook(
 def test_catalog_draft_entity_prompt_id_rejects_unknown() -> None:
     with pytest.raises(ValueError, match="unknown catalog"):
         catalog_draft_entity_prompt_id("warehouse")
+
+
+def test_load_inventory_draft_system_prompt_includes_stock_receipt() -> None:
+    text = load_inventory_draft_system_prompt("stock_receipt")
+    assert "Playbook bắt buộc" in text
+    assert "skuCode" in text
+    assert "supplierName" in text

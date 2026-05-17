@@ -13,6 +13,12 @@ Reply with **ONLY one PostgreSQL SELECT** (read-only).
 - Use **ONLY** table names present in the user prompt schema block — never invent tables.
 - If a table is not in the schema block, pick the closest allowed table.
 
+## Tên hiển thị (danh mục, sản phẩm, NCC, KH) — KHÔNG phân biệt hoa thường
+
+- Khi lọc theo **tên** cột `name` hoặc `category_name` (vd. danh mục, tên SP, tên NCC): dùng **`ILIKE '...'`**, không dùng `=`.
+- Ví dụ: `c.name ILIKE 'Điện tử 1'` (khớp cả `Điện Tử 1` trong DB).
+- **Mã** (`sku_code`, `supplier_code`, `customer_code`, `receipt_code`, …) vẫn dùng `=` — so khớp chính xác.
+
 ## Enum literals (CASE-SENSITIVE)
 
 - `stockreceipts.status`: Draft | Pending | **Approved** | Rejected

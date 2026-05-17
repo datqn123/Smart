@@ -1,0 +1,791 @@
+{
+  "version": "1",
+  "guide_sha256": "baffbcbb6421b95cdc0957ff20c79d672388cf796db81cc4e3db895c2d966766",
+  "generated_at": "2026-05-17T04:34:03.159031+00:00",
+  "source_path": "GUID_ERP.md",
+  "modules": [
+    {
+      "id": "table_of_contents",
+      "title_vi": "## Table of Contents",
+      "title_en": "## Table of Contents",
+      "guide_refs": [
+        "§Table of Contents"
+      ],
+      "chunk_file": "00_table_of_contents.md",
+      "subsections": [],
+      "user_terms_vi": [],
+      "user_terms_en": [],
+      "common_misnomers": [],
+      "capabilities": []
+    },
+    {
+      "id": "architecture",
+      "title_vi": "Kiến trúc hệ thống",
+      "title_en": "Architecture Overview",
+      "guide_refs": [
+        "§1"
+      ],
+      "chunk_file": "01_architecture.md",
+      "subsections": [
+        "Technology Stack",
+        "General Data Flow",
+        "AI Chat Flow",
+        "Response Envelope (Spring Boot)"
+      ],
+      "user_terms_vi": [
+        "đơn hàng",
+        "bán hàng",
+        "POS"
+      ],
+      "user_terms_en": [
+        "sales order",
+        "pos"
+      ],
+      "common_misnomers": [],
+      "capabilities": [
+        "Technology Stack",
+        "General Data Flow",
+        "AI Chat Flow",
+        "Response Envelope (Spring Boot)"
+      ]
+    },
+    {
+      "id": "permissions",
+      "title_vi": "Phân quyền",
+      "title_en": "Permissions & Roles",
+      "guide_refs": [
+        "§2"
+      ],
+      "chunk_file": "02_permissions.md",
+      "subsections": [
+        "Roles",
+        "Permission System (12 flags)",
+        "Permission Enforcement"
+      ],
+      "user_terms_vi": [
+        "sản phẩm",
+        "SKU"
+      ],
+      "user_terms_en": [
+        "product",
+        "sku"
+      ],
+      "common_misnomers": [],
+      "capabilities": [
+        "Roles",
+        "Permission System (12 flags)",
+        "Permission Enforcement"
+      ]
+    },
+    {
+      "id": "auth_session",
+      "title_vi": "Đăng nhập / phiên",
+      "title_en": "Login / Logout / Session",
+      "guide_refs": [
+        "§3"
+      ],
+      "chunk_file": "03_auth_session.md",
+      "subsections": [
+        "3.1. Login",
+        "3.2. Token Refresh",
+        "3.3. Logout",
+        "3.4. Session Persistence",
+        "3.5. Password Reset Request"
+      ],
+      "user_terms_vi": [
+        "đơn hàng",
+        "bán hàng",
+        "POS"
+      ],
+      "user_terms_en": [
+        "sales order",
+        "pos"
+      ],
+      "common_misnomers": [],
+      "capabilities": [
+        "3.1. Login",
+        "3.2. Token Refresh",
+        "3.3. Logout",
+        "3.4. Session Persistence",
+        "3.5. Password Reset Request"
+      ]
+    },
+    {
+      "id": "dashboard",
+      "title_vi": "Dashboard",
+      "title_en": "Dashboard",
+      "guide_refs": [
+        "§4"
+      ],
+      "chunk_file": "04_dashboard.md",
+      "subsections": [],
+      "user_terms_vi": [],
+      "user_terms_en": [],
+      "common_misnomers": [],
+      "capabilities": []
+    },
+    {
+      "id": "inventory",
+      "title_vi": "Quản lý kho",
+      "title_en": "Inventory Management",
+      "guide_refs": [
+        "§5"
+      ],
+      "chunk_file": "05_inventory.md",
+      "subsections": [
+        "5.1. View & Search Stock",
+        "5.2. Edit Stock Info",
+        "5.3. Stock Receipt (Inbound)",
+        "Create Receipt",
+        "Approve Receipt — **Inventory Increase Point**",
+        "Reject Receipt",
+        "Edit / Delete",
+        "Receipt Status Diagram",
+        "5.4. Stock Dispatch (Outbound)",
+        "Create Manual Dispatch",
+        "Approve Dispatch (Admin)",
+        "Delivery Complete — **Inventory Decrease Point**",
+        "Dispatch Status Diagram",
+        "5.5. Audit Session",
+        "Create Audit Session",
+        "Enter Actual Quantities",
+        "Complete Audit",
+        "Owner Approve / Reject",
+        "Apply Variance — **Inventory Adjustment Point**",
+        "Audit Status Diagram",
+        "5.6. Warehouse Locations"
+      ],
+      "user_terms_vi": [
+        "phiếu xuất kho",
+        "xuất kho",
+        "phiếu nhập kho",
+        "nhập kho",
+        "sản phẩm",
+        "SKU",
+        "đơn hàng",
+        "bán hàng",
+        "POS"
+      ],
+      "user_terms_en": [
+        "stock dispatch",
+        "outbound",
+        "stock receipt",
+        "inbound",
+        "product",
+        "sku",
+        "sales order",
+        "pos"
+      ],
+      "common_misnomers": [
+        {
+          "phrase_vi": "phiếu xuất khẩu",
+          "canonical_vi": "phiếu xuất kho",
+          "canonical_en": "Stock Dispatch",
+          "module_id": "inventory_stock_dispatch",
+          "note": "Hệ thống không có module xuất khẩu quốc tế"
+        },
+        {
+          "phrase_vi": "xuất khẩu",
+          "canonical_vi": "phiếu xuất kho",
+          "canonical_en": "Stock Dispatch",
+          "module_id": "inventory_stock_dispatch",
+          "note": "Trong ERP thường là phiếu xuất kho (outbound), không phải export"
+        },
+        {
+          "phrase_vi": "đơn hàng nhập khẩu",
+          "canonical_vi": "phiếu nhập kho",
+          "canonical_en": "Stock Receipt",
+          "module_id": "inventory_stock_receipt",
+          "note": "Không có đơn nhập khẩu — dùng phiếu nhập kho"
+        },
+        {
+          "phrase_vi": "nhập khẩu",
+          "canonical_vi": "phiếu nhập kho",
+          "canonical_en": "Stock Receipt",
+          "module_id": "inventory_stock_receipt",
+          "note": "Trong ERP thường là phiếu nhập kho (inbound)"
+        },
+        {
+          "phrase_vi": "bill xuất",
+          "canonical_vi": "phiếu xuất kho",
+          "canonical_en": "Stock Dispatch",
+          "module_id": "inventory_stock_dispatch",
+          "note": null
+        }
+      ],
+      "capabilities": [
+        "5.1. View & Search Stock",
+        "5.2. Edit Stock Info",
+        "5.3. Stock Receipt (Inbound)",
+        "Create Receipt",
+        "Approve Receipt — **Inventory Increase Point**",
+        "Reject Receipt",
+        "Edit / Delete",
+        "Receipt Status Diagram",
+        "5.4. Stock Dispatch (Outbound)",
+        "Create Manual Dispatch",
+        "Approve Dispatch (Admin)",
+        "Delivery Complete — **Inventory Decrease Point**"
+      ]
+    },
+    {
+      "id": "catalog",
+      "title_vi": "Sản phẩm & danh mục",
+      "title_en": "Product Management",
+      "guide_refs": [
+        "§6"
+      ],
+      "chunk_file": "06_catalog.md",
+      "subsections": [
+        "6.1. Products",
+        "Create Product",
+        "Product List",
+        "Edit Product (Differential PATCH)",
+        "Delete Product — **Owner Only**",
+        "Product Image Management",
+        "6.2. Categories — Hierarchical Tree",
+        "Tree List",
+        "Create Category",
+        "Edit — Cycle Prevention",
+        "Delete Category — **Owner Only, Soft Delete**",
+        "6.3. Suppliers",
+        "Basic CRUD",
+        "Delete — **Owner Only, Hard Delete**",
+        "6.4. Customers",
+        "Basic CRUD",
+        "Delete — Split Authority"
+      ],
+      "user_terms_vi": [
+        "sản phẩm",
+        "SKU",
+        "đơn hàng",
+        "bán hàng",
+        "POS"
+      ],
+      "user_terms_en": [
+        "product",
+        "sku",
+        "sales order",
+        "pos"
+      ],
+      "common_misnomers": [],
+      "capabilities": [
+        "6.1. Products",
+        "Create Product",
+        "Product List",
+        "Edit Product (Differential PATCH)",
+        "Delete Product — **Owner Only**",
+        "Product Image Management",
+        "6.2. Categories — Hierarchical Tree",
+        "Tree List",
+        "Create Category",
+        "Edit — Cycle Prevention",
+        "Delete Category — **Owner Only, Soft Delete**",
+        "6.3. Suppliers"
+      ]
+    },
+    {
+      "id": "orders",
+      "title_vi": "Đơn hàng",
+      "title_en": "Order Management",
+      "guide_refs": [
+        "§7"
+      ],
+      "chunk_file": "07_orders.md",
+      "subsections": [
+        "7.1. Retail POS",
+        "Cart (Zustand store, persist sessionStorage)",
+        "Checkout",
+        "7.2. Wholesale",
+        "Create Order",
+        "Edit Order",
+        "Order Status Diagram",
+        "7.3. Returns / Refunds",
+        "Cancel Order",
+        "7.4. Vouchers",
+        "Voucher Types",
+        "Preview Voucher",
+        "Redemption (during checkout)"
+      ],
+      "user_terms_vi": [
+        "đơn hàng",
+        "bán hàng",
+        "POS"
+      ],
+      "user_terms_en": [
+        "sales order",
+        "pos"
+      ],
+      "common_misnomers": [],
+      "capabilities": [
+        "7.1. Retail POS",
+        "Cart (Zustand store, persist sessionStorage)",
+        "Checkout",
+        "7.2. Wholesale",
+        "Create Order",
+        "Edit Order",
+        "Order Status Diagram",
+        "7.3. Returns / Refunds",
+        "Cancel Order",
+        "7.4. Vouchers",
+        "Voucher Types",
+        "Preview Voucher"
+      ]
+    },
+    {
+      "id": "finance",
+      "title_vi": "Dòng tiền / sổ cái",
+      "title_en": "Cash Flow Management",
+      "guide_refs": [
+        "§8"
+      ],
+      "chunk_file": "08_finance.md",
+      "subsections": [
+        "8.1. Cash Transactions",
+        "Create Transaction",
+        "Complete Transaction — **Ledger Posting Point**",
+        "Status-Based Rules",
+        "Delete Transaction",
+        "Permissions",
+        "8.2. Cash Funds",
+        "8.3. Finance Ledger — Double-Entry Bookkeeping",
+        "Signed Amount Convention",
+        "Automatic Ledger Posting Sources (Idempotent)",
+        "8.4. Partner Debts",
+        "Create Debt",
+        "Pay Debt"
+      ],
+      "user_terms_vi": [
+        "phiếu xuất kho",
+        "xuất kho",
+        "phiếu nhập kho",
+        "nhập kho",
+        "đơn hàng",
+        "bán hàng",
+        "POS",
+        "sổ cái",
+        "doanh thu",
+        "chi phí"
+      ],
+      "user_terms_en": [
+        "stock dispatch",
+        "outbound",
+        "stock receipt",
+        "inbound",
+        "sales order",
+        "pos",
+        "finance ledger",
+        "revenue",
+        "expense"
+      ],
+      "common_misnomers": [],
+      "capabilities": [
+        "8.1. Cash Transactions",
+        "Create Transaction",
+        "Complete Transaction — **Ledger Posting Point**",
+        "Status-Based Rules",
+        "Delete Transaction",
+        "Permissions",
+        "8.2. Cash Funds",
+        "8.3. Finance Ledger — Double-Entry Bookkeeping",
+        "Signed Amount Convention",
+        "Automatic Ledger Posting Sources (Idempotent)",
+        "8.4. Partner Debts",
+        "Create Debt"
+      ]
+    },
+    {
+      "id": "ai_chat",
+      "title_vi": "Trợ lý AI",
+      "title_en": "AI Chat",
+      "guide_refs": [
+        "§9"
+      ],
+      "chunk_file": "09_ai_chat.md",
+      "subsections": [
+        "Architecture",
+        "9.1. General Chat",
+        "9.2. Data Query (SQL Generation Pipeline)",
+        "SQL Subgraph Diagram",
+        "Step Details",
+        "Retry Logic",
+        "Summarization",
+        "9.3. Chart Generation",
+        "9.4. Catalog Draft (HITL — Human-In-The-Loop)",
+        "9.5. Intent Classification",
+        "9.6. SSE Events",
+        "9.7. SQL Safety — 4 Layers",
+        "9.8. Conversation Memory"
+      ],
+      "user_terms_vi": [
+        "sản phẩm",
+        "SKU",
+        "đơn hàng",
+        "bán hàng",
+        "POS"
+      ],
+      "user_terms_en": [
+        "product",
+        "sku",
+        "sales order",
+        "pos"
+      ],
+      "common_misnomers": [],
+      "capabilities": [
+        "Architecture",
+        "9.1. General Chat",
+        "9.2. Data Query (SQL Generation Pipeline)",
+        "SQL Subgraph Diagram",
+        "Step Details",
+        "Retry Logic",
+        "Summarization",
+        "9.3. Chart Generation",
+        "9.4. Catalog Draft (HITL — Human-In-The-Loop)",
+        "9.5. Intent Classification",
+        "9.6. SSE Events",
+        "9.7. SQL Safety — 4 Layers"
+      ]
+    },
+    {
+      "id": "settings",
+      "title_vi": "Cài đặt hệ thống",
+      "title_en": "System Settings",
+      "guide_refs": [
+        "§10"
+      ],
+      "chunk_file": "10_settings.md",
+      "subsections": [
+        "10.1. Employee Management",
+        "Employee List",
+        "Create Employee",
+        "Edit Employee",
+        "Delete Employee (Soft Delete — locks account)",
+        "Generate Next Staff Code",
+        "10.2. Store Profile",
+        "View Profile",
+        "Edit Profile (Differential PATCH)",
+        "Upload Logo",
+        "10.3. Alert Settings",
+        "List",
+        "Create Alert",
+        "Toggle Alert (Soft Disable)",
+        "10.4. System Logs",
+        "List",
+        "Delete Logs"
+      ],
+      "user_terms_vi": [
+        "đơn hàng",
+        "bán hàng",
+        "POS"
+      ],
+      "user_terms_en": [
+        "sales order",
+        "pos"
+      ],
+      "common_misnomers": [],
+      "capabilities": [
+        "10.1. Employee Management",
+        "Employee List",
+        "Create Employee",
+        "Edit Employee",
+        "Delete Employee (Soft Delete — locks account)",
+        "Generate Next Staff Code",
+        "10.2. Store Profile",
+        "View Profile",
+        "Edit Profile (Differential PATCH)",
+        "Upload Logo",
+        "10.3. Alert Settings",
+        "List"
+      ]
+    },
+    {
+      "id": "notifications",
+      "title_vi": "Thông báo",
+      "title_en": "Notifications",
+      "guide_refs": [
+        "§11"
+      ],
+      "chunk_file": "11_notifications.md",
+      "subsections": [
+        "UI (Header notification bell)",
+        "Click Notification",
+        "API",
+        "Backend"
+      ],
+      "user_terms_vi": [
+        "đơn hàng",
+        "bán hàng",
+        "POS"
+      ],
+      "user_terms_en": [
+        "sales order",
+        "pos"
+      ],
+      "common_misnomers": [],
+      "capabilities": [
+        "UI (Header notification bell)",
+        "Click Notification",
+        "API",
+        "Backend"
+      ]
+    },
+    {
+      "id": "approvals",
+      "title_vi": "Phê duyệt",
+      "title_en": "Approvals",
+      "guide_refs": [
+        "§12"
+      ],
+      "chunk_file": "12_approvals.md",
+      "subsections": [
+        "Pending Approvals",
+        "Approval History",
+        "Approve / Reject"
+      ],
+      "user_terms_vi": [
+        "đơn hàng",
+        "bán hàng",
+        "POS"
+      ],
+      "user_terms_en": [
+        "sales order",
+        "pos"
+      ],
+      "common_misnomers": [],
+      "capabilities": [
+        "Pending Approvals",
+        "Approval History",
+        "Approve / Reject"
+      ]
+    },
+    {
+      "id": "reports",
+      "title_vi": "Báo cáo",
+      "title_en": "Reports & Analytics",
+      "guide_refs": [
+        "§13"
+      ],
+      "chunk_file": "13_reports.md",
+      "subsections": [
+        "Revenue Page",
+        "Top Products Page"
+      ],
+      "user_terms_vi": [
+        "sản phẩm",
+        "SKU"
+      ],
+      "user_terms_en": [
+        "product",
+        "sku"
+      ],
+      "common_misnomers": [],
+      "capabilities": [
+        "Revenue Page",
+        "Top Products Page"
+      ]
+    },
+    {
+      "id": "api_reference",
+      "title_vi": "API tham chiếu",
+      "title_en": "API Reference",
+      "guide_refs": [
+        "§14"
+      ],
+      "chunk_file": "14_api_reference.md",
+      "subsections": [
+        "Auth",
+        "Users / Employees",
+        "Products",
+        "Categories",
+        "Suppliers",
+        "Customers",
+        "Inventory",
+        "Stock Receipts",
+        "Stock Dispatchs",
+        "Audit Sessions",
+        "Sales Orders",
+        "POS & Vouchers",
+        "Cashflow",
+        "AI Chat",
+        "Settings",
+        "Notifications",
+        "Approvals (Read-only)"
+      ],
+      "user_terms_vi": [
+        "phiếu xuất kho",
+        "xuất kho",
+        "phiếu nhập kho",
+        "nhập kho",
+        "sản phẩm",
+        "SKU",
+        "đơn hàng",
+        "bán hàng",
+        "POS"
+      ],
+      "user_terms_en": [
+        "stock dispatch",
+        "outbound",
+        "stock receipt",
+        "inbound",
+        "product",
+        "sku",
+        "sales order",
+        "pos"
+      ],
+      "common_misnomers": [],
+      "capabilities": [
+        "Auth",
+        "Users / Employees",
+        "Products",
+        "Categories",
+        "Suppliers",
+        "Customers",
+        "Inventory",
+        "Stock Receipts",
+        "Stock Dispatchs",
+        "Audit Sessions",
+        "Sales Orders",
+        "POS & Vouchers"
+      ]
+    },
+    {
+      "id": "database",
+      "title_vi": "Cơ sở dữ liệu",
+      "title_en": "Database Reference",
+      "guide_refs": [
+        "§15"
+      ],
+      "chunk_file": "15_database.md",
+      "subsections": [
+        "Core Tables",
+        "Catalog & Partners",
+        "Inventory",
+        "Orders",
+        "Finance",
+        "AI"
+      ],
+      "user_terms_vi": [
+        "sản phẩm",
+        "SKU",
+        "sổ cái",
+        "doanh thu",
+        "chi phí"
+      ],
+      "user_terms_en": [
+        "product",
+        "sku",
+        "finance ledger",
+        "revenue",
+        "expense"
+      ],
+      "common_misnomers": [],
+      "capabilities": [
+        "Core Tables",
+        "Catalog & Partners",
+        "Inventory",
+        "Orders",
+        "Finance",
+        "AI"
+      ]
+    },
+    {
+      "id": "appendix",
+      "title_vi": "Quy tắc nghiệp vụ",
+      "title_en": "Appendix: Key Business Rules",
+      "guide_refs": [
+        "§16"
+      ],
+      "chunk_file": "16_appendix.md",
+      "subsections": [
+        "Inventory Rules",
+        "Product Pricing Rules",
+        "Delete Permission Rules",
+        "Finance Rules",
+        "AI Chat Rules"
+      ],
+      "user_terms_vi": [
+        "phiếu nhập kho",
+        "nhập kho",
+        "đơn hàng",
+        "bán hàng",
+        "POS",
+        "sổ cái",
+        "doanh thu",
+        "chi phí"
+      ],
+      "user_terms_en": [
+        "stock receipt",
+        "inbound",
+        "sales order",
+        "pos",
+        "finance ledger",
+        "revenue",
+        "expense"
+      ],
+      "common_misnomers": [],
+      "capabilities": [
+        "Inventory Rules",
+        "Product Pricing Rules",
+        "Delete Permission Rules",
+        "Finance Rules",
+        "AI Chat Rules"
+      ]
+    }
+  ],
+  "global_misnomers": [
+    {
+      "phrase_vi": "phiếu xuất khẩu",
+      "canonical_vi": "phiếu xuất kho",
+      "canonical_en": "Stock Dispatch",
+      "module_id": "inventory_stock_dispatch",
+      "note": "Hệ thống không có module xuất khẩu quốc tế"
+    },
+    {
+      "phrase_vi": "xuất khẩu",
+      "canonical_vi": "phiếu xuất kho",
+      "canonical_en": "Stock Dispatch",
+      "module_id": "inventory_stock_dispatch",
+      "note": "Trong ERP thường là phiếu xuất kho (outbound), không phải export"
+    },
+    {
+      "phrase_vi": "đơn hàng nhập khẩu",
+      "canonical_vi": "phiếu nhập kho",
+      "canonical_en": "Stock Receipt",
+      "module_id": "inventory_stock_receipt",
+      "note": "Không có đơn nhập khẩu — dùng phiếu nhập kho"
+    },
+    {
+      "phrase_vi": "nhập khẩu",
+      "canonical_vi": "phiếu nhập kho",
+      "canonical_en": "Stock Receipt",
+      "module_id": "inventory_stock_receipt",
+      "note": "Trong ERP thường là phiếu nhập kho (inbound)"
+    },
+    {
+      "phrase_vi": "bill xuất",
+      "canonical_vi": "phiếu xuất kho",
+      "canonical_en": "Stock Dispatch",
+      "module_id": "inventory_stock_dispatch",
+      "note": null
+    }
+  ],
+  "global_out_of_scope": [
+    "wordpress",
+    "woocommerce",
+    "shopify",
+    "excel macro",
+    "google sheets",
+    "facebook ads",
+    "tiktok shop",
+    "zalo pay api",
+    "cài đặt windows",
+    "máy in driver"
+  ],
+  "ai_rules_summary": [
+    "SQL read-only: chỉ SELECT, không DDL/DML",
+    "Chỉ truy vấn bảng trong allowlist",
+    "Doanh thu/chi phí: ưu tiên financeledger",
+    "Tăng tồn: duyệt phiếu nhập kho; giảm tồn: phiếu xuất Delivered hoặc kiểm kê",
+    "Master catalog (product/category/supplier/customer) khác chứng từ kho (receipt/dispatch)"
+  ]
+}

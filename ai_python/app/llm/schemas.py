@@ -13,7 +13,36 @@ class IntentOutput(BaseModel):
         "system_data_query",
         "system_data_chart",
         "catalog_data_entry",
+        "inventory_data_entry",
     ]
+
+
+class DomainIssue(BaseModel):
+    type: Literal[
+        "term_mismatch",
+        "unknown_entity",
+        "wrong_workflow",
+        "out_of_scope",
+        "missing_slot",
+        "ambiguous_module",
+    ]
+    user_text: str = ""
+    canonical_vi: str | None = None
+    canonical_en: str | None = None
+    guide_ref: str | None = None
+    severity: Literal["block", "warn"] = "warn"
+
+
+class DomainGuardOutput(BaseModel):
+    action: Literal["proceed", "clarify", "reject"]
+    in_scope: bool = True
+    matched_modules: list[str] = Field(default_factory=list)
+    coverage: Literal["full", "partial", "unknown"] = "full"
+    issues: list[DomainIssue] = Field(default_factory=list)
+    missing_slots: list[str] = Field(default_factory=list)
+    normalized_question: str = ""
+    clarification_questions: list[str] = Field(default_factory=list)
+    assistant_message: str = ""
 
 
 class SqlReviewOutput(BaseModel):
@@ -126,3 +155,28 @@ class CatalogDraftRowOutput(BaseModel):
 class CatalogDraftGenerateOutput(BaseModel):
     columns: list[CatalogDraftColumnOutput] = Field(default_factory=list)
     rows: list[CatalogDraftRowOutput] = Field(default_factory=list)
+
+
+class InventoryEntityPickOutput(BaseModel):
+    doc_type: Literal["stock_receipt"] = "stock_receipt"
+    line_count_hint: int = Field(default=1, ge=1, le=20)
+
+
+class InventoryDraftLineOutput(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    lineId: str = "l1"
+    values: dict[str, Any] = Field(default_factory=dict)
+
+
+class InventoryDraftColumnOutput(BaseModel):
+    key: str
+    label: str = ""
+    type: str = "string"
+    required: bool = False
+
+
+class InventoryDraftGenerateOutput(BaseModel):
+    header: dict[str, Any] = Field(default_factory=dict)
+    lineColumns: list[InventoryDraftColumnOutput] = Field(default_factory=list)
+    lines: list[InventoryDraftLineOutput] = Field(default_factory=list)

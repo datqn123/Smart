@@ -10,6 +10,7 @@ INTENT_HANDLERS_V1: dict[str, str] = {
     "system_data_query": "sql_branch",
     "system_data_chart": "agent_idea",
     "catalog_data_entry": "catalog_draft_branch",
+    "inventory_data_entry": "inventory_draft_branch",
 }
 
 
@@ -20,4 +21,6 @@ def normalize_intent(raw: str | None) -> str:
         return "system_data_chart"
     if raw == "catalog_data_entry":
         return "catalog_data_entry"
+    if raw == "inventory_data_entry":
+        return "inventory_data_entry"
     return "general_chat"

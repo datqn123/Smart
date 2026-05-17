@@ -1,9 +1,14 @@
 import { getApiUrl } from "@/lib/api/config"
+import type { AiInteractionMode } from "../types"
 import type { CatalogDraftTablePayload } from "./aiCatalogDraftApi"
+import type { InventoryReceiptDraftPayload } from "./aiInventoryDraftApi"
+import type { DomainClarifyPayload } from "./aiDomainClarifyTypes"
+import type { QueryTablePayload } from "./aiQueryTableTypes"
 
 type OpenAiChatStreamArgs = {
   query: string
   conversationId: string
+  interactionMode?: AiInteractionMode
   onDelta: (delta: string) => void
   onDone: () => void
   onError: (message: string) => void
@@ -11,6 +16,12 @@ type OpenAiChatStreamArgs = {
   onChart?: (spec: Record<string, unknown>) => void
   /** When FastAPI emits SSE `draft` (catalog HITL table). */
   onDraft?: (payload: CatalogDraftTablePayload) => void
+  /** When FastAPI emits SSE `inventory_draft` (stock receipt HITL). */
+  onInventoryDraft?: (payload: InventoryReceiptDraftPayload) => void
+  /** When FastAPI emits SSE `data_table` (read-only SQL rows). */
+  onDataTable?: (payload: QueryTablePayload) => void
+  /** When FastAPI emits SSE `clarify` (domain guard — scope/terminology). */
+  onClarify?: (payload: DomainClarifyPayload) => void
 }
 
 export type AiChatStreamHandle = { abort: () => void }
@@ -31,8 +42,30 @@ function parseSseBlock(block: string): { event: string; data: string } | null {
   return { event, data: dataLines.join("\n") }
 }
 
+function parseClarifyPayload(raw: string): DomainClarifyPayload | null {
+  try {
+    const c = JSON.parse(raw) as DomainClarifyPayload
+    if (c && Array.isArray(c.questions)) return c
+  } catch {
+    /* ignore */
+  }
+  return null
+}
+
+function parseQueryTablePayload(raw: string): QueryTablePayload | null {
+  try {
+    const table = JSON.parse(raw) as QueryTablePayload
+    if (table && Array.isArray(table.columns) && Array.isArray(table.rows)) {
+      return table
+    }
+  } catch {
+    /* ignore */
+  }
+  return null
+}
+
 /**
- * POST + Bearer → Spring relay → FastAPI; SSE events `delta` | `chart` | `done` | `error`.
+ * POST + Bearer → Spring relay → FastAPI; SSE events `delta` | `clarify` | `chart` | `draft` | `data_table` | `done` | `error`.
  */
 export function startAiChatPostStream(args: OpenAiChatStreamArgs): AiChatStreamHandle {
   const ac = new AbortController()
@@ -52,6 +85,9 @@ export function startAiChatPostStream(args: OpenAiChatStreamArgs): AiChatStreamH
         body: JSON.stringify({
           message: args.query,
           conversationId: args.conversationId,
+          ...(args.interactionMode && args.interactionMode !== "auto"
+            ? { interactionMode: args.interactionMode }
+            : {}),
         }),
       })
 
@@ -86,6 +122,10 @@ export function startAiChatPostStream(args: OpenAiChatStreamArgs): AiChatStreamH
           buf = buf.slice(sep + 2)
           const parsed = parseSseBlock(block)
           if (!parsed) continue
+          if (parsed.event === "clarify" && parsed.data.length > 0 && args.onClarify) {
+            const clarify = parseClarifyPayload(parsed.data)
+            if (clarify) args.onClarify(clarify)
+          }
           if (parsed.event === "delta" && parsed.data.length > 0) args.onDelta(parsed.data)
           if (parsed.event === "chart" && parsed.data.length > 0 && args.onChart) {
             try {
@@ -103,6 +143,18 @@ export function startAiChatPostStream(args: OpenAiChatStreamArgs): AiChatStreamH
               /* ignore malformed draft payload */
             }
           }
+          if (parsed.event === "inventory_draft" && parsed.data.length > 0 && args.onInventoryDraft) {
+            try {
+              const inv = JSON.parse(parsed.data) as InventoryReceiptDraftPayload
+              if (inv?.draftId) args.onInventoryDraft(inv)
+            } catch {
+              /* ignore malformed inventory draft payload */
+            }
+          }
+          if (parsed.event === "data_table" && parsed.data.length > 0 && args.onDataTable) {
+            const table = parseQueryTablePayload(parsed.data)
+            if (table) args.onDataTable(table)
+          }
           if (parsed.event === "done") args.onDone()
           if (parsed.event === "error") {
             args.onError(parsed.data.length > 0 ? parsed.data : "Không thể kết nối trợ lý AI.")
@@ -113,6 +165,10 @@ export function startAiChatPostStream(args: OpenAiChatStreamArgs): AiChatStreamH
       const tail = buf.trim()
       if (tail) {
         const parsed = parseSseBlock(tail)
+        if (parsed?.event === "clarify" && parsed.data.length > 0 && args.onClarify) {
+          const clarify = parseClarifyPayload(parsed.data)
+          if (clarify) args.onClarify(clarify)
+        }
         if (parsed?.event === "delta" && parsed.data.length > 0) args.onDelta(parsed.data)
         if (parsed?.event === "chart" && parsed.data.length > 0 && args.onChart) {
           try {
@@ -129,6 +185,18 @@ export function startAiChatPostStream(args: OpenAiChatStreamArgs): AiChatStreamH
           } catch {
             /* ignore */
           }
+        }
+        if (parsed?.event === "inventory_draft" && parsed.data.length > 0 && args.onInventoryDraft) {
+          try {
+            const inv = JSON.parse(parsed.data) as InventoryReceiptDraftPayload
+            if (inv?.draftId) args.onInventoryDraft(inv)
+          } catch {
+            /* ignore */
+          }
+        }
+        if (parsed?.event === "data_table" && parsed.data.length > 0 && args.onDataTable) {
+          const table = parseQueryTablePayload(parsed.data)
+          if (table) args.onDataTable(table)
         }
         if (parsed?.event === "done") args.onDone()
         if (parsed?.event === "error") {

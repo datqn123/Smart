@@ -32,6 +32,16 @@ def strip_embedded_chat_transcript(text: str) -> str:
     return rest if rest else t
 
 
+def effective_user_question(
+    messages: list[BaseMessage] | None,
+    normalized: str | None = None,
+) -> str:
+    """Prefer domain-guard normalized question when present."""
+    if normalized and str(normalized).strip():
+        return str(normalized).strip()
+    return latest_human_question(messages)
+
+
 def latest_human_question(messages: list[BaseMessage] | None) -> str:
     """Last non-empty HumanMessage content, with optional transcript stripping."""
     for m in reversed(messages or []):

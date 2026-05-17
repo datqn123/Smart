@@ -123,7 +123,11 @@ def build_gen_sql_user_prompt(
     chart_thread_context: str | None = None,
     allowed_tables_line: str | None = None,
     month_calendar: MonthCalendarSpec | None = None,
+    domain_context_block: str | None = None,
 ) -> str:
+    domain_block = (domain_context_block or "").strip()
+    if domain_block:
+        domain_block = f"ERP domain context (canonical terms — follow for filters/entities):\n{domain_block}\n\n"
     tail = (dialog_tail or "").strip()
     dialog_block = (
         "Recent conversation (resolve pronouns like đơn đó / tháng đó; "
@@ -184,6 +188,7 @@ def build_gen_sql_user_prompt(
     if mode == "explore":
         return (
             f"{persona}\n\n"
+            f"{domain_block}"
             f"{dialog_block}"
             f"{chart_ctx_block}"
             f"{planner_block}"
@@ -205,6 +210,7 @@ def build_gen_sql_user_prompt(
     seed_block = seed[:8000] if seed else "(no previous SQL — treat as fresh generation)"
     return (
         f"{persona} Do not invent columns outside the schema block or the seed SQL.\n\n"
+        f"{domain_block}"
         f"{dialog_block}"
         f"{chart_ctx_block}"
         f"{planner_block}"

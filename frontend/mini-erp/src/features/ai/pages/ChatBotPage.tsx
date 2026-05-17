@@ -1,12 +1,28 @@
 import { useState, useRef, useEffect } from "react"
 import { usePageTitle } from "@/context/PageTitleContext"
 import { Send, Image as ImageIcon, Mic, Paperclip, MessageSquare, Bot, User } from "lucide-react"
-import type { ChatMessage } from "../types"
+import type { AiInteractionMode, ChatMessage } from "../types"
 import { Button } from "@/components/ui/button"
 import { startAiChatPostStream, type AiChatStreamHandle } from "../api/aiChatSse"
 import { AiChatChartCard } from "../components/AiChatChartCard"
 import { AiChatDraftTableCard } from "../components/AiChatDraftTableCard"
+import { AiChatReceiptDraftCard } from "../components/AiChatReceiptDraftCard"
+import { AiChatQueryTableCard } from "../components/AiChatQueryTableCard"
+import { AiChatClarifyCard } from "../components/AiChatClarifyCard"
 import type { CatalogDraftTablePayload } from "../api/aiCatalogDraftApi"
+import type { DomainClarifyPayload } from "../api/aiDomainClarifyTypes"
+import type { InventoryReceiptDraftPayload } from "../api/aiInventoryDraftApi"
+import type { QueryTablePayload } from "../api/aiQueryTableTypes"
+import { cn } from "@/lib/utils"
+
+const INTERACTION_MODES: { id: AiInteractionMode; label: string }[] = [
+  { id: "auto", label: "Tự động" },
+  { id: "data_query", label: "Hỏi dữ liệu" },
+  { id: "data_table", label: "Bảng kết quả" },
+  { id: "chart", label: "Biểu đồ" },
+  { id: "catalog_draft", label: "Tạo bảng nhập" },
+  { id: "inventory_draft", label: "Phiếu nhập kho" },
+]
 
 export function ChatBotPage() {
   const { setTitle } = usePageTitle()
@@ -23,6 +39,7 @@ export function ChatBotPage() {
     }
   ])
   const [inputValue, setInputValue] = useState("")
+  const [interactionMode, setInteractionMode] = useState<AiInteractionMode>("auto")
   const [isTyping, setIsTyping] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
   const [conversationId] = useState(() => {
@@ -123,6 +140,7 @@ export function ChatBotPage() {
     streamRef.current = startAiChatPostStream({
       query: content,
       conversationId,
+      interactionMode,
       onDelta: (delta) => {
         setMessages(prev =>
           prev.map(m =>
@@ -144,6 +162,33 @@ export function ChatBotPage() {
           prev.map(m =>
             m.id === assistantId
               ? { ...m, metadata: { ...m.metadata, draftTable: payload } }
+              : m
+          )
+        )
+      },
+      onInventoryDraft: (payload: InventoryReceiptDraftPayload) => {
+        setMessages(prev =>
+          prev.map(m =>
+            m.id === assistantId
+              ? { ...m, metadata: { ...m.metadata, inventoryDraft: payload } }
+              : m
+          )
+        )
+      },
+      onDataTable: (payload: QueryTablePayload) => {
+        setMessages(prev =>
+          prev.map(m =>
+            m.id === assistantId
+              ? { ...m, metadata: { ...m.metadata, queryTable: payload } }
+              : m
+          )
+        )
+      },
+      onClarify: (payload: DomainClarifyPayload) => {
+        setMessages(prev =>
+          prev.map(m =>
+            m.id === assistantId
+              ? { ...m, metadata: { ...m.metadata, domainClarify: payload } }
               : m
           )
         )
@@ -211,8 +256,11 @@ export function ChatBotPage() {
         {messages.map((msg) => {
           const hasChart = msg.role === "assistant" && Boolean(msg.metadata?.chartSpec)
           const hasDraft = msg.role === "assistant" && Boolean(msg.metadata?.draftTable)
-          const wideBubble = hasChart || hasDraft
-          const layoutClass = hasDraft
+          const hasInventoryDraft = msg.role === "assistant" && Boolean(msg.metadata?.inventoryDraft)
+          const hasQueryTable = msg.role === "assistant" && Boolean(msg.metadata?.queryTable)
+          const hasClarify = msg.role === "assistant" && Boolean(msg.metadata?.domainClarify)
+          const wideBubble = hasChart || hasDraft || hasInventoryDraft || hasQueryTable || hasClarify
+          const layoutClass = hasDraft || hasInventoryDraft || hasQueryTable
             ? "w-full max-w-[min(960px,100%)]"
             : wideBubble
               ? "max-w-[96%] sm:max-w-[min(640px,88%)]"
@@ -249,9 +297,9 @@ export function ChatBotPage() {
                         <span className="text-[10px] font-bold uppercase tracking-wider">0:05</span>
                      </div>
                   )}
-                  {msg.role === "assistant" ? (
+                  {msg.role === "assistant" && !hasClarify ? (
                     <span className="whitespace-pre-line break-words">{assistantText}</span>
-                  ) : (
+                  ) : msg.role === "assistant" && hasClarify ? null : (
                     msg.content
                   )}
                 </div>
@@ -260,6 +308,21 @@ export function ChatBotPage() {
                 ) : null}
                 {hasDraft && msg.metadata?.draftTable ? (
                   <AiChatDraftTableCard initial={msg.metadata.draftTable} />
+                ) : null}
+                {hasInventoryDraft && msg.metadata?.inventoryDraft ? (
+                  <AiChatReceiptDraftCard initial={msg.metadata.inventoryDraft} />
+                ) : null}
+                {hasQueryTable && msg.metadata?.queryTable ? (
+                  <AiChatQueryTableCard payload={msg.metadata.queryTable} />
+                ) : null}
+                {hasClarify && msg.metadata?.domainClarify ? (
+                  <AiChatClarifyCard
+                    payload={msg.metadata.domainClarify}
+                    onPickSuggestion={(text) => {
+                      setInputValue(text)
+                      handleSend(text)
+                    }}
+                  />
                 ) : null}
                 <div className={`text-[10px] font-bold uppercase tracking-widest text-slate-400 ${msg.role === "user" ? "text-right" : "text-left"}`}>
                   {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -289,6 +352,24 @@ export function ChatBotPage() {
       {/* Input Area */}
       <div className="p-4 md:p-6 bg-white border-t border-slate-200 z-10">
         <div className="max-w-4xl mx-auto flex flex-col gap-3">
+           <div className="flex flex-wrap gap-2">
+             {INTERACTION_MODES.map((mode) => (
+               <button
+                 key={mode.id}
+                 type="button"
+                 disabled={isTyping}
+                 onClick={() => setInteractionMode(mode.id)}
+                 className={cn(
+                   "rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
+                   interactionMode === mode.id
+                     ? "border-blue-600 bg-blue-600 text-white shadow-sm"
+                     : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                 )}
+               >
+                 {mode.label}
+               </button>
+             ))}
+           </div>
            {isRecording && (
               <div className="flex items-center justify-between px-4 py-2 bg-rose-50 border border-rose-100 rounded-xl animate-pulse">
                 <div className="flex items-center gap-3">

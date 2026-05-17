@@ -8,6 +8,7 @@ from pathlib import Path
 _AGENTS_DIR = Path(__file__).resolve().parent / "agents"
 _CONTRACT_HEADER = "## JSON output contract"
 CATALOG_DRAFT_ENTITY_TYPES = frozenset({"product", "category", "supplier", "customer"})
+INVENTORY_DRAFT_DOC_TYPES = frozenset({"stock_receipt"})
 
 
 @lru_cache(maxsize=64)
@@ -61,6 +62,32 @@ def load_catalog_draft_system_prompt(entity_type: str) -> str:
 @lru_cache(maxsize=4)
 def load_catalog_draft_json_contract() -> str | None:
     return load_agent_json_contract("catalog_draft")
+
+
+def inventory_draft_doc_prompt_id(doc_type: str) -> str:
+    doc = doc_type.strip().lower()
+    if doc not in INVENTORY_DRAFT_DOC_TYPES:
+        raise ValueError(f"unknown inventory doc_type: {doc_type!r}")
+    return f"inventory_draft_{doc}"
+
+
+@lru_cache(maxsize=16)
+def load_inventory_draft_system_prompt(doc_type: str) -> str:
+    """Base inventory_draft + mandatory doc playbook — use before generate_inventory_draft LLM."""
+    doc = doc_type.strip().lower()
+    base = load_agent_prompt("inventory_draft")
+    entity_body = load_agent_prompt(inventory_draft_doc_prompt_id(doc))
+    return (
+        f"{base}\n\n---\n\n"
+        f"## Playbook bắt buộc — doc `{doc}`\n\n"
+        "Đọc và tuân thủ **toàn bộ** phần dưới trước khi sinh JSON.\n\n"
+        f"{entity_body}"
+    ).strip()
+
+
+@lru_cache(maxsize=4)
+def load_inventory_draft_json_contract() -> str | None:
+    return load_agent_json_contract("inventory_draft")
 
 
 def _read_agent_file(agent_id: str) -> str:

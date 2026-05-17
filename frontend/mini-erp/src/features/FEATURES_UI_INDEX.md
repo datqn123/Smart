@@ -120,7 +120,7 @@
 
 | Loại | File |
 | :--- | :--- |
-| Chat | `pages/ChatBotPage.tsx`, `api/aiChatSse.ts`, `api/aiCatalogDraftApi.ts` |
+| Chat | `pages/ChatBotPage.tsx`, `api/aiChatSse.ts`, `api/aiCatalogDraftApi.ts`, `api/aiInventoryDraftApi.ts`, `components/AiChatReceiptDraftCard.tsx` |
 | Bảng nháp AI (HITL catalog) | `components/AiChatDraftTableCard.tsx` — SSE `draft` + `PATCH`/`POST commit` nháp |
 | Biểu đồ chat | `components/AiChatChartCard.tsx` |
 
