@@ -35,6 +35,8 @@ _EXPECTED_IDS = frozenset(
         "inventory_entity_pick",
         "inventory_draft",
         "inventory_draft_stock_receipt",
+        "context_compact",
+        "domain_guard",
     }
 )
 
@@ -66,7 +68,7 @@ def test_load_agent_prompt_non_empty(agent_id: str) -> None:
     "agent_id",
     sorted(
         _EXPECTED_IDS
-        - {"chat_normal", "summarize", "gen_sql"}
+        - {"chat_normal", "summarize", "gen_sql", "context_compact"}
         - _CATALOG_DRAFT_ENTITY_PLAYBOOKS
         - _INVENTORY_DRAFT_PLAYBOOKS
     ),

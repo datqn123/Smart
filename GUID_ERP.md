@@ -714,62 +714,14 @@ Backend SalesOrderService.retailCheckout():
 Response: 201 Created with full order data
 ```
 
-### 7.2. Wholesale
-
-#### Create Order
-
-```
-POST /api/v1/sales-orders { orderChannel: "Wholesale", customerId, discountAmount?, shippingAddress?, notes?, paymentStatus?, status?, lines[] }
-  ↓
-Backend:
-  1. Validate customer exists
-  2. Validate lines (same as retail)
-  3. Validate status: Pending|Processing|Partial|Shipped|Delivered (Cancelled blocked)
-  4. Validate paymentStatus: Paid|Unpaid|Partial
-  5. INSERT order header (temp code → SO-{year}-{id})
-  6. INSERT order lines
-  7. Post to finance ledger (if applicable)
-  → Does NOT auto-deduct stock (managed via separate dispatch workflow)
-```
-
-#### Edit Order
-
-```
-PATCH /api/v1/sales-orders/{id} { status?, paymentStatus?, shippingAddress?, notes?, discountAmount? }
-  ↓
-Backend:
-  1. SELECT ... FOR UPDATE
-  2. Block updates on Cancelled orders (409)
-  3. Trigger finance ledger posting when:
-     - paymentStatus → "Paid"
-     - status → "Delivered"
-```
-
-#### Order Status Diagram
-
-```
-Pending → Processing → Partial → Shipped → Delivered
-   ↓          ↓          ↓         ↓          ↓
-Cancelled ← (any state, via cancel endpoint)
-```
-
-| Status | Can Create | Can Patch | Can Cancel | Finance Impact |
-|---|---|---|---|---|
-| Pending | ✓ | ✓ | ✓ | None |
-| Processing | ✓ | ✓ | ✓ | None |
-| Partial | ✓ | ✓ | ✓ | None |
-| Shipped | ✓ | ✓ | ✓ (409 if dispatched) | None |
-| Delivered | ✓ | ✓ | ✓ (restores stock for retail) | Records revenue |
-| Cancelled | ✗ | ✗ | Idempotent 200 | Records refund (retail) |
-
-### 7.3. Returns / Refunds
+### 7.2. Returns / Refunds
 
 ```
 POST /api/v1/sales-orders { orderChannel: "Return", customerId, refSalesOrderId?, lines[] }
   ↓
 Backend:
   1. Validate refSalesOrderId customer must match return's customer
-  2. Create order normally (same as Wholesale)
+   2. Create order normally (same as retail, with orderChannel="Return")
 ```
 
 #### Cancel Order
@@ -780,16 +732,15 @@ POST /api/v1/sales-orders/{id}/cancel
 Backend SalesOrderService.cancel():
   1. SELECT ... FOR UPDATE
   2. Idempotent: already Cancelled → return immediately (200)
-  3. Check stock dispatch:
-     - Retail: Call RetailStockService.reverseDeductionForRetailCancel()
-       → Restore inventory, INSERT inventory_log inbound, cancel dispatch records
-     - Wholesale: 409 — "Cannot cancel — already dispatched from warehouse"
+   3. Check stock dispatch:
+      - Retail: Call RetailStockService.reverseDeductionForRetailCancel()
+        → Restore inventory, INSERT inventory_log inbound, cancel dispatch records
   4. Voucher reversal (Retail): restore voucher used_count
   5. Finance ledger: post refund entry
   6. UPDATE status = 'Cancelled', cancelled_at = now, cancelled_by = userId
 ```
 
-### 7.4. Vouchers
+### 7.3. Vouchers
 
 #### Voucher Types
 
@@ -919,7 +870,6 @@ Backend FinanceLedgerService:
 |---|---|---|---|
 | Cash Transaction (Income) | Completed | SalesRevenue | CashTransaction |
 | Cash Transaction (Expense) | Completed | OperatingExpense | CashTransaction |
-| Sales Order (Wholesale) | Delivered + Paid | SalesRevenue | SalesOrder |
 | Sales Order (Retail) | Paid | SalesRevenue | SalesOrder |
 | Sales Order (Return) | Paid | Refund | SalesOrder |
 | Sales Order (Retail Cancel) | Had revenue posted | Refund | SalesOrder |
@@ -1108,8 +1058,10 @@ summarize_answer node:
 
 - **Checkpointer:** MemorySaver (in-memory) or SqliteSaver (persistent file)
 - **Thread ID:** `sessionStorage ai_chat_conversation_id` — UUID per browser tab
-- **Dialog tail:** Last 12 messages (max 2000 chars) injected into prompt for gen_sql and summarize
-- **Each new turn:** Resets query_result, generated_sql, final_answer, error_payload, intent. Keeps thread_id, user_id, tenant_id.
+- **Dialog tail:** Last 12 messages (max 2000 chars) injected into prompt for gen_sql and summarize; when a summary exists it is prepended as `[Tóm tắt các lượt trước]`.
+- **Compaction:** After `domain_guard` (proceed path), node `context_compact` runs when user turn count exceeds `CONTEXT_COMPACT_MAX_TURNS` (default 10). LLM writes an 8-line Vietnamese summary; keeps the last 2 user turns verbatim; prunes older messages from checkpoint via `RemoveMessage`.
+- **State keys:** `conversation_summary`, `context_compact_generation` (persist across turns; not reset in `_build_state`).
+- **Each new turn:** Resets query_result, generated_sql, final_answer, error_payload, intent. Keeps thread_id, user_id, tenant_id, conversation summary.
 
 ---
 
@@ -1490,7 +1442,7 @@ Backend:
 | GET | `/api/v1/sales-orders` | List orders |
 | GET | `/api/v1/sales-orders/{id}` | Order detail |
 | GET | `/api/v1/sales-orders/retail/history` | Retail history |
-| POST | `/api/v1/sales-orders` | Create wholesale/return order |
+| POST | `/api/v1/sales-orders` | Create return order |
 | POST | `/api/v1/sales-orders/retail/checkout` | POS checkout |
 | POST | `/api/v1/sales-orders/retail/voucher-preview` | Preview voucher |
 | PATCH | `/api/v1/sales-orders/{id}` | Edit order |

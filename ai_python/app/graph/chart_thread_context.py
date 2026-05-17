@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
+from app.graph.message_utils import format_summary_prefix
+
 
 def format_prior_turns_for_chart(
     messages: list[BaseMessage] | None,
     *,
     max_turns: int = 2,
     max_chars: int = 2500,
+    summary: str | None = None,
 ) -> str:
     """
     Extract recent User/Assistant pairs *before* the latest human message.
@@ -52,8 +55,15 @@ def format_prior_turns_for_chart(
             i = j
         i -= 1
     block = "\n\n---\n\n".join(pairs).strip()
-    if not block:
+    prefix = format_summary_prefix(summary)
+    if prefix and block:
+        combined = f"{prefix}\n\n---\n\n{block}"
+    elif prefix:
+        combined = prefix
+    else:
+        combined = block
+    if not combined:
         return ""
-    if len(block) <= max_chars:
-        return block
-    return block[-max_chars:].lstrip()
+    if len(combined) <= max_chars:
+        return combined
+    return combined[-max_chars:].lstrip()

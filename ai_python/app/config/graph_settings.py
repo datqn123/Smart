@@ -184,6 +184,29 @@ class GraphSettings(BaseSettings):
         le=8,
         description="Max GUID chunks retrieved per turn for domain_guard.",
     )
+    # --- Context compaction (conversation memory) ---
+    context_compact_enabled: bool = Field(
+        default=True,
+        description="Summarize and prune old messages when human turn count exceeds max.",
+    )
+    context_compact_max_turns: int = Field(
+        default=10,
+        ge=1,
+        le=100,
+        description="Max user turns before compaction runs.",
+    )
+    context_compact_summary_lines: int = Field(
+        default=8,
+        ge=1,
+        le=32,
+        description="Target line count for LLM conversation summary.",
+    )
+    context_compact_keep_last_turns: int = Field(
+        default=2,
+        ge=1,
+        le=10,
+        description="Recent user turns kept verbatim after compaction.",
+    )
 
     @field_validator("ai_display_timezone", mode="before")
     @classmethod
@@ -250,6 +273,7 @@ class GraphSettings(BaseSettings):
         "sql_validate_ledger_metric",
         "chart_readiness_enabled",
         "chart_readiness_use_llm_critic",
+        "context_compact_enabled",
         mode="before",
     )
     @classmethod
@@ -265,7 +289,14 @@ class GraphSettings(BaseSettings):
             return v.strip().lower()
         return v
 
-    @field_validator("sql_dialog_tail_max_messages", "sql_dialog_tail_max_chars", mode="before")
+    @field_validator(
+        "sql_dialog_tail_max_messages",
+        "sql_dialog_tail_max_chars",
+        "context_compact_max_turns",
+        "context_compact_summary_lines",
+        "context_compact_keep_last_turns",
+        mode="before",
+    )
     @classmethod
     def coerce_sql_dialog_tail_ints(cls, v: object) -> object:
         if isinstance(v, str):

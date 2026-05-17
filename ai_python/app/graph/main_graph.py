@@ -19,6 +19,7 @@ from app.graph.nodes.query_table import (
     route_after_sql_branch,
 )
 from app.graph.nodes.chat_normal import make_chat_normal_node
+from app.graph.nodes.context_compact import make_context_compact_node
 from app.graph.nodes.domain_guard import make_domain_guard_node, route_after_domain_guard
 from app.graph.nodes.intent import make_intent_node, route_after_intent
 from app.graph.nodes.summarize import make_summarize_answer_node
@@ -34,6 +35,7 @@ def build_main_graph(deps: GraphDeps):
     catalog_inner = build_catalog_draft_subgraph(deps)
     inventory_inner = build_inventory_draft_subgraph(deps)
     g.add_node("domain_guard", make_domain_guard_node(deps))
+    g.add_node("context_compact", make_context_compact_node(deps))
     g.add_node("classify_intent", make_intent_node(deps))
     g.add_node("chat_normal", make_chat_normal_node(deps))
     g.add_node("catalog_draft_branch", catalog_inner.compile())
@@ -51,10 +53,11 @@ def build_main_graph(deps: GraphDeps):
         "domain_guard",
         route_after_domain_guard,
         {
-            "continue": "classify_intent",
+            "continue": "context_compact",
             "stop": END,
         },
     )
+    g.add_edge("context_compact", "classify_intent")
     g.add_conditional_edges(
         "classify_intent",
         route_after_intent,

@@ -83,6 +83,52 @@ def test_strip_noop_term_issue() -> None:
     assert len(strip_noop_issues(issues)) == 0
 
 
+def test_expand_follow_up_retail_from_thread() -> None:
+    from app.graph.erp_guide.slot_resolution import expand_elliptical_follow_up
+
+    tail = (
+        "User: trong tháng này có bao nhiêu đơn hàng bán lẻ nhỉ\n\n"
+        "Assistant: Số lượng đơn hàng bán lẻ trong tháng này là 9."
+    )
+    expanded = expand_elliptical_follow_up("chi tiết từng đơn", tail)
+    assert "bán lẻ" in expanded.lower()
+
+
+def test_filter_order_channel_slot_when_in_dialog() -> None:
+    from app.graph.erp_guide.slot_resolution import filter_resolved_missing_slots
+
+    tail = "User: đơn hàng bán lẻ tháng này\n\nAssistant: 9 đơn"
+    slots = filter_resolved_missing_slots(
+        "chi tiết từng đơn",
+        ["order_channel", "Which order type"],
+        dialog_tail=tail,
+    )
+    assert slots == []
+
+
+def test_proceed_follow_up_retail_orders() -> None:
+    from app.graph.nodes.domain_guard import _apply_hard_rules
+    from app.llm.schemas import DomainGuardOutput
+
+    tail = (
+        "User: trong tháng này có bao nhiêu đơn hàng bán lẻ nhỉ\n\n"
+        "Assistant: 9 đơn hàng bán lẻ."
+    )
+    out = DomainGuardOutput(
+        action="clarify",
+        in_scope=True,
+        coverage="partial",
+        missing_slots=["order_channel"],
+        clarification_questions=["Bạn muốn xem chi tiết loại đơn hàng nào?"],
+        normalized_question="chi tiết từng đơn",
+    )
+    final = _apply_hard_rules(
+        out, [], user_question="chi tiết từng đơn", dialog_tail=tail
+    )
+    assert final.action == "proceed"
+    assert "bán lẻ" in final.normalized_question.lower()
+
+
 def test_apply_hard_rules_blocks_on_severity() -> None:
     out = DomainGuardOutput(
         action="proceed",

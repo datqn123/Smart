@@ -9,6 +9,7 @@ from langchain_core.messages import AIMessage
 from app.graph.agent_trace import emit_agent_trace
 from app.graph.deps import GraphDeps
 from app.graph.display_format import format_display_for_chat_ui
+from app.graph.message_utils import build_chat_context_text
 from app.graph.state import AgentState
 from app.prompts.load import load_agent_prompt
 
@@ -31,12 +32,12 @@ def make_chat_normal_node(deps: GraphDeps):
             )
             stub = "[chat] stub: no LLM registry"
             return {"final_answer": stub, "messages": [AIMessage(content=stub)]}
-        msgs = state.get("messages") or []
-        parts: list[str] = []
-        for m in msgs[-20:]:
-            c = getattr(m, "content", "")
-            parts.append(str(c))
-        text = "\n".join(parts)[-4000:]
+        text = build_chat_context_text(
+            state.get("messages"),
+            state.get("conversation_summary"),
+            tail_messages=20,
+            max_chars=4000,
+        )
         ans = reg.get("chat").invoke_text(text, system=_CHAT_SYSTEM)
         ans = format_display_for_chat_ui(ans)
         preview = ans if len(ans) <= 1200 else ans[:1200] + "…"

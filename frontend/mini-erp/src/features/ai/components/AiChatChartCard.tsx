@@ -1,5 +1,12 @@
-import { useId, useMemo } from "react"
-import { BarChart3, PieChart as PieChartIcon } from "lucide-react"
+import { useId, useMemo, useState } from "react"
+import { BarChart3, Maximize2, PieChart as PieChartIcon } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import {
   Bar,
   BarChart,
@@ -197,59 +204,30 @@ function chartYAxisProps() {
   }
 }
 
-export function AiChatChartCard({ spec }: { spec: Record<string, unknown> }) {
-  const gradientId = useId().replace(/:/g, "")
-  const s = spec as ChartSpecShape
-  const rawData = Array.isArray(s.data) ? s.data.filter(isDataRow) : []
-  const xKey = typeof s.xKey === "string" && s.xKey.trim() ? s.xKey.trim() : null
-  const seriesArr = Array.isArray(s.series) ? s.series : []
-  const yKey =
-    typeof seriesArr[0]?.dataKey === "string" && seriesArr[0].dataKey.trim()
-      ? seriesArr[0].dataKey.trim()
-      : null
-  const chartType =
-    s.chartType === "line" ? "line" : s.chartType === "pie" ? "pie" : "bar"
-  const title = typeof s.title === "string" ? s.title.trim() : ""
-  const metricLabel =
-    typeof seriesArr[0]?.name === "string" && seriesArr[0].name.trim()
-      ? seriesArr[0].name.trim()
-      : yKey ?? "Giá trị"
 
-  const data = useMemo(() => {
-    if (!xKey || !yKey || rawData.length === 0) return []
-    return normalizeRows(rawData, xKey, yKey)
-  }, [rawData, xKey, yKey])
+type ChartRenderProps = {
+  gradientId: string
+  chartType: "line" | "pie" | "bar"
+  data: Array<Record<string, string | number>>
+  pieData: PieRow[]
+  xKey: string
+  yKey: string
+  metricLabel: string
+  areaClassName: string
+  pieOuterRadius?: number
+}
 
-  const pieData = useMemo((): PieRow[] => {
-    if (!xKey || !yKey || data.length === 0) return []
-    const total = data.reduce((sum, row) => sum + (Number(row[yKey]) || 0), 0)
-    return data.map((row, i) => {
-      const value = Number(row[yKey]) || 0
-      return {
-        ...row,
-        __rawX: String(row.__rawX ?? row[xKey] ?? ""),
-        __fill: PIE_SLICE_COLORS[i % PIE_SLICE_COLORS.length],
-        __pct: total > 0 ? (value / total) * 100 : 0,
-      }
-    })
-  }, [data, xKey, yKey])
-
-  if (!xKey || !yKey) {
-    return (
-      <div className="rounded-xl border border-amber-200/80 bg-amber-50/90 px-3 py-2.5 text-xs text-amber-950">
-        Thiếu cấu hình trục biểu đồ từ server (xKey / series.dataKey).
-      </div>
-    )
-  }
-
-  if (data.length === 0) {
-    return (
-      <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-600">
-        Không có dữ liệu để vẽ biểu đồ.
-      </div>
-    )
-  }
-
+function ChartCanvas({
+  gradientId,
+  chartType,
+  data,
+  pieData,
+  xKey,
+  yKey,
+  metricLabel,
+  areaClassName,
+  pieOuterRadius = 82,
+}: ChartRenderProps) {
   const tooltip = (
     <Tooltip
       content={<ChartTooltipContent metricLabel={metricLabel} />}
@@ -258,36 +236,12 @@ export function AiChatChartCard({ spec }: { spec: Record<string, unknown> }) {
       contentStyle={TOOLTIP_STYLE}
     />
   )
-
   const grid = <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
 
   return (
-    <div className="w-full min-w-0 overflow-hidden rounded-2xl border border-slate-200/90 bg-gradient-to-b from-slate-50/80 to-white shadow-sm ring-1 ring-slate-900/[0.04]">
-      <div className="flex items-start gap-2 border-b border-slate-100 bg-white/60 px-3 py-2.5">
-        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-          {chartType === "pie" ? (
-            <PieChartIcon className="h-4 w-4" aria-hidden />
-          ) : (
-            <BarChart3 className="h-4 w-4" aria-hidden />
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          {title ? (
-            <h4 className="text-sm font-semibold leading-snug tracking-tight text-slate-800 line-clamp-2">
-              {title}
-            </h4>
-          ) : (
-            <h4 className="text-sm font-semibold text-slate-800">Biểu đồ dữ liệu</h4>
-          )}
-          <p className="mt-0.5 text-[11px] text-slate-500">
-            {data.length} {chartType === "pie" ? "nhóm" : "mốc thời gian"}
-          </p>
-        </div>
-      </div>
-
-      <div className="h-[260px] w-full min-w-[220px] px-1 pb-2 pt-3">
-        <ResponsiveContainer width="100%" height="100%">
-          {chartType === "line" ? (
+    <div className={areaClassName}>
+      <ResponsiveContainer width="100%" height="100%">
+        {chartType === "line" ? (
             <LineChart data={data} margin={{ top: 4, right: 16, bottom: 4, left: 0 }}>
               <defs>
                 <linearGradient id={`line-${gradientId}`} x1="0" y1="0" x2="0" y2="1">
@@ -318,12 +272,12 @@ export function AiChatChartCard({ spec }: { spec: Record<string, unknown> }) {
                 cx="50%"
                 cy="44%"
                 innerRadius={0}
-                outerRadius={82}
+                outerRadius={pieOuterRadius}
                 paddingAngle={3}
                 stroke="#fff"
                 strokeWidth={2}
                 label={false}
-                activeShape={{ outerRadius: 92, stroke: "#fff", strokeWidth: 2 }}
+                activeShape={{ outerRadius: pieOuterRadius + 10, stroke: "#fff", strokeWidth: 2 }}
               >
                 {pieData.map((entry, i) => (
                   <Cell key={`pie-${entry.__rawX}-${i}`} fill={entry.__fill} />
@@ -378,8 +332,129 @@ export function AiChatChartCard({ spec }: { spec: Record<string, unknown> }) {
               </Bar>
             </BarChart>
           )}
-        </ResponsiveContainer>
-      </div>
+      </ResponsiveContainer>
     </div>
+  )
+}
+
+export function AiChatChartCard({ spec }: { spec: Record<string, unknown> }) {
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const gradientId = useId().replace(/:/g, "")
+  const s = spec as ChartSpecShape
+  const rawData = Array.isArray(s.data) ? s.data.filter(isDataRow) : []
+  const xKey = typeof s.xKey === "string" && s.xKey.trim() ? s.xKey.trim() : null
+  const seriesArr = Array.isArray(s.series) ? s.series : []
+  const yKey =
+    typeof seriesArr[0]?.dataKey === "string" && seriesArr[0].dataKey.trim()
+      ? seriesArr[0].dataKey.trim()
+      : null
+  const chartType =
+    s.chartType === "line" ? "line" : s.chartType === "pie" ? "pie" : "bar"
+  const title = typeof s.title === "string" ? s.title.trim() : ""
+  const metricLabel =
+    typeof seriesArr[0]?.name === "string" && seriesArr[0].name.trim()
+      ? seriesArr[0].name.trim()
+      : yKey ?? "Giá trị"
+
+  const data = useMemo(() => {
+    if (!xKey || !yKey || rawData.length === 0) return []
+    return normalizeRows(rawData, xKey, yKey)
+  }, [rawData, xKey, yKey])
+
+  const pieData = useMemo((): PieRow[] => {
+    if (!xKey || !yKey || data.length === 0) return []
+    const total = data.reduce((sum, row) => sum + (Number(row[yKey]) || 0), 0)
+    return data.map((row, i) => {
+      const value = Number(row[yKey]) || 0
+      return {
+        ...row,
+        __rawX: String(row.__rawX ?? row[xKey] ?? ""),
+        __fill: PIE_SLICE_COLORS[i % PIE_SLICE_COLORS.length],
+        __pct: total > 0 ? (value / total) * 100 : 0,
+      }
+    })
+  }, [data, xKey, yKey])
+
+  if (!xKey || !yKey) {
+    return (
+      <div className="rounded-xl border border-amber-200/80 bg-amber-50/90 px-3 py-2.5 text-xs text-amber-950">
+        Thiếu cấu hình trục biểu đồ từ server (xKey / series.dataKey).
+      </div>
+    )
+  }
+
+  if (data.length === 0) {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-600">
+        Không có dữ liệu để vẽ biểu đồ.
+      </div>
+    )
+  }
+
+
+  const chartTitle = title || "Biểu đồ dữ liệu"
+  const canvasProps: ChartRenderProps = {
+    gradientId,
+    chartType,
+    data,
+    pieData,
+    xKey,
+    yKey,
+    metricLabel,
+    areaClassName: "",
+  }
+
+  return (
+    <>
+      <div className="w-full min-w-0 overflow-hidden rounded-2xl border border-slate-200/90 bg-gradient-to-b from-slate-50/80 to-white shadow-sm ring-1 ring-slate-900/[0.04]">
+        <div className="flex items-start gap-2 border-b border-slate-100 bg-white/60 px-3 py-2.5">
+          <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+            {chartType === "pie" ? (
+              <PieChartIcon className="h-4 w-4" aria-hidden />
+            ) : (
+              <BarChart3 className="h-4 w-4" aria-hidden />
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <h4 className="text-sm font-semibold leading-snug tracking-tight text-slate-800 line-clamp-2">
+              {chartTitle}
+            </h4>
+            <p className="mt-0.5 text-[11px] text-slate-500">
+              {data.length} {chartType === "pie" ? "nhóm" : "mốc thời gian"}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="shrink-0 bg-white"
+            onClick={() => setDialogOpen(true)}
+          >
+            <Maximize2 className="h-4 w-4" />
+            Phóng to
+          </Button>
+        </div>
+        <ChartCanvas
+          {...canvasProps}
+          areaClassName="h-[min(300px,38vh)] w-full min-w-[240px] px-1 pb-2 pt-3 md:h-[min(340px,42vh)]"
+        />
+      </div>
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="flex max-h-[min(92dvh,720px)] w-full max-w-[min(96vw,900px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(96vw,900px)]">
+          <DialogHeader className="border-b border-slate-100 px-5 py-4 text-left">
+            <DialogTitle className="text-base">{chartTitle}</DialogTitle>
+            <p className="text-xs text-slate-500">
+              {data.length} {chartType === "pie" ? "nhóm" : "mốc thời gian"}
+            </p>
+          </DialogHeader>
+          <ChartCanvas
+            {...canvasProps}
+            gradientId={`${gradientId}-dlg`}
+            areaClassName="h-[min(480px,62vh)] w-full px-2 pb-4 pt-2"
+            pieOuterRadius={120}
+          />
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }

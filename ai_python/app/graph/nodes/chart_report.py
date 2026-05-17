@@ -132,6 +132,7 @@ def make_agent_idea_node(deps: GraphDeps):
         thread_ctx = format_prior_turns_for_chart(
             state.get("messages"),
             max_turns=int(deps.settings.chart_thread_context_max_turns),
+            summary=state.get("conversation_summary"),
         )
         catalog = ""
         if deps.settings.chart_brief_catalog_max_tables > 0:

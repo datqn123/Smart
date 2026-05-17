@@ -73,10 +73,14 @@ class AgentState(TypedDict, total=False):
     normalized_user_question: str | None
     domain_context: dict[str, Any] | None
     domain_clarify_sse: dict[str, Any] | None
+    # Context compaction (conversation memory)
+    conversation_summary: str | None
+    context_compact_generation: int | None
 
 
 def default_initial_state() -> AgentState:
     return {
+        "context_compact_generation": 0,
         "sql_attempt_count": 0,
         "validation_feedback": {
             "intent_review": [],

@@ -14,11 +14,12 @@ from app.graph.erp_guide.retrieve import detect_heuristic_misnomers, retrieve_gu
 from app.graph.erp_guide.rewrite import resolve_suggested_rewrite
 from app.graph.erp_guide.slot_resolution import (
     default_normalized_for_proceed,
+    expand_elliptical_follow_up,
     filter_resolved_missing_slots,
     has_blocking_issues,
     strip_noop_issues,
 )
-from app.graph.message_utils import latest_human_question
+from app.graph.message_utils import format_dialog_tail_for_sql, latest_human_question
 from app.graph.state import AgentState
 from app.llm.schemas import DomainGuardOutput, DomainIssue
 from app.prompts.load import load_agent_json_contract, load_agent_prompt
@@ -61,11 +62,21 @@ def _short_clarify_intro(issues: list[DomainIssue]) -> str:
     return _CLARIFY_BUBBLE_INTRO
 
 
+def _dialog_context_for_guard(state: AgentState, settings) -> str:
+    return format_dialog_tail_for_sql(
+        state.get("messages"),
+        max_messages=min(8, int(settings.sql_dialog_tail_max_messages)),
+        max_chars=min(1800, int(settings.sql_dialog_tail_max_chars)),
+        summary=state.get("conversation_summary"),
+    )
+
+
 def _apply_hard_rules(
     out: DomainGuardOutput,
     heuristic_blocks: list[DomainIssue],
     *,
     user_question: str,
+    dialog_tail: str = "",
 ) -> DomainGuardOutput:
     issues = strip_noop_issues(list(out.issues) + [i for i in heuristic_blocks if i.user_text])
     seen = set()
@@ -77,8 +88,11 @@ def _apply_hard_rules(
         seen.add(key)
         deduped.append(i)
 
-    missing = filter_resolved_missing_slots(user_question, list(out.missing_slots or []))
+    missing = filter_resolved_missing_slots(
+        user_question, list(out.missing_slots or []), dialog_tail=dialog_tail
+    )
     blocking = has_blocking_issues(deduped)
+    expanded_q = expand_elliptical_follow_up(user_question, dialog_tail)
 
     action = out.action
     if not out.in_scope and any(i.type == "out_of_scope" for i in deduped):
@@ -90,6 +104,13 @@ def _apply_hard_rules(
         action = "proceed"
     elif deduped and action == "proceed" and blocking:
         action = "clarify"
+    elif (
+        action == "clarify"
+        and not blocking
+        and expanded_q.strip() != user_question.strip()
+    ):
+        # Follow-up inherits channel/time from prior turn — do not re-ask «loại đơn nào»
+        action = "proceed"
 
     questions = list(out.clarification_questions)[:3]
     if action == "clarify":
@@ -104,10 +125,13 @@ def _apply_hard_rules(
 
     normalized = (out.normalized_question or "").strip()
     if action == "proceed":
+        base_q = expanded_q if expanded_q.strip() != user_question.strip() else user_question
         if not normalized or normalized.lower() == user_question.strip().lower():
-            normalized = default_normalized_for_proceed(user_question)
+            normalized = default_normalized_for_proceed(base_q)
         else:
             normalized = default_normalized_for_proceed(normalized)
+        if expanded_q.strip() != user_question.strip() and expanded_q.lower() not in normalized.lower():
+            normalized = default_normalized_for_proceed(expanded_q)
 
     return DomainGuardOutput(
         action=action,
@@ -133,6 +157,7 @@ def make_domain_guard_node(deps: GraphDeps):
             }
 
         question = latest_human_question(state.get("messages"))
+        dialog_tail = _dialog_context_for_guard(state, deps.settings)
         data_dir = deps.settings.erp_guide_data_dir
         index = load_domain_index(data_dir)
         index_text = format_index_for_prompt(index)
@@ -165,10 +190,16 @@ def make_domain_guard_node(deps: GraphDeps):
                 "domain_context": {"guide_snippets": snippets},
             }
 
+        dialog_block = (
+            f"## Recent conversation (resolve đơn đó / từng đơn / tháng đó from here)\n{dialog_tail}\n\n"
+            if dialog_tail
+            else ""
+        )
         prompt = (
             f"## Domain index\n{index_text}\n\n"
             f"## Guide snippets\n{snippet_block or '(none)'}\n\n"
-            f"## User message\n{question}\n"
+            f"{dialog_block}"
+            f"## User message (current turn)\n{question}\n"
         )
         client = reg.get("domain_guard")
         try:
@@ -193,7 +224,9 @@ def make_domain_guard_node(deps: GraphDeps):
                 "domain_context": {"guide_snippets": snippets},
             }
 
-        final = _apply_hard_rules(out, heuristic_issues, user_question=question)
+        final = _apply_hard_rules(
+            out, heuristic_issues, user_question=question, dialog_tail=dialog_tail
+        )
         emit_agent_trace(
             logger,
             deps.settings,

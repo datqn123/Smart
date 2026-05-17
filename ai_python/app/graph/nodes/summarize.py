@@ -84,6 +84,7 @@ def make_summarize_answer_node(deps: GraphDeps):
                     state.get("messages"),
                     max_messages=int(deps.settings.sql_dialog_tail_max_messages),
                     max_chars=int(deps.settings.sql_dialog_tail_max_chars),
+                    summary=state.get("conversation_summary"),
                 )
                 dialog_block = (
                     f"Recent conversation:\n{dialog_tail}\n\n" if dialog_tail else ""
@@ -131,6 +132,7 @@ def make_summarize_answer_node(deps: GraphDeps):
             state.get("messages"),
             max_messages=int(deps.settings.sql_dialog_tail_max_messages),
             max_chars=int(deps.settings.sql_dialog_tail_max_chars),
+            summary=state.get("conversation_summary"),
         )
         dialog_block = (
             f"Recent conversation (resolve pronouns like đơn đó / tháng đó; "

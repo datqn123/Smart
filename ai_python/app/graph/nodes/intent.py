@@ -8,7 +8,11 @@ from langchain_core.messages import BaseMessage, SystemMessage
 
 from app.graph.agent_trace import emit_agent_trace
 from app.graph.deps import GraphDeps
-from app.graph.message_utils import effective_user_question, latest_human_question
+from app.graph.message_utils import (
+    effective_user_question,
+    latest_human_question,
+    messages_for_llm_context,
+)
 from app.graph.interaction_mode import resolve_mode_override
 from app.graph.registry import normalize_intent
 from app.graph.state import AgentState
@@ -25,8 +29,11 @@ _INTENT_MESSAGE_TAIL = 24
 
 def _messages_for_intent(state: AgentState) -> list[BaseMessage]:
     """System + recent turns; avoids dumping huge Pydantic schema on the model."""
-    raw = state.get("messages") or []
-    tail = raw[-_INTENT_MESSAGE_TAIL:] if len(raw) > _INTENT_MESSAGE_TAIL else list(raw)
+    tail = messages_for_llm_context(
+        state.get("messages"),
+        state.get("conversation_summary"),
+        tail_cap=_INTENT_MESSAGE_TAIL,
+    )
     return [SystemMessage(content=_INTENT_CLASSIFY_SYSTEM), *tail]
 
 

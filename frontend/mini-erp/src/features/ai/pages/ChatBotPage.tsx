@@ -259,22 +259,27 @@ export function ChatBotPage() {
           const hasInventoryDraft = msg.role === "assistant" && Boolean(msg.metadata?.inventoryDraft)
           const hasQueryTable = msg.role === "assistant" && Boolean(msg.metadata?.queryTable)
           const hasClarify = msg.role === "assistant" && Boolean(msg.metadata?.domainClarify)
-          const wideBubble = hasChart || hasDraft || hasInventoryDraft || hasQueryTable || hasClarify
-          const layoutClass = hasDraft || hasInventoryDraft || hasQueryTable
-            ? "w-full max-w-[min(960px,100%)]"
-            : wideBubble
-              ? "max-w-[96%] sm:max-w-[min(640px,88%)]"
+          const hasArtifact =
+            hasChart || hasDraft || hasInventoryDraft || hasQueryTable || hasClarify
+          const fullBleedArtifact =
+            msg.role === "assistant" &&
+            (hasDraft || hasInventoryDraft || hasQueryTable || hasChart)
+          const layoutClass = fullBleedArtifact
+            ? "w-full max-w-[min(1100px,100%)]"
+            : hasArtifact
+              ? "max-w-[96%] sm:max-w-[min(720px,92%)]"
               : "max-w-[85%] sm:max-w-[70%]"
           const assistantText = (msg.content ?? "").replace(/\*\*/g, "")
           return (
           <div key={msg.id} className={`flex w-full ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-            <div className={`flex gap-3 ${layoutClass} ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
-              {/* Avatar */}
+            <div className={`flex gap-3 min-w-0 ${layoutClass} ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
+              {!fullBleedArtifact ? (
               <div className={`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
                 msg.role === "assistant" ? "bg-blue-600 text-white" : "bg-slate-200 text-slate-600"
               }`}>
                 {msg.role === "assistant" ? <Bot className="h-5 w-5" /> : <User className="h-5 w-5" />}
               </div>
+              ) : null}
 
               {/* Message Content */}
               <div className="min-w-0 flex-1 space-y-2">

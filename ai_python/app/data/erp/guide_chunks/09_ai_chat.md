@@ -14,7 +14,7 @@ Browser (React) → Spring Boot (Java, port 8080) → Python FastAPI (port 9000)
 
 ### 9.1. General Chat
 
-**Flow:** `START → domain_guard → classify_intent → chat_normal → END`
+**Flow:** `START → domain_guard → context_compact → classify_intent → chat_normal → END`
 
 `domain_guard` loads the ERP capability index (from `GUID_ERP.md`) and may return `clarify` (SSE + questions) or `reject` before any SQL/draft/chart branch runs.
 
@@ -145,7 +145,8 @@ summarize_answer node:
 
 - **Checkpointer:** MemorySaver (in-memory) or SqliteSaver (persistent file)
 - **Thread ID:** `sessionStorage ai_chat_conversation_id` — UUID per browser tab
-- **Dialog tail:** Last 12 messages (max 2000 chars) injected into prompt for gen_sql and summarize
-- **Each new turn:** Resets query_result, generated_sql, final_answer, error_payload, intent. Keeps thread_id, user_id, tenant_id.
+- **Dialog tail:** Last 12 messages (max 2000 chars) injected into prompt for gen_sql and summarize; prepends `conversation_summary` when set.
+- **Compaction (`context_compact`):** When user turns > 10 (configurable), summarizes older turns to 8 Vietnamese lines, keeps last 2 user turns, prunes old messages from checkpoint.
+- **Each new turn:** Resets query_result, generated_sql, final_answer, error_payload, intent. Keeps thread_id, user_id, tenant_id, `conversation_summary`.
 
 ---
