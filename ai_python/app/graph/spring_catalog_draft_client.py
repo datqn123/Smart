@@ -62,3 +62,42 @@ def post_catalog_draft(
     if isinstance(inner, dict):
         return inner
     return data
+
+
+def validate_catalog_draft_references(
+    settings: GraphSettings,
+    *,
+    bearer_token: str | None,
+    entity_type: str,
+    columns: list[dict[str, Any]],
+    rows: list[dict[str, Any]],
+    timeout_seconds: float = 15.0,
+) -> list[str]:
+    url = urljoin(catalog_drafts_url(settings).rstrip("/") + "/", "validate")
+    headers: dict[str, str] = {"Content-Type": "application/json"}
+    token = (bearer_token or settings.spring_sql_bearer_token or "").strip()
+    if token:
+        if not token.lower().startswith("bearer "):
+            token = f"Bearer {token}"
+        headers["Authorization"] = token
+    body = {
+        "entityType": entity_type,
+        "columns": columns,
+        "rows": rows,
+    }
+    with httpx.Client(timeout=timeout_seconds) as client:
+        resp = client.post(url, json=body, headers=headers)
+    if resp.status_code >= 400:
+        detail = resp.text[:500] if resp.text else resp.status_code
+        raise RuntimeError(f"Spring catalog-drafts/validate HTTP {resp.status_code}: {detail}")
+    data = resp.json()
+    if not isinstance(data, dict):
+        raise RuntimeError("validate response is not JSON object")
+    inner = data.get("data")
+    payload = inner if isinstance(inner, dict) else data
+    if payload.get("ok") is True:
+        return []
+    issues = payload.get("issues")
+    if isinstance(issues, list):
+        return [str(x) for x in issues if x]
+    return ["Không xác minh được tham chiếu bảng nhập."]

@@ -12,6 +12,8 @@ type OpenAiChatStreamArgs = {
   onDelta: (delta: string) => void
   onDone: () => void
   onError: (message: string) => void
+  /** When FastAPI emits SSE `progress` (user-facing status text). */
+  onProgress?: (text: string) => void
   /** When FastAPI emits SSE `chart` (JSON one line). */
   onChart?: (spec: Record<string, unknown>) => void
   /** When FastAPI emits SSE `draft` (catalog HITL table). */
@@ -25,6 +27,159 @@ type OpenAiChatStreamArgs = {
 }
 
 export type AiChatStreamHandle = { abort: () => void }
+
+export type TranscribeAudioResult = {
+  transcript: string
+  language?: string | null
+  correlationId: string
+}
+
+export type TranscribeAudioErrorCode =
+  | "network"
+  | "stt_unavailable"
+  | "empty_transcript"
+  | "validation"
+  | "unknown"
+
+export class TranscribeAudioError extends Error {
+  readonly code: TranscribeAudioErrorCode
+
+  constructor(code: TranscribeAudioErrorCode, message: string) {
+    super(message)
+    this.name = "TranscribeAudioError"
+    this.code = code
+  }
+}
+
+/** POST multipart → Spring relay → Python STT (FPT Whisper). */
+export async function transcribeAudio(
+  wavBlob: Blob,
+  options?: { language?: string }
+): Promise<TranscribeAudioResult> {
+  const token = sessionStorage.getItem("accessToken")
+  const correlationId = crypto.randomUUID()
+  const formData = new FormData()
+  formData.append("file", wavBlob, "recording.wav")
+  if (options?.language) {
+    formData.append("language", options.language)
+  }
+
+  let res: Response
+  try {
+    res = await fetch(getApiUrl("/api/v1/ai/chat/transcribe"), {
+      method: "POST",
+      headers: {
+        ...(token?.trim() ? { Authorization: `Bearer ${token}` } : {}),
+        "X-Correlation-Id": correlationId,
+      },
+      body: formData,
+    })
+  } catch {
+    throw new TranscribeAudioError("network", "Lỗi kết nối khi gửi ghi âm.")
+  }
+
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`
+    let code: TranscribeAudioErrorCode = "unknown"
+    try {
+      const j = (await res.json()) as { error?: { message?: string; code?: string } }
+      if (j.error?.message) msg = j.error.message
+      if (res.status === 503 || j.error?.code === "AI_STT_UNAVAILABLE") {
+        code = "stt_unavailable"
+        msg = "Dịch vụ chuyển giọng thành văn bản tạm thời không khả dụng."
+      } else if (res.status === 400) {
+        code = "validation"
+      }
+    } catch {
+      /* ignore */
+    }
+    throw new TranscribeAudioError(code, msg)
+  }
+
+  const data = (await res.json()) as {
+    transcript?: string
+    language?: string | null
+    correlation_id?: string
+  }
+  const transcript = (data.transcript ?? "").trim()
+  if (!transcript) {
+    throw new TranscribeAudioError(
+      "empty_transcript",
+      "Không thể nhận diện giọng nói. Vui lòng thử lại."
+    )
+  }
+  return {
+    transcript,
+    language: data.language,
+    correlationId: data.correlation_id ?? correlationId,
+  }
+}
+
+export type SynthesizeSpeechErrorCode =
+  | "network"
+  | "tts_unavailable"
+  | "validation"
+  | "unknown"
+
+export class SynthesizeSpeechError extends Error {
+  readonly code: SynthesizeSpeechErrorCode
+
+  constructor(code: SynthesizeSpeechErrorCode, message: string) {
+    super(message)
+    this.name = "SynthesizeSpeechError"
+    this.code = code
+  }
+}
+
+/** POST JSON → Spring relay → Python TTS (FPT.AI-VITs) → audio/wav blob. */
+export async function synthesizeSpeech(
+  text: string,
+  options?: { voice?: string }
+): Promise<Blob> {
+  const token = sessionStorage.getItem("accessToken")
+  const correlationId = crypto.randomUUID()
+  const body: { text: string; voice?: string } = { text: text.trim() }
+  if (options?.voice?.trim()) body.voice = options.voice.trim()
+
+  let res: Response
+  try {
+    res = await fetch(getApiUrl("/api/v1/ai/chat/synthesize"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token?.trim() ? { Authorization: `Bearer ${token}` } : {}),
+        "X-Correlation-Id": correlationId,
+      },
+      body: JSON.stringify(body),
+    })
+  } catch {
+    throw new SynthesizeSpeechError("network", "Lỗi kết nối khi tạo giọng đọc.")
+  }
+
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`
+    let code: SynthesizeSpeechErrorCode = "unknown"
+    try {
+      const j = (await res.json()) as { error?: { message?: string; code?: string } }
+      if (j.error?.message) msg = j.error.message
+      if (res.status === 503 || j.error?.code === "AI_TTS_UNAVAILABLE") {
+        code = "tts_unavailable"
+        msg = "Dịch vụ đọc văn bản tạm thời không khả dụng."
+      } else if (res.status === 400) {
+        code = "validation"
+      }
+    } catch {
+      /* ignore non-JSON error body */
+    }
+    throw new SynthesizeSpeechError(code, msg)
+  }
+
+  const blob = await res.blob()
+  if (!blob.size) {
+    throw new SynthesizeSpeechError("unknown", "Dịch vụ đọc văn bản trả về dữ liệu rỗng.")
+  }
+  return blob
+}
 
 function parseSseBlock(block: string): { event: string; data: string } | null {
   let event = ""
@@ -64,8 +219,20 @@ function parseQueryTablePayload(raw: string): QueryTablePayload | null {
   return null
 }
 
+/** Dev: Vite proxy có thể buffer POST SSE — gọi thẳng Spring (CORS đã bật localhost). */
+function resolveAiChatStreamUrl(): string {
+  const fromEnv = import.meta.env.VITE_AI_STREAM_URL as string | undefined
+  if (fromEnv?.trim()) {
+    return fromEnv.trim()
+  }
+  if (import.meta.env.DEV) {
+    return "http://127.0.0.1:8080/api/v1/ai/chat/stream"
+  }
+  return getApiUrl("/api/v1/ai/chat/stream")
+}
+
 /**
- * POST + Bearer → Spring relay → FastAPI; SSE events `delta` | `clarify` | `chart` | `draft` | `data_table` | `done` | `error`.
+ * POST + Bearer → Spring relay → FastAPI; SSE events `progress` | `delta` | `clarify` | …
  */
 export function startAiChatPostStream(args: OpenAiChatStreamArgs): AiChatStreamHandle {
   const ac = new AbortController()
@@ -73,7 +240,7 @@ export function startAiChatPostStream(args: OpenAiChatStreamArgs): AiChatStreamH
   void (async () => {
     try {
       const token = sessionStorage.getItem("accessToken")
-      const url = getApiUrl("/api/v1/ai/chat/stream")
+      const url = resolveAiChatStreamUrl()
       const res = await fetch(url, {
         method: "POST",
         signal: ac.signal,
@@ -126,6 +293,9 @@ export function startAiChatPostStream(args: OpenAiChatStreamArgs): AiChatStreamH
             const clarify = parseClarifyPayload(parsed.data)
             if (clarify) args.onClarify(clarify)
           }
+          if (parsed.event === "progress" && parsed.data.length > 0 && args.onProgress) {
+            args.onProgress(parsed.data)
+          }
           if (parsed.event === "delta" && parsed.data.length > 0) args.onDelta(parsed.data)
           if (parsed.event === "chart" && parsed.data.length > 0 && args.onChart) {
             try {
@@ -168,6 +338,9 @@ export function startAiChatPostStream(args: OpenAiChatStreamArgs): AiChatStreamH
         if (parsed?.event === "clarify" && parsed.data.length > 0 && args.onClarify) {
           const clarify = parseClarifyPayload(parsed.data)
           if (clarify) args.onClarify(clarify)
+        }
+        if (parsed?.event === "progress" && parsed.data.length > 0 && args.onProgress) {
+          args.onProgress(parsed.data)
         }
         if (parsed?.event === "delta" && parsed.data.length > 0) args.onDelta(parsed.data)
         if (parsed?.event === "chart" && parsed.data.length > 0 && args.onChart) {

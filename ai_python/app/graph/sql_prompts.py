@@ -124,6 +124,7 @@ def build_gen_sql_user_prompt(
     allowed_tables_line: str | None = None,
     month_calendar: MonthCalendarSpec | None = None,
     domain_context_block: str | None = None,
+    query_table_mode: bool = False,
 ) -> str:
     domain_block = (domain_context_block or "").strip()
     if domain_block:
@@ -185,6 +186,22 @@ def build_gen_sql_user_prompt(
             "You revise a SQL query for a read-only database. A previous attempt exists; "
             "fix issues implied by feedback while staying faithful to allowed tables/columns."
         )
+    query_table_block = ""
+    if query_table_mode:
+        query_table_block = (
+            "Data-table UI mode: the user will see a wide editable grid — SELECT **6–12 useful "
+            "business columns**, not a minimal 2–3 column answer.\n"
+            "- List columns explicitly (no SELECT *).\n"
+            "- Omit `id` and `category_id` from the SELECT list (use them only in JOIN/WHERE if needed).\n"
+            "- `products` listing: prefer "
+            "sku_code, barcode, name, description, weight, status, created_at, updated_at.\n"
+            "- Filter by **giá vốn / cost_price**: use table **`productpricehistory`** "
+            "(exact name) joined to `products`; filter `pph.cost_price`. "
+            "Prefer latest price per product via `JOIN productunits` + `LATERAL` "
+            "or `DISTINCT ON (p.id)` — table name is **not** `product_price_history`.\n"
+            "- `stockreceipts` / `stockdispatches`: include codes, dates, amounts, status — not only counts.\n"
+            "- Use schema snake_case names (sku_code, not SKU_CODE).\n\n"
+        )
     if mode == "explore":
         return (
             f"{persona}\n\n"
@@ -195,6 +212,7 @@ def build_gen_sql_user_prompt(
             f"{calendar_block}"
             f"{plan_block}"
             f"{allow_block}"
+            f"{query_table_block}"
             f"Schema (allowlist tables):\n{schema_block}\n\n"
             f"Prior feedback (only buckets with content):\n{feedback_render}\n\n"
             f"User question: {user_q}\n\n"
@@ -217,6 +235,7 @@ def build_gen_sql_user_prompt(
         f"{calendar_block}"
         f"{plan_block}"
         f"{allow_block}"
+        f"{query_table_block}"
         f"Schema (allowlist tables):\n{schema_block}\n\n"
         f"Seed SQL (starting point):\n{seed_block}\n\n"
         f"Prior feedback:\n{feedback_render}\n\n"

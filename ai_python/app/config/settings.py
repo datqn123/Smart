@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -97,6 +99,147 @@ class LlmSettings(BaseSettings):
 
 def load_llm_settings() -> LlmSettings:
     return LlmSettings()
+
+
+class SttSettings(BaseSettings):
+    """Speech-to-text (FPT Whisper) — env prefix ``STT_``.
+
+    Gateway credentials always come from ``LLM_BASE_URL`` and ``LLM_API_KEY`` (same as Gemma/chat).
+    """
+
+    model_config = SettingsConfigDict(
+        env_prefix="STT_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    enabled: bool = Field(
+        default=True,
+        description="Set STT_ENABLED=0 to disable voice STT.",
+    )
+    model: str = Field(default="FPT.AI-whisper-medium")
+    language: str = Field(default="vi")
+    response_format: str = Field(default="json")
+    max_audio_seconds: int = Field(default=60, ge=1, le=600)
+    max_upload_bytes: int = Field(default=10_485_760, ge=1)
+    http_timeout_seconds: float = Field(default=45.0, ge=5.0, le=300.0)
+
+    @field_validator("model", "language", "response_format", mode="before")
+    @classmethod
+    def strip_stt_str(cls, v: object) -> object:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+
+@dataclass(frozen=True)
+class ResolvedSttCredentials:
+    base_url: str
+    api_key: str
+    model: str
+    language: str
+    response_format: str
+    http_timeout_seconds: float
+    max_upload_bytes: int
+    max_audio_seconds: int
+
+
+def load_stt_settings() -> SttSettings:
+    return SttSettings()
+
+
+class TtsSettings(BaseSettings):
+    """Text-to-speech (FPT VITs) — env prefix ``TTS_``.
+
+    Gateway credentials use ``LLM_BASE_URL`` and ``LLM_API_KEY`` (same as chat/STT).
+    """
+
+    model_config = SettingsConfigDict(
+        env_prefix="TTS_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    enabled: bool = Field(
+        default=True,
+        description="Set TTS_ENABLED=0 to disable speech synthesis.",
+    )
+    model: str = Field(default="FPT.AI-VITs")
+    voice: str = Field(default="std_kimngan")
+    response_format: str = Field(default="wav")
+    max_input_chars: int = Field(default=5000, ge=1, le=50_000)
+    http_timeout_seconds: float = Field(default=60.0, ge=5.0, le=300.0)
+
+    @field_validator("model", "voice", "response_format", mode="before")
+    @classmethod
+    def strip_tts_str(cls, v: object) -> object:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+
+@dataclass(frozen=True)
+class ResolvedTtsCredentials:
+    base_url: str
+    api_key: str
+    model: str
+    voice: str
+    response_format: str
+    http_timeout_seconds: float
+    max_input_chars: int
+
+
+def load_tts_settings() -> TtsSettings:
+    return TtsSettings()
+
+
+def resolve_tts_credentials(
+    llm: LlmSettings,
+    tts: TtsSettings,
+) -> ResolvedTtsCredentials | None:
+    if not tts.enabled:
+        return None
+    base_url = llm.base_url.strip()
+    api_key = llm.api_key.get_secret_value().strip() if llm.api_key else ""
+    if not base_url or not api_key:
+        return None
+    model = tts.model.strip() or "FPT.AI-VITs"
+    voice = tts.voice.strip() or "std_kimngan"
+    return ResolvedTtsCredentials(
+        base_url=base_url.rstrip("/"),
+        api_key=api_key,
+        model=model,
+        voice=voice,
+        response_format=tts.response_format.strip() or "wav",
+        http_timeout_seconds=tts.http_timeout_seconds,
+        max_input_chars=tts.max_input_chars,
+    )
+
+
+def resolve_stt_credentials(
+    llm: LlmSettings,
+    stt: SttSettings,
+) -> ResolvedSttCredentials | None:
+    """Return resolved credentials when STT is enabled; gateway uses ``LLM_*`` like chat models."""
+    if not stt.enabled:
+        return None
+    base_url = llm.base_url.strip()
+    api_key = llm.api_key.get_secret_value().strip() if llm.api_key else ""
+    if not base_url or not api_key:
+        return None
+    model = stt.model.strip() or "FPT.AI-whisper-medium"
+    return ResolvedSttCredentials(
+        base_url=base_url.rstrip("/"),
+        api_key=api_key,
+        model=model,
+        language=stt.language.strip() or "vi",
+        response_format=stt.response_format.strip() or "json",
+        http_timeout_seconds=stt.http_timeout_seconds,
+        max_upload_bytes=stt.max_upload_bytes,
+        max_audio_seconds=stt.max_audio_seconds,
+    )
 
 
 def validate_llm_required(settings: LlmSettings) -> None:

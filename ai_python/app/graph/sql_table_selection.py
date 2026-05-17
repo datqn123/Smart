@@ -8,6 +8,12 @@ from typing import TYPE_CHECKING
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.graph.dbmeta import SchemaArtifact
+from app.graph.sql_allowlist import cap_tables_priority, fk_closure_list_ordered
+from app.graph.sql_query_domain import (
+    boost_table_scores_for_domain,
+    default_tables_for_domain,
+    detect_sql_query_domain,
+)
 from app.prompts.load import load_agent_json_contract, load_agent_prompt
 from app.llm.schemas import SqlTablePickOutput
 
@@ -16,29 +22,44 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_STAFF_PHRASES = (
+    "nhân viên",
+    "nhan vien",
+    "người tạo",
+    "nguoi tao",
+    "người lập",
+    "nguoi lap",
+    "staff",
+    "nhân sự",
+    "nhan su",
+    "tạo phiếu",
+    "tao phieu",
+)
+
+_RECEIPT_PHRASES = (
+    "phiếu nhập",
+    "phieu nhap",
+    "nhập kho",
+    "nhap kho",
+    "stockreceipt",
+)
+
+# Dropped first when staff context needs users within table cap.
+_DROP_WHEN_STAFF = (
+    "partnerdebts",
+    "productunits",
+    "stockdispatchdetail",
+    "stockdispatches",
+    "warehouses",
+)
+
 _TABLE_PICK_SYSTEM = load_agent_prompt("sql_table_pick")
 _TABLE_PICK_JSON_CONTRACT = load_agent_json_contract("sql_table_pick")
 
 
 def expand_fk_neighbors(artifact: SchemaArtifact, seeds: list[str]) -> list[str]:
-    """Add referenced tables from FK edges one hop from any seed table."""
-    names_lower = {t.name.lower(): t.name for t in artifact.tables}
-    cur: set[str] = {s for s in seeds if s}
-    changed = True
-    while changed:
-        changed = False
-        for t in artifact.tables:
-            if t.name not in cur:
-                continue
-            for fk in t.fks or []:
-                ref = fk.get("ref_table")
-                if not ref or not isinstance(ref, str):
-                    continue
-                canonical = names_lower.get(ref.lower())
-                if canonical and canonical not in cur:
-                    cur.add(canonical)
-                    changed = True
-    return sorted(cur, key=lambda x: x.lower())
+    """Add all FK ref_table neighbors (fixpoint); seeds keep priority order."""
+    return fk_closure_list_ordered(artifact, seeds, max_hops=None)
 
 
 def _score_tables(user_q: str, artifact: SchemaArtifact) -> dict[str, float]:
@@ -75,12 +96,15 @@ def heuristic_select_tables(
     if len(all_names) <= max_tables:
         return all_names
     scores = _score_tables(user_q, artifact)
+    domain = detect_sql_query_domain(user_q)
+    scores = boost_table_scores_for_domain(scores, domain)
     ranked = sorted(all_names, key=lambda n: scores.get(n, 0.0), reverse=True)
     positive = [n for n in ranked if scores.get(n, 0.0) > 0.0]
     if not positive:
-        return all_names[:max_tables]
-    picked = positive[:max_tables]
-    return expand_fk_neighbors(artifact, picked)[:max_tables]
+        picked = default_tables_for_domain(domain) or all_names[:max_tables]
+    else:
+        picked = positive[:max_tables]
+    return cap_tables_priority(expand_fk_neighbors(artifact, picked), max_tables)
 
 
 def refine_tables_with_llm(
@@ -127,7 +151,122 @@ def refine_tables_with_llm(
             break
     if not picked:
         return heuristic
-    return expand_fk_neighbors(artifact, picked)[:max_tables]
+    return cap_tables_priority(expand_fk_neighbors(artifact, picked), max_tables)
+
+
+def question_needs_users_table(user_q: str) -> bool:
+    q = user_q.lower()
+    return any(p in q for p in _STAFF_PHRASES)
+
+
+def ensure_context_tables_for_question(
+    user_q: str,
+    tables: list[str],
+    *,
+    max_tables: int,
+    known_tables: set[str] | None = None,
+) -> list[str]:
+    """Inject users / receipt tables when question wording requires them (within cap)."""
+    if not question_needs_users_table(user_q):
+        return tables[:max_tables]
+
+    known_lower = {t.lower() for t in known_tables} if known_tables else None
+    cur = list(tables)
+    seen = {t.lower() for t in cur}
+
+    def can_add(name: str) -> bool:
+        if known_lower is not None and name.lower() not in known_lower:
+            return False
+        return name.lower() not in seen
+
+    def add(name: str) -> None:
+        if can_add(name):
+            cur.append(name)
+            seen.add(name.lower())
+
+    q = user_q.lower()
+    if any(p in q for p in _RECEIPT_PHRASES):
+        add("stockreceipts")
+        add("suppliers")
+    add("users")
+
+    if len(cur) > max_tables:
+        drop = {d.lower() for d in _DROP_WHEN_STAFF}
+        priority = [t for t in cur if t.lower() not in drop]
+        rest = [t for t in cur if t.lower() in drop]
+        cur = priority + rest
+    return cur[:max_tables]
+
+
+def question_needs_cost_price(user_q: str) -> bool:
+    q = user_q.lower()
+    return any(
+        p in q
+        for p in (
+            "giá vốn",
+            "gia von",
+            "giá bán",
+            "gia ban",
+            "cost price",
+            "cost_price",
+            "sale price",
+            "sale_price",
+        )
+    )
+
+
+def ensure_price_tables_for_question(
+    user_q: str,
+    tables: list[str],
+    *,
+    max_tables: int,
+    known_tables: set[str] | None = None,
+) -> list[str]:
+    """Inject products + price history + base unit when filtering by cost/sale price."""
+    if not question_needs_cost_price(user_q):
+        return tables[:max_tables]
+    known_lower = {t.lower() for t in known_tables} if known_tables else None
+    cur = list(tables)
+    seen = {t.lower() for t in cur}
+
+    def add(name: str) -> None:
+        if known_lower is not None and name.lower() not in known_lower:
+            return
+        if name.lower() not in seen:
+            cur.insert(0, name)
+            seen.add(name.lower())
+
+    for t in ("productunits", "productpricehistory", "products"):
+        add(t)
+    return cur[:max_tables]
+
+
+def ensure_domain_tables_for_question(
+    user_q: str,
+    tables: list[str],
+    *,
+    max_tables: int,
+    known_tables: set[str] | None = None,
+) -> list[str]:
+    """Inject domain-required tables (inventory snapshot, receipts, …) within cap."""
+    domain = detect_sql_query_domain(user_q)
+    seeds = default_tables_for_domain(domain)
+    if not seeds:
+        return tables[:max_tables]
+    known_lower = {t.lower() for t in known_tables} if known_tables else None
+    cur = list(tables)
+    seen = {t.lower() for t in cur}
+
+    def add(name: str) -> None:
+        if known_lower is not None and name.lower() not in known_lower:
+            return
+        if name.lower() not in seen:
+            cur.insert(0, name)
+            seen.add(name.lower())
+
+    for t in reversed(seeds):
+        add(t)
+    return cur[:max_tables]
 
 
 def select_tables_for_question(
@@ -140,17 +279,28 @@ def select_tables_for_question(
     min_tables_for_llm: int,
 ) -> list[str]:
     """Main entry: heuristic, optional LLM refine, FK expansion, cap."""
+    known = {t.name for t in artifact.tables}
     h = heuristic_select_tables(user_q, artifact, max_tables=max_tables)
     if (
         use_llm
         and deps.llm_registry is not None
         and len(artifact.tables) >= min_tables_for_llm
     ):
-        return refine_tables_with_llm(
+        h = refine_tables_with_llm(
             deps=deps,
             user_q=user_q,
             artifact=artifact,
             heuristic=h,
             max_tables=max_tables,
         )
-    return h
+    h = cap_tables_priority(expand_fk_neighbors(artifact, h), max_tables)
+    h = ensure_domain_tables_for_question(
+        user_q, h, max_tables=max_tables, known_tables=known
+    )
+    h = ensure_context_tables_for_question(
+        user_q, h, max_tables=max_tables, known_tables=known
+    )
+    h = ensure_price_tables_for_question(
+        user_q, h, max_tables=max_tables, known_tables=known
+    )
+    return h[:max_tables]

@@ -33,6 +33,8 @@ _EXPECTED_IDS = frozenset(
         "catalog_draft_supplier",
         "catalog_draft_customer",
         "inventory_entity_pick",
+        "inventory_draft_slots",
+        "catalog_draft_slots",
         "inventory_draft",
         "inventory_draft_stock_receipt",
         "context_compact",
@@ -51,6 +53,8 @@ _CATALOG_DRAFT_ENTITY_PLAYBOOKS = frozenset(
 )
 
 _INVENTORY_DRAFT_PLAYBOOKS = frozenset({"inventory_draft_stock_receipt"})
+
+_LEGACY_AGENT_IDS = frozenset({"inventory_entity_pick"})
 
 
 def test_all_agent_prompt_files_exist() -> None:
@@ -71,6 +75,7 @@ def test_load_agent_prompt_non_empty(agent_id: str) -> None:
         - {"chat_normal", "summarize", "gen_sql", "context_compact"}
         - _CATALOG_DRAFT_ENTITY_PLAYBOOKS
         - _INVENTORY_DRAFT_PLAYBOOKS
+        - _LEGACY_AGENT_IDS
     ),
 )
 def test_load_agent_json_contract_non_empty(agent_id: str) -> None:

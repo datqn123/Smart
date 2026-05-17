@@ -10,6 +10,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.example.smart_erp.ai.inventorydraft.dto.DraftReferenceValidationResult;
 import com.example.smart_erp.ai.inventorydraft.dto.InventoryDraftCommitResult;
 import com.example.smart_erp.ai.inventorydraft.dto.InventoryDraftCreateRequest;
 import com.example.smart_erp.ai.inventorydraft.dto.InventoryDraftPatchRequest;
@@ -30,15 +31,35 @@ public class AiInventoryDraftService {
 
 	private final AiInventoryDraftJdbcRepository repository;
 	private final AiInventoryDraftCommitter committer;
+	private final InventoryDraftFkResolver fkResolver;
 	private final ObjectMapper objectMapper;
 
 	public AiInventoryDraftService(
 			AiInventoryDraftJdbcRepository repository,
 			AiInventoryDraftCommitter committer,
+			InventoryDraftFkResolver fkResolver,
 			ObjectMapper objectMapper) {
 		this.repository = repository;
 		this.committer = committer;
+		this.fkResolver = fkResolver;
 		this.objectMapper = objectMapper;
+	}
+
+	@Transactional(readOnly = true)
+	public DraftReferenceValidationResult validateReferences(Authentication auth, InventoryDraftCreateRequest req) {
+		requirePermission(auth);
+		InventoryEntityType entityType = parseEntity(req.entityType());
+		if (entityType != InventoryEntityType.STOCK_RECEIPT) {
+			throw new BusinessException(ApiErrorCode.BAD_REQUEST, "validate chỉ hỗ trợ stock_receipt trong v1");
+		}
+		validateLinesArray(req.lines());
+		ObjectNode header = req.header() != null && req.header().isObject()
+				? (ObjectNode) req.header()
+				: objectMapper.createObjectNode();
+		ArrayNode lines = req.lines() != null && req.lines().isArray()
+				? (ArrayNode) req.lines()
+				: objectMapper.createArrayNode();
+		return fkResolver.validateStockReceipt(header, lines);
 	}
 
 	@Transactional
@@ -120,6 +141,7 @@ public class AiInventoryDraftService {
 		}
 		catch (BusinessException e) {
 			return new InventoryDraftCommitResult(false, e.getMessage(), null, null, objectMapper.valueToTree(toResponse(row)));
+
 		}
 		ObjectNode commitResult = objectMapper.createObjectNode();
 		commitResult.put("committedAt", Instant.now().toString());

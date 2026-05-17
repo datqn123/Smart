@@ -113,6 +113,9 @@ def _physical_tables_from_join_token(token: object) -> set[str]:
             out |= _physical_tables_from_join_token(x)
         return out
     if isinstance(token, Identifier):
+        # Qualified refs in JOIN ON (pu.col) are columns, not tables.
+        if token.get_parent_name():
+            return set()
         for sub in token.tokens:
             if isinstance(sub, Parenthesis):
                 inner = _strip_outer_parentheses(str(sub))
@@ -149,6 +152,8 @@ def _merge_alias_map_from_join_token(token: object, out: dict[str, str]) -> None
             _merge_alias_map_from_join_token(x, out)
         return
     if isinstance(token, Identifier):
+        if token.get_parent_name():
+            return
         for sub in token.tokens:
             if isinstance(sub, Parenthesis):
                 inner = _strip_outer_parentheses(str(sub))
@@ -226,48 +231,58 @@ def _end_join_region(tokens: list, fi: int) -> int:
     return len(tokens)
 
 
-def _rec_ids(token: object) -> list[Identifier]:
+def _rec_ids(token: object, *, skip_subselects: bool = False) -> list[Identifier]:
     out: list[Identifier] = []
+    if skip_subselects and isinstance(token, Parenthesis):
+        inner = _strip_outer_parentheses(str(token))
+        if inner.upper().startswith("SELECT"):
+            return []
     if isinstance(token, Function):
-        for p in token.get_parameters():
-            out.extend(_rec_ids(p))
+        for x in token.tokens:
+            out.extend(_rec_ids(x, skip_subselects=skip_subselects))
         return out
     if isinstance(token, Identifier):
+        nested: list[Identifier] = []
+        for sub in token.tokens:
+            nested.extend(_rec_ids(sub, skip_subselects=skip_subselects))
+        if nested:
+            return nested
         return [token]
     if isinstance(token, IdentifierList):
         for x in token.get_identifiers():
             if str(x).strip() == "*":
                 continue
-            out.extend(_rec_ids(x))
+            out.extend(_rec_ids(x, skip_subselects=skip_subselects))
         return out
     if isinstance(token, Comparison):
         for x in token.tokens:
-            out.extend(_rec_ids(x))
+            out.extend(_rec_ids(x, skip_subselects=skip_subselects))
         return out
     if hasattr(token, "tokens"):
         for x in token.tokens:
-            out.extend(_rec_ids(x))
+            out.extend(_rec_ids(x, skip_subselects=skip_subselects))
     return out
 
 
-def _collect_column_identifiers(stmt: Statement) -> list[Identifier]:
+def _collect_column_identifiers(stmt: Statement, *, skip_subselects: bool = False) -> list[Identifier]:
     """Identifiers used as columns (excludes FROM table names; includes JOIN ON / WHERE / GROUP / ORDER)."""
     tks = stmt.tokens
     fi = _from_keyword_index(tks)
     ids: list[Identifier] = []
     if fi < 0:
         return ids
+    rec = lambda t: _rec_ids(t, skip_subselects=skip_subselects)
     for t in tks[0:fi]:
         if str(t).upper().strip() == "SELECT":
             continue
-        ids.extend(_rec_ids(t))
+        ids.extend(rec(t))
     ej = _end_join_region(tks, fi)
     for t in tks[fi + 1 : ej]:
         if isinstance(t, Comparison):
-            ids.extend(_rec_ids(t))
+            ids.extend(rec(t))
     wi = next((i for i, t in enumerate(tks) if isinstance(t, Where)), None)
     if wi is not None:
-        ids.extend(_rec_ids(tks[wi]))
+        ids.extend(rec(tks[wi]))
     start_post = (wi + 1) if wi is not None else ej
     i = start_post
     while i < len(tks):
@@ -278,7 +293,7 @@ def _collect_column_identifiers(stmt: Statement) -> list[Identifier]:
                 ns = str(tks[i]).upper().strip()
                 if ns.startswith(("ORDER BY", "LIMIT", "HAVING")):
                     break
-                ids.extend(_rec_ids(tks[i]))
+                ids.extend(rec(tks[i]))
                 i += 1
             continue
         if su.startswith("ORDER BY"):
@@ -287,14 +302,14 @@ def _collect_column_identifiers(stmt: Statement) -> list[Identifier]:
                 ns = str(tks[i]).upper().strip()
                 if ns.startswith("LIMIT"):
                     break
-                ids.extend(_rec_ids(tks[i]))
+                ids.extend(rec(tks[i]))
                 i += 1
             continue
         if su.startswith("HAVING"):
             i += 1
             while i < len(tks):
                 if isinstance(tks[i], Comparison):
-                    ids.extend(_rec_ids(tks[i]))
+                    ids.extend(rec(tks[i]))
                 ns = str(tks[i]).upper().strip()
                 if ns.startswith(("ORDER BY", "LIMIT")):
                     break
@@ -304,9 +319,112 @@ def _collect_column_identifiers(stmt: Statement) -> list[Identifier]:
     return ids
 
 
+def _nested_select_statements(stmt: Statement) -> list[Statement]:
+    """Inner SELECT statements (NOT EXISTS, IN subquery, scalar subselect, …)."""
+    found: list[Statement] = []
+
+    def walk(tok: object) -> None:
+        if isinstance(tok, Parenthesis):
+            inner = _strip_outer_parentheses(str(tok))
+            if inner.upper().startswith("SELECT"):
+                parsed = sqlparse.parse(inner)
+                if len(parsed) == 1 and (parsed[0].get_type() or "").upper() == "SELECT":
+                    inner_stmt = parsed[0]
+                    found.append(inner_stmt)
+                    for t in inner_stmt.tokens:
+                        walk(t)
+            return
+        if hasattr(tok, "tokens"):
+            for sub in tok.tokens:
+                walk(sub)
+
+    for t in stmt.tokens:
+        walk(t)
+    return found
+
+
 def _resolve_canonical_table(ref: str, alias_map: dict[str, str]) -> str:
     r = ref.lower()
     return alias_map.get(r, r)
+
+
+def _column_allowlist_error(
+    *,
+    table: str | None,
+    column: str,
+    allowed: set[str] | None,
+) -> str:
+    """Human- and LLM-readable column policy error (includes table when known)."""
+    col = column.lower()
+    if table:
+        base = f"column not in allowlist: {table}.{col}"
+    else:
+        base = f"column not in allowlist: {col}"
+    hints: list[str] = []
+    if table == "productunits" and col == "unit_id":
+        hints.append(
+            "productunits has no unit_id column; use alias.id (PK) when joining "
+            "productpricehistory.unit_id or inventory.unit_id"
+        )
+    elif allowed:
+        sample = ", ".join(sorted(allowed)[:12])
+        if len(allowed) > 12:
+            sample += ", …"
+        hints.append(f"allowed on {table}: {sample}" if table else f"allowed columns include: {sample}")
+    if hints:
+        return f"{base}. {'; '.join(hints)}"
+    return base
+
+
+def _validate_columns_single_stmt(
+    stmt: Statement,
+    *,
+    table_columns: dict[str, set[str]],
+    alias_map: dict[str, str],
+    cte_names: set[str],
+) -> str | None:
+    canonical_tables = {t for t in alias_map.values() if t not in cte_names}
+    union_cols: set[str] = set()
+    for t in canonical_tables:
+        union_cols |= table_columns.get(t, set())
+
+    proj_aliases = _select_projection_aliases(_select_list_text(stmt))
+    physical_tables = _extract_from_join_tables_stmt(stmt) | set(table_columns.keys())
+
+    for ident in _collect_column_identifiers(stmt, skip_subselects=True):
+        parent = ident.get_parent_name()
+        real = ident.get_real_name()
+        if real is None:
+            continue
+        real_l = real.lower()
+        if real_l == "*":
+            continue
+        if parent:
+            parent_l = parent.lower()
+            if parent_l not in alias_map:
+                # Correlated reference to outer query (e.g. pp.col inside NOT EXISTS).
+                continue
+            tbl = _resolve_canonical_table(parent, alias_map)
+            if tbl in cte_names:
+                continue
+            allowed = table_columns.get(tbl)
+            if allowed is None or real_l not in allowed:
+                return _column_allowlist_error(table=tbl, column=real_l, allowed=allowed)
+        else:
+            if real_l in cte_names:
+                continue
+            if real_l in _SQL_KEYWORDS:
+                continue
+            if real_l in _SQL_BUILTIN_IDENTIFIERS:
+                continue
+            if real_l in proj_aliases:
+                continue
+            # sqlparse may surface inner ``FROM tablename`` as an unqualified column identifier.
+            if real_l in physical_tables:
+                continue
+            if real_l not in union_cols:
+                return _column_allowlist_error(table=None, column=real_l, allowed=union_cols or None)
+    return None
 
 
 def _validate_columns_for_map(
@@ -317,39 +435,24 @@ def _validate_columns_for_map(
     cte_names: set[str] | None = None,
 ) -> str | None:
     ctes = cte_names or set()
-    canonical_tables = {t for t in alias_map.values() if t not in ctes}
-    union_cols: set[str] = set()
-    for t in canonical_tables:
-        union_cols |= table_columns.get(t, set())
-
-    proj_aliases = _select_projection_aliases(_select_list_text(stmt))
-
-    for ident in _collect_column_identifiers(stmt):
-        parent = ident.get_parent_name()
-        real = ident.get_real_name()
-        if real is None:
-            continue
-        real_l = real.lower()
-        if real_l == "*":
-            continue
-        if parent:
-            tbl = _resolve_canonical_table(parent, alias_map)
-            if tbl in ctes:
-                continue
-            allowed = table_columns.get(tbl)
-            if allowed is None or real_l not in allowed:
-                return f"column not in allowlist: {real_l}"
-        else:
-            if real_l in ctes:
-                continue
-            if real_l in _SQL_KEYWORDS:
-                continue
-            if real_l in _SQL_BUILTIN_IDENTIFIERS:
-                continue
-            if real_l in proj_aliases:
-                continue
-            if real_l not in union_cols:
-                return f"column not in allowlist: {real_l}"
+    err = _validate_columns_single_stmt(
+        stmt,
+        table_columns=table_columns,
+        alias_map=alias_map,
+        cte_names=ctes,
+    )
+    if err:
+        return err
+    for inner in _nested_select_statements(stmt):
+        inner_alias = _from_join_alias_map_stmt(inner)
+        err = _validate_columns_single_stmt(
+            inner,
+            table_columns=table_columns,
+            alias_map=inner_alias,
+            cte_names=ctes,
+        )
+        if err:
+            return err
     return None
 
 
@@ -446,7 +549,13 @@ def validate_sql_deterministic(
     tables = _extract_from_join_tables_stmt(stmt) - cte_names
     if allow is not None:
         if tables and not tables <= allow:
-            return False, f"table not in allowlist {sorted(allow)}", None, notes
+            offending = sorted(tables - allow)
+            return (
+                False,
+                f"table not in allowlist: {offending}. Allowed: {sorted(allow)}",
+                None,
+                notes,
+            )
 
     if table_columns is not None:
         alias_map = _from_join_alias_map_stmt(stmt)

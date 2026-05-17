@@ -15,7 +15,8 @@ Each `.md` file = **system prompt** for one LLM node in the graph. Loaded via `a
 | `chart_readiness.md` | `chart_readiness` | `chart_critic` |
 | `chart.md` | `agent_chart` | `chart` |
 | `chart_review.md` | `agent_review` | `review` |
-| `catalog_entity_pick.md` | `classify_catalog_entity` | `catalog_entity` |
+| `catalog_entity_pick.md` | (legacy; see `catalog_draft_slots`) | — |
+| `catalog_draft_slots.md` | `classify_catalog_entity`, `resolve_catalog_draft` | `intent` |
 | `catalog_draft.md` | `generate_catalog_draft` (base) | `catalog_draft` |
 | `catalog_draft_product.md` | (playbook, appended at runtime) | — |
 | `catalog_draft_category.md` | (playbook, appended at runtime) | — |
@@ -24,7 +25,8 @@ Each `.md` file = **system prompt** for one LLM node in the graph. Loaded via `a
 
 **Catalog draft:** the `generate_catalog_draft` node does **not** call `load_agent_prompt("catalog_draft")` directly — it uses `load_catalog_draft_system_prompt(entity_type)` to concatenate the base prompt + the entity-specific playbook.
 
-| `inventory_entity_pick.md` | `classify_inventory_doc` | — |
+| `inventory_entity_pick.md` | (legacy; see `inventory_draft_slots`) | — |
+| `inventory_draft_slots.md` | `classify_inventory_doc`, `resolve_inventory_draft` | `intent` |
 | `inventory_draft.md` | `generate_inventory_draft` (base) | — |
 | `inventory_draft_stock_receipt.md` | (playbook, appended at runtime) | — |
 

@@ -107,10 +107,11 @@ def _global_attempts_left(state: AgentState) -> bool:
 
 
 def _budget_left(state: AgentState, kind: FailureKind) -> bool:
+    if kind == "intent_review":
+        # One sql_review failure per gen_sql round — do not exhaust budget on issue count.
+        return int(state.get("sql_attempt_count") or 0) < MAX_POLICY_RETRIES
     if kind == "policy":
         return len(_feedback_bucket(state, "policy")) < MAX_POLICY_RETRIES
-    if kind == "intent_review":
-        return len(_feedback_bucket(state, "intent_review")) < MAX_POLICY_RETRIES
     if kind == "exec":
         return len(_feedback_bucket(state, "exec")) < MAX_EXEC_RETRIES
     if kind == "result":

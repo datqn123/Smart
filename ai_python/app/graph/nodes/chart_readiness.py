@@ -14,6 +14,7 @@ from app.graph.chart_sql_shape import sql_has_time_grouping
 from app.graph.deps import GraphDeps
 from app.graph.feedback import append_feedback
 from app.graph.message_utils import latest_human_question
+from app.graph.progress import emit_progress
 from app.graph.retry_policy import (
     RetryAction,
     chart_degrade_state_patch,
@@ -97,10 +98,10 @@ def make_chart_readiness_node(deps: GraphDeps):
     def chart_readiness(state: AgentState) -> dict:
         logger.info("node=chart_readiness action=start")
         if state.get("intent") != "system_data_chart":
-            return {"chart_data_ok": True}
+            return {**emit_progress(state, "chart_readiness"), "chart_data_ok": True}
 
         if not deps.settings.chart_readiness_enabled:
-            return {"chart_data_ok": True}
+            return {**emit_progress(state, "chart_readiness"), "chart_data_ok": True}
 
         brief = state.get("chart_brief")
         if not isinstance(brief, dict):
@@ -189,7 +190,7 @@ def make_chart_readiness_node(deps: GraphDeps):
                     syn, "result", f"chart readiness: {retry_hint}"
                 )
                 upd["validation_feedback"] = syn["validation_feedback"]
-        return upd
+        return {**emit_progress(state, "chart_readiness"), **upd}
 
     return chart_readiness
 

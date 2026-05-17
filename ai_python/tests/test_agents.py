@@ -15,9 +15,21 @@ from app.graph.deps import GraphDeps
 from app.graph.feedback import append_feedback, empty_feedback, render_for_prompt
 from app.graph.registry import normalize_intent
 from app.graph.sql_executor import StubSqlExecutor
+from app.graph.logging_policy import safe_log_query_result
 from app.graph.validate_sql import validate_sql_deterministic
 from app.llm.registry import LlmRegistry
 from tests.fake_llm import FakeLlmClient
+
+
+def test_safe_log_query_result_includes_row_preview() -> None:
+    text = safe_log_query_result(
+        {
+            "rows": [{"total_inventory_value": 30554000}],
+            "meta": {"row_count": 1, "columns": ["total_inventory_value"]},
+        }
+    )
+    assert "30554000" in text
+    assert "rows_preview" in text
 
 
 # --- DBM loader ---
@@ -65,6 +77,14 @@ def test_render_for_prompt_skips_empty_buckets() -> None:
     out = render_for_prompt(fb)
     assert "[policy] x" in out and "attempts=2" in out
     assert "[intent_review]" not in out and "[exec]" not in out
+
+
+def test_render_for_prompt_max_items_per_bucket() -> None:
+    fb = empty_feedback()
+    fb["intent_review"] = ["a", "b", "c", "d"]
+    out = render_for_prompt(fb, max_items_per_bucket=2)
+    assert "[intent_review] c; d" in out
+    assert "a" not in out
 
 
 # --- validate_sql ---
@@ -152,6 +172,138 @@ def test_validate_sql_allowlist_ignores_extract_from_in_where() -> None:
     )
     assert ok is True, detail
     assert sanitized and "salesorders" in sanitized.lower()
+
+
+def test_validate_sql_rejects_sale_price_on_products_table() -> None:
+    """sqlparse must validate columns inside SUM(...) — not only the outer aggregate."""
+    s = GraphSettings()
+    tc = {
+        "inventory": {"id", "product_id", "quantity", "unit_id"},
+        "products": {"id", "category_id", "sku_code", "name"},
+        "productpricehistory": {"product_id", "unit_id", "cost_price", "sale_price", "effective_date"},
+    }
+    sql = (
+        "SELECT SUM(i.quantity * p.sale_price) AS total_inventory_value "
+        "FROM inventory i JOIN products p ON i.product_id = p.id WHERE i.quantity > 0 LIMIT 1000"
+    )
+    ok, detail, _, _ = validate_sql_deterministic(
+        sql,
+        s,
+        allowlist_tables=set(tc.keys()),
+        table_columns=tc,
+    )
+    assert ok is False and detail and "sale_price" in detail
+
+
+def test_validate_sql_rejects_productunits_unit_id_column() -> None:
+    """productunits PK is id; unit_id exists on FK tables only (pph, inventory, …)."""
+    s = GraphSettings()
+    tc = {
+        "inventory": {"id", "product_id", "quantity", "unit_id"},
+        "products": {"id", "name"},
+        "productpricehistory": {"id", "product_id", "unit_id", "cost_price", "effective_date"},
+        "productunits": {"id", "product_id", "unit_name", "is_base_unit"},
+    }
+    sql = """
+        WITH base_units AS (
+            SELECT pu.product_id, pu.unit_id
+            FROM productunits pu
+            WHERE pu.is_base_unit = TRUE
+        )
+        SELECT SUM(i.quantity) AS total_qty
+        FROM inventory i
+        JOIN base_units bu ON bu.product_id = i.product_id
+        LIMIT 1000
+    """
+    ok, detail, _, _ = validate_sql_deterministic(
+        sql,
+        s,
+        allowlist_tables=set(tc.keys()),
+        table_columns=tc,
+    )
+    assert ok is False, detail
+    assert detail and "productunits.unit_id" in detail
+    assert "pu.id" in detail or "no unit_id column" in detail
+
+
+def test_validate_sql_inventory_value_with_pu_id_passes() -> None:
+    """Canonical stock value: pph.unit_id = pu.id (base unit), not pu.unit_id."""
+    s = GraphSettings()
+    tc = {
+        "inventory": {"id", "product_id", "quantity"},
+        "products": {"id", "name"},
+        "productpricehistory": {"id", "product_id", "unit_id", "cost_price", "effective_date"},
+        "productunits": {"id", "product_id", "is_base_unit"},
+    }
+    sql = """
+        SELECT COALESCE(SUM(i.quantity * pph.cost_price), 0) AS total_inventory_value
+        FROM inventory i
+        JOIN products p ON p.id = i.product_id
+        JOIN productunits pu ON pu.product_id = p.id AND pu.is_base_unit = TRUE
+        JOIN productpricehistory pph
+          ON pph.product_id = p.id AND pph.unit_id = pu.id
+         AND pph.effective_date <= CURRENT_DATE
+        WHERE i.quantity > 0
+    """
+    ok, detail, sanitized, _ = validate_sql_deterministic(
+        sql,
+        s,
+        allowlist_tables=set(tc.keys()),
+        table_columns=tc,
+    )
+    assert ok is True, detail
+    assert sanitized and "total_inventory_value" in sanitized.lower()
+
+
+def test_validate_sql_join_on_qualified_column_not_table() -> None:
+    """JOIN ON pu.is_base_unit = TRUE must not be parsed as table is_base_unit."""
+    s = GraphSettings()
+    allow = {"inventory", "productunits"}
+    ok, detail, _, _ = validate_sql_deterministic(
+        "SELECT i.id FROM inventory i "
+        "JOIN productunits pu ON pu.product_id = i.product_id AND pu.is_base_unit = TRUE "
+        "LIMIT 10",
+        s,
+        allowlist_tables=allow,
+        table_columns={
+            "inventory": {"id", "product_id"},
+            "productunits": {"id", "product_id", "is_base_unit"},
+        },
+    )
+    assert ok is True, detail
+
+
+def test_validate_sql_not_exists_subquery_table_not_misread_as_column() -> None:
+    """FROM table inside NOT EXISTS must not fail as unqualified column ``tablename``."""
+    s = GraphSettings()
+    tc = {
+        "inventory": {"quantity", "product_id", "unit_id"},
+        "products": {"id", "cost_price"},
+        "productpricehistory": {"product_id", "unit_id", "cost_price", "effective_date"},
+    }
+    sql = """
+        SELECT SUM(i.quantity * pp.cost_price) AS total_inventory_value
+        FROM inventory i
+        JOIN products p ON i.product_id = p.id
+        JOIN productpricehistory pp ON p.id = pp.product_id AND pp.unit_id = i.unit_id
+        WHERE pp.effective_date <= CURRENT_DATE
+        AND NOT EXISTS (
+            SELECT 1
+            FROM productpricehistory pp2
+            WHERE pp2.product_id = pp.product_id
+            AND pp2.unit_id = pp.unit_id
+            AND pp2.effective_date > pp.effective_date
+            AND pp2.effective_date <= CURRENT_DATE
+        )
+        LIMIT 1000
+    """
+    ok, detail, _, _ = validate_sql_deterministic(
+        sql,
+        s,
+        allowlist_tables=set(tc.keys()),
+        table_columns=tc,
+    )
+    assert ok is True, detail
 
 
 def test_validate_sql_blocks_unknown_column() -> None:

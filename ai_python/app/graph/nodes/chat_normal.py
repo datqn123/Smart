@@ -7,9 +7,11 @@ import logging
 from langchain_core.messages import AIMessage
 
 from app.graph.agent_trace import emit_agent_trace
+from app.graph.answer_quality import finalize_answer
 from app.graph.deps import GraphDeps
 from app.graph.display_format import format_display_for_chat_ui
-from app.graph.message_utils import build_chat_context_text
+from app.graph.message_utils import build_chat_context_text, latest_human_question
+from app.graph.progress import emit_progress
 from app.graph.state import AgentState
 from app.prompts.load import load_agent_prompt
 
@@ -31,7 +33,7 @@ def make_chat_normal_node(deps: GraphDeps):
                 detail="final_answer cố định",
             )
             stub = "[chat] stub: no LLM registry"
-            return {"final_answer": stub, "messages": [AIMessage(content=stub)]}
+            return {**emit_progress(state, "chat_normal"), "final_answer": stub, "messages": [AIMessage(content=stub)]}
         text = build_chat_context_text(
             state.get("messages"),
             state.get("conversation_summary"),
@@ -40,6 +42,13 @@ def make_chat_normal_node(deps: GraphDeps):
         )
         ans = reg.get("chat").invoke_text(text, system=_CHAT_SYSTEM)
         ans = format_display_for_chat_ui(ans)
+        ans = finalize_answer(
+            ans,
+            deps=deps,
+            node_name="chat_normal",
+            scenario="chat",
+            user_question=latest_human_question(state.get("messages")),
+        )
         preview = ans if len(ans) <= 1200 else ans[:1200] + "…"
         emit_agent_trace(
             logger,
@@ -48,6 +57,6 @@ def make_chat_normal_node(deps: GraphDeps):
             phase="Trả lời chat chung (LLM)",
             detail=f"văn_bản_phản_hồi:\n{preview}",
         )
-        return {"final_answer": ans, "messages": [AIMessage(content=ans)]}
+        return {**emit_progress(state, "chat_normal"), "final_answer": ans, "messages": [AIMessage(content=ans)]}
 
     return chat_normal

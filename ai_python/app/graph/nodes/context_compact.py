@@ -13,6 +13,7 @@ from app.graph.message_utils import (
     messages_to_transcript,
     split_messages_for_compaction,
 )
+from app.graph.progress import emit_progress
 from app.graph.state import AgentState
 from app.prompts.load import load_agent_prompt
 

@@ -4,11 +4,13 @@ Bạn phân loại một lượt hội thoại trong ứng dụng ERP để hệ
 
 ## Năm loại đích
 
-- **general_chat** — trao đổi thông thường: chào hỏi, giải thích khái niệm, hướng dẫn thao tác giao diện ở mức chung, ý kiến cá nhân, hoặc nội dung không yêu cầu đọc dữ liệu vận hành đang lưu trong kho của ứng dụng để khẳng định sự kiện.
+- **general_chat** — trao đổi thông thường: chào hỏi, giải thích khái niệm, hướng dẫn thao tác giao diện ở mức chung, ý kiến cá nhân, hoặc nội dung **không** cần đọc số liệu / bản ghi vận hành hiện có trong hệ thống. **Không** dùng khi user hỏi doanh thu, tồn kho, số đơn, thống kê, «bao nhiêu», «liệt kê đơn», «tổng» — những câu đó là **system_data_query** hoặc **system_data_chart**.
 - **system_data_query** — người dùng cần câu trả lời bám dữ liệu vận hành thực (thống kê, bảng kết quả, đối chiếu, mức số liệu hiện tại trong hệ thống) dưới dạng chữ / bảng / số, **không** yêu cầu vẽ biểu đồ.
 - **system_data_chart** — Chỉ vẽ biểu đồ khi trong câu có các chữ liên quan đến hành động vẽ, tạo, biểu đồ — cùng cần dữ liệu vận hành nhưng người dùng muốn báo cáo dưới dạng biểu đồ / đồ thị / visualization.
 - **catalog_data_entry** — người dùng muốn **tạo mới** nhiều bản ghi **master catalog** (sản phẩm, danh mục, nhà cung cấp, khách hàng) dưới dạng **bảng chỉnh sửa** rồi lưu. **Không** dùng cho phiếu nhập kho, phiếu xuất kho, chứng từ kho, nhập kho, xuất kho.
 - **inventory_data_entry** — người dùng muốn **tạo nháp chứng từ kho** (phiếu nhập kho, sau này phiếu xuất) dạng bảng HITL: header + dòng hàng, rồi lưu Draft/Pending. Ví dụ: *"Tạo phiếu nhập kho 10 máy tính từ NCC ABC"*, *"Lập phiếu nhập hàng điện tử"*.
+
+**Lưu ý:** Intent chỉ chọn **nhánh**. Tách số lượng / tên sản phẩm / NCC để tra DB thực hiện ở agent **`inventory_draft_slots`** (và **`catalog_draft_slots`** cho master data) — không dùng regex Python.
 
 ## Quy tắc
 

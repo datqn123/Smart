@@ -22,19 +22,20 @@ from app.graph.nodes.sql_pipeline import (
     route_after_validate_result,
     route_after_validate_sql,
 )
+from app.graph.progress import wrap_node_with_stream_progress as wrap
 from app.graph.state import AgentState
 
 
 def build_sql_subgraph(deps: GraphDeps):
     g = StateGraph(AgentState)
-    g.add_node("schema_explore", make_schema_explore_node(deps))
-    g.add_node("gen_sql", make_gen_sql_node(deps))
-    g.add_node("sql_review", make_sql_review_node(deps))
-    g.add_node("validate_sql", make_validate_sql_node(deps))
-    g.add_node("execute_sql", make_execute_sql_node(deps))
-    g.add_node("validate_result", make_validate_result_node(deps))
-    g.add_node("chart_readiness", make_chart_readiness_node(deps))
-    g.add_node("fail_max_attempts", make_fail_max_attempts_node(deps))
+    g.add_node("schema_explore", wrap("schema_explore", make_schema_explore_node(deps)))
+    g.add_node("gen_sql", wrap("gen_sql", make_gen_sql_node(deps)))
+    g.add_node("sql_review", wrap("sql_review", make_sql_review_node(deps)))
+    g.add_node("validate_sql", wrap("validate_sql", make_validate_sql_node(deps)))
+    g.add_node("execute_sql", wrap("execute_sql", make_execute_sql_node(deps)))
+    g.add_node("validate_result", wrap("validate_result", make_validate_result_node(deps)))
+    g.add_node("chart_readiness", wrap("chart_readiness", make_chart_readiness_node(deps)))
+    g.add_node("fail_max_attempts", wrap("fail_max_attempts", make_fail_max_attempts_node(deps)))
 
     g.add_conditional_edges(
         START,

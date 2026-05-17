@@ -25,6 +25,7 @@ class DomainIssue(BaseModel):
         "out_of_scope",
         "missing_slot",
         "ambiguous_module",
+        "sql_table_missing",
     ]
     user_text: str = ""
     canonical_vi: str | None = None
@@ -158,8 +159,35 @@ class CatalogDraftGenerateOutput(BaseModel):
 
 
 class InventoryEntityPickOutput(BaseModel):
-    doc_type: Literal["stock_receipt"] = "stock_receipt"
+    doc_type: Literal["stock_receipt", "stock_dispatch"] = "stock_receipt"
     line_count_hint: int = Field(default=1, ge=1, le=20)
+
+
+class InventoryDraftSlotsOutput(BaseModel):
+    """Slots for DB lookup before inventory draft (see inventory_draft_slots.md)."""
+
+    doc_type: Literal["stock_receipt", "stock_dispatch"] = "stock_receipt"
+    line_count_hint: int = Field(default=1, ge=1, le=20)
+    quantity: int | None = Field(default=None, ge=1)
+    product_query: str | None = None
+    product_sku: str | None = None
+    supplier_query: str | None = None
+    supplier_code: str | None = None
+
+
+class CatalogDraftSlotsOutput(BaseModel):
+    """Slots for DB lookup before catalog draft (see catalog_draft_slots.md)."""
+
+    entity_type: Literal["product", "category", "supplier", "customer"] = "product"
+    row_count_hint: int = Field(default=3, ge=1, le=50)
+    quantity: int | None = Field(default=None, ge=1)
+    product_query: str | None = None
+    product_sku: str | None = None
+    category_query: str | None = None
+    category_code: str | None = None
+    supplier_query: str | None = None
+    supplier_code: str | None = None
+    customer_query: str | None = None
 
 
 class InventoryDraftLineOutput(BaseModel):

@@ -114,11 +114,7 @@ def enrich_receipt_lines(
     for i, row in enumerate(lines):
         line_id, values = _merge_line(row, i)
         idx = i + 1
-        if not values.get("skuCode") or not str(values.get("skuCode", "")).strip():
-            slug = re.sub(r"[^A-Za-z0-9]+", "-", theme.upper())[:10].strip("-") or "SP"
-            values["skuCode"] = f"{slug}-{idx:03d}"
-        if not values.get("productName") or not str(values.get("productName", "")).strip():
-            values["productName"] = f"{theme} {idx}"
+        # Do not invent SKU/product name — DB validation requires existing master data.
         if values.get("quantity") is None or values.get("quantity") == "":
             values["quantity"] = qty_hint if qty_hint is not None and i == 0 else 1
         if values.get("costPrice") is None or values.get("costPrice") == "":
@@ -133,10 +129,6 @@ def enrich_receipt_header(header: dict[str, Any], *, user_prompt: str = "") -> d
         h["receiptDate"] = date.today().isoformat()
     if not h.get("saveMode"):
         h["saveMode"] = "draft"
-    if not h.get("supplierName") and not h.get("supplierCode"):
-        m = re.search(r"(?:từ|ncc|nhà cung cấp)\s+([^\d,]+)", user_prompt, re.IGNORECASE)
-        if m:
-            h["supplierName"] = m.group(1).strip()[:120]
     return h
 
 
@@ -165,8 +157,10 @@ def validate_receipt_draft(header: dict[str, Any], lines: list[dict[str, Any]]) 
             if val is None or (isinstance(val, str) and not val.strip()):
                 issues.append(f"Dòng {i + 1}: thiếu {key}")
         qty = values.get("quantity")
-        if qty is not None and int(qty) <= 0:
-            issues.append(f"Dòng {i + 1}: quantity phải > 0")
+        if qty is None or (isinstance(qty, str) and not str(qty).strip()):
+            issues.append(f"Dòng {i + 1}: thiếu số lượng nhập")
+        elif int(qty) <= 0:
+            issues.append(f"Dòng {i + 1}: số lượng nhập phải lớn hơn 0")
         sku = values.get("skuCode")
         batch = values.get("batchNumber")
         if sku and batch:

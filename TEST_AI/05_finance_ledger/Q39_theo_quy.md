@@ -4,12 +4,16 @@
 - **Câu hỏi:** Tổng thu chi theo từng quỹ (cash_funds)?
 - **Nhóm:** system_data_query (finance_ledger)
 - **Intent dự kiến:** `system_data_query`
-- **Ngày test:**
-- **Thời gian phản hồi:**
-- **Trạng thái:** ⬜ Chưa test / ✅ Pass / ❌ Fail / ⚠️ Partial
+- **Ngày test:** 17/05/2026 17:36:18
+- **Thời gian phản hồi:** 5998ms
+- **Trạng thái:** ✅ Pass
 
 ## Response từ AI
-_(Chưa có)_
+**Trả lời:**
+
+Tá»ng sá» tiá»n máº·t quá»¹ chÃ­nh lÃ  1.110.000.
+
+
 
 ## Kiểm tra
 - [ ] Intent đúng với dự kiến

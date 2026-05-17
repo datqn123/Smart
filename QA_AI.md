@@ -15,6 +15,21 @@
 4. Mở màn AI Chat, lần lượt nhập từng câu hỏi bên dưới
 5. Ghi nhận kết quả theo cột: **Intent dự kiến**, **Kết quả thực tế**, **Trạng thái**, **Ghi chú**
 
+### Tiêu chí chất lượng câu trả lời (mọi intent)
+
+User hỏi **thông tin về cái gì** (chỉ số, SKU, phiếu, khách hàng, danh mục…) — câu trả lời **không được cụt** (chỉ số / một dòng / “xem bảng”).
+
+| Tiêu chí | Đạt | Không đạt |
+|----------|-----|-----------|
+| Gắn đúng **chủ đề** câu hỏi | Mở đầu nêu rõ đang trả lời về gì (tổng tồn, SKU X, phiếu Y…) | Chỉ `30.554.000` hoặc “có 3 dòng” |
+| Số liệu | Khớp `rows` / bảng UI, có đơn vị/ngữ cảnh | Bịa số hoặc “không có dữ liệu” khi `rows` có giá trị |
+| Chi tiết item | Nhiều dòng → liệt kê tên/mã/SKU từng dòng quan trọng | Không nêu item user đang tìm |
+| Độ dài | Đoạn ngắn có cấu trúc (mở đầu + ý nghĩa + gợi ý hỏi tiếp) | Một câu dưới ~80 ký tự |
+
+Prompt agent: `ai_python/app/prompts/agents/summarize.md` (§ «Trả lời theo đối tượng user đang hỏi»), `answer_enrich.md`.
+
+**Chọn bảng cho `gen_sql`:** module `ai_python/app/graph/sql_query_domain.py` — câu có *hết hàng / tồn kho* → domain `inventory` → shortlist `inventory`, `products`, … (không ép `financeledger`, không ưu tiên `stockreceipts`). Bật thêm `SQL_TABLE_SELECTION_ENABLED=1` trong `.env` nếu muốn giới hạn schema block.
+
 ---
 
 ## 1. GENERAL_CHAT — Hội thoại thông thường (7 câu)

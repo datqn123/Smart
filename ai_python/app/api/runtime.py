@@ -127,11 +127,13 @@ def _build_state(
     state["chart_degraded"] = None
     state["catalog_entity_type"] = None
     state["catalog_row_count_hint"] = None
+    state["catalog_draft_slots"] = None
     state["catalog_draft_payload"] = None
     state["catalog_draft_id"] = None
     state["catalog_draft_sse"] = None
     state["inventory_doc_type"] = None
     state["inventory_line_count_hint"] = None
+    state["inventory_draft_slots"] = None
     state["inventory_draft_payload"] = None
     state["inventory_draft_id"] = None
     state["inventory_draft_sse"] = None
@@ -142,6 +144,7 @@ def _build_state(
     state["normalized_user_question"] = None
     state["domain_context"] = None
     state["domain_clarify_sse"] = None
+    state["progress_text"] = None
     state["spring_bearer_token"] = bearer_token
     return state
 

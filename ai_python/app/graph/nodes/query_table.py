@@ -7,6 +7,7 @@ import logging
 from app.graph.agent_trace import emit_agent_trace
 from app.graph.deps import GraphDeps
 from app.graph.interaction_mode import should_route_query_table
+from app.graph.progress import emit_progress
 from app.graph.query_table_sse import build_query_table_sse
 from app.graph.state import AgentState
 
@@ -49,12 +50,14 @@ def make_emit_query_table_node(deps: GraphDeps):
             phase="SSE data_table",
             detail=f"rowCount={payload.get('rowCount')} truncated={payload.get('truncated')}",
         )
-        return {"query_table_sse": payload}
+        return {**emit_progress(state, "emit_query_table"), "query_table_sse": payload}
 
     return emit_query_table
 
 
 def route_after_sql_branch(state: AgentState) -> str:
+    if state.get("domain_clarify_sse"):
+        return "stop_clarify"
     if state.get("intent") == "system_data_chart":
         if state.get("chart_data_ok") or state.get("chart_degraded"):
             return "agent_chart"

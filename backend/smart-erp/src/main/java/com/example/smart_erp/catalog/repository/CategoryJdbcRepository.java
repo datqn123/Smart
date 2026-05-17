@@ -57,13 +57,31 @@ public class CategoryJdbcRepository {
 		}
 		String sql = """
 				SELECT id FROM categories
-				WHERE deleted_at IS NULL AND LOWER(TRIM(name)) = LOWER(TRIM(:name))
+				WHERE deleted_at IS NULL AND status = 'Active'
+				  AND LOWER(TRIM(name)) = LOWER(TRIM(:name))
 				""";
 		List<Long> ids = namedJdbc.query(sql, Map.of("name", name.trim()), (rs, rowNum) -> rs.getLong("id"));
 		if (ids.size() == 1) {
 			return Optional.of(ids.getFirst());
 		}
 		return Optional.empty();
+	}
+
+	/** Exact category_code match among active (non-deleted) rows. */
+	public Optional<Long> findActiveIdByExactCode(String categoryCode) {
+		if (categoryCode == null || categoryCode.isBlank()) {
+			return Optional.empty();
+		}
+		String sql = """
+				SELECT id FROM categories
+				WHERE deleted_at IS NULL AND status = 'Active' AND category_code = :code
+				""";
+		List<Long> ids = namedJdbc.query(sql, Map.of("code", categoryCode.trim()), (rs, rowNum) -> rs.getLong("id"));
+		return ids.isEmpty() ? Optional.empty() : Optional.of(ids.getFirst());
+	}
+
+	public boolean existsActiveWithNameIgnoreCase(String name) {
+		return findActiveIdByExactNameIgnoreCase(name).isPresent();
 	}
 
 	public Optional<CategoryFlatRow> findActiveById(long id) {

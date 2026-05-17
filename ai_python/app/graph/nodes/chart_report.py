@@ -9,6 +9,7 @@ from typing import Any
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
 from app.graph.agent_trace import emit_agent_trace
+from app.graph.answer_quality import finalize_answer
 from app.graph.chart_catalog import chart_catalog_snippet
 from app.graph.chart_data_profile import build_query_result_profile, profile_for_prompt
 from app.graph.chart_thread_context import format_prior_turns_for_chart
@@ -16,6 +17,7 @@ from app.graph.datetime_display import localize_query_result_for_display
 from app.graph.deps import GraphDeps
 from app.graph.display_format import format_display_for_chat_ui
 from app.graph.message_utils import latest_human_question
+from app.graph.progress import emit_progress
 from app.graph.state import AgentState
 from app.llm.schemas import (
     ChartReviewOutput,
@@ -153,7 +155,7 @@ def make_agent_idea_node(deps: GraphDeps):
                 phase="Stub (no LLM registry)",
                 detail=json.dumps(payload["idea_data_request"], ensure_ascii=False)[:800],
             )
-            return payload
+            return {**emit_progress(state, "agent_idea"), **payload}
         parts = [f"Câu hỏi / yêu cầu hiện tại:\n{user_q}"]
         if thread_ctx:
             parts.append(f"\nPrior thread (same topic — stay consistent):\n{thread_ctx}")
@@ -194,7 +196,7 @@ def make_agent_idea_node(deps: GraphDeps):
             phase="Data brief + chart idea",
             detail=json.dumps(bundle["idea_data_request"], ensure_ascii=False)[:1200],
         )
-        return bundle
+        return {**emit_progress(state, "agent_idea"), **bundle}
 
     return agent_idea
 
@@ -225,7 +227,7 @@ def make_agent_chart_node(deps: GraphDeps):
                 phase="Stub spec (no LLM registry)",
                 detail=json.dumps(draft, ensure_ascii=False)[:800],
             )
-            return {"chart_spec_draft": draft}
+            return {**emit_progress(state, "agent_chart"), "chart_spec_draft": draft}
         human = (
             f"Chart brief (JSON):\n{json.dumps(brief, ensure_ascii=False)[:2500]}\n\n"
             f"Chart idea (JSON):\n{idea}\n\n"
@@ -256,7 +258,7 @@ def make_agent_chart_node(deps: GraphDeps):
             phase="Draft Recharts spec",
             detail=json.dumps(draft, ensure_ascii=False)[:1200],
         )
-        return {"chart_spec_draft": draft}
+        return {**emit_progress(state, "agent_chart"), "chart_spec_draft": draft}
 
     return agent_chart
 
@@ -290,6 +292,14 @@ def make_agent_review_node(deps: GraphDeps):
                 f"{len(rows)} dòng dữ liệu." if rows else "Không có dữ liệu."
             )
             fa = format_display_for_chat_ui(ans)
+            fa = finalize_answer(
+                fa,
+                deps=deps,
+                node_name="agent_review",
+                scenario="chart_success",
+                user_question=user_q,
+                has_query_result=bool(rows),
+            )
             emit_agent_trace(
                 logger,
                 deps.settings,
@@ -298,6 +308,7 @@ def make_agent_review_node(deps: GraphDeps):
                 detail=json.dumps(final, ensure_ascii=False)[:800],
             )
             return {
+                **emit_progress(state, "agent_review"),
                 "chart_spec_final": final,
                 "final_answer": fa,
                 "messages": [AIMessage(content=fa)],
@@ -345,7 +356,16 @@ def make_agent_review_node(deps: GraphDeps):
             detail=(out.final_answer or "")[:1200],
         )
         fa = format_display_for_chat_ui(out.final_answer or "")
+        fa = finalize_answer(
+            fa,
+            deps=deps,
+            node_name="agent_review",
+            scenario="chart_review",
+            user_question=user_q,
+            has_query_result=bool(rows),
+        )
         return {
+            **emit_progress(state, "agent_review"),
             "chart_spec_final": final,
             "final_answer": fa,
             "messages": [AIMessage(content=fa)],
@@ -369,6 +389,16 @@ def make_chart_fail_message_node(deps: GraphDeps):
         else:
             msg = "Không tạo được biểu đồ từ dữ liệu hiện tại."
         fa = format_display_for_chat_ui(msg)
+        user_q = latest_human_question(state.get("messages"))
+        fa = finalize_answer(
+            fa,
+            deps=deps,
+            node_name="chart_fail_message",
+            scenario="chart_fail",
+            user_question=user_q,
+            has_query_result=False,
+            fallback_template_id="chart_fail_vi",
+        )
         emit_agent_trace(
             logger,
             deps.settings,
@@ -376,7 +406,7 @@ def make_chart_fail_message_node(deps: GraphDeps):
             phase="Chart aborted",
             detail=msg[:800],
         )
-        return {"final_answer": fa, "messages": [AIMessage(content=fa)]}
+        return {**emit_progress(state, "chart_fail_message"), "final_answer": fa, "messages": [AIMessage(content=fa)]}
 
     return chart_fail_message
 

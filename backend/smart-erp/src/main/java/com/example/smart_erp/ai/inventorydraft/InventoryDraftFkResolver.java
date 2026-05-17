@@ -7,8 +7,12 @@ import java.util.Optional;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import com.example.smart_erp.ai.inventorydraft.dto.DraftReferenceValidationResult;
 import com.example.smart_erp.common.api.ApiErrorCode;
 import com.example.smart_erp.common.exception.BusinessException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 @Component
 public class InventoryDraftFkResolver {
@@ -53,6 +57,74 @@ public class InventoryDraftFkResolver {
 					""", Map.of("n", name.trim()), "Tên sản phẩm");
 		}
 		throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Thiếu skuCode hoặc productName");
+	}
+
+	/**
+	 * Verify supplier and line SKUs exist in DB before showing inventory draft HITL UI.
+	 */
+	public DraftReferenceValidationResult validateStockReceipt(ObjectNode header, ArrayNode lines) {
+		java.util.ArrayList<String> issues = new java.util.ArrayList<>();
+		String supplierErr = tryResolveSupplierMessage(
+				text(header, "supplierName"),
+				text(header, "supplierCode"));
+		if (supplierErr != null) {
+			issues.add("Nhà cung cấp: " + supplierErr);
+		}
+		if (lines == null || lines.isEmpty()) {
+			issues.add("Phiếu nhập phải có ít nhất một dòng hàng");
+			return DraftReferenceValidationResult.failure(issues);
+		}
+		int lineNo = 0;
+		for (JsonNode lineNode : lines) {
+			if (!lineNode.isObject()) {
+				continue;
+			}
+			lineNo++;
+			ObjectNode line = (ObjectNode) lineNode;
+			JsonNode valuesNode = line.has("values") && line.get("values").isObject()
+					? line.get("values")
+					: line;
+			ObjectNode values = (ObjectNode) valuesNode;
+			String sku = text(values, "skuCode");
+			String productName = text(values, "productName");
+			String productErr = tryResolveProductMessage(sku, productName);
+			if (productErr != null) {
+				String label = (sku != null && !sku.isBlank()) ? sku : (productName != null ? productName : "?");
+				issues.add("Dòng " + lineNo + " (" + label + "): " + productErr);
+			}
+		}
+		if (issues.isEmpty()) {
+			return DraftReferenceValidationResult.success();
+		}
+		return DraftReferenceValidationResult.failure(issues);
+	}
+
+	private String tryResolveSupplierMessage(String supplierName, String supplierCode) {
+		try {
+			resolveSupplierId(supplierName, supplierCode);
+			return null;
+		}
+		catch (BusinessException e) {
+			return e.getMessage();
+		}
+	}
+
+	private String tryResolveProductMessage(String skuCode, String productName) {
+		try {
+			resolveProductId(skuCode, productName);
+			return null;
+		}
+		catch (BusinessException e) {
+			return e.getMessage();
+		}
+	}
+
+	private static String text(ObjectNode node, String field) {
+		if (node == null || !node.has(field) || node.get(field).isNull()) {
+			return null;
+		}
+		String s = node.get(field).asText();
+		return s != null && !s.isBlank() ? s.trim() : null;
 	}
 
 	public int resolveBaseUnitId(int productId) {

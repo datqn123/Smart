@@ -10,7 +10,15 @@ type Props = {
 }
 
 export function AiChatClarifyCard({ payload, onPickSuggestion }: Props) {
-  const { questions, issues, originalQuestion, suggestedRewrite, suggestedNormalized } = payload
+  const {
+    questions,
+    issues,
+    assistantIntro,
+    originalQuestion,
+    suggestedRewrite,
+    suggestedNormalized,
+  } = payload
+  const intro = (assistantIntro || "").trim()
   const suggested = (suggestedRewrite || suggestedNormalized || "").trim()
   const original = (originalQuestion || "").trim()
   const hasRewrite = Boolean(suggested && original && suggested !== original)
@@ -34,6 +42,9 @@ export function AiChatClarifyCard({ payload, onPickSuggestion }: Props) {
         <HelpCircle className="h-4 w-4 shrink-0" />
         Cần làm rõ
       </div>
+      {intro ? (
+        <p className="mb-2 whitespace-pre-line text-slate-700">{intro.replace(/\*\*/g, "")}</p>
+      ) : null}
       {issues.length > 0 ? (
         <ul className="mb-2 list-disc space-y-1 pl-5 text-slate-700">
           {issues.map((issue, i) => (

@@ -22,7 +22,15 @@ def set_correlation_id(cid: str | None) -> contextvars.Token[str | None]:
 
 
 def reset_correlation_id(token: contextvars.Token[str | None]) -> None:
-    _correlation_id.reset(token)
+    """Reset ContextVar; ignore if token was set in another thread (SSE sync iterator)."""
+    try:
+        _correlation_id.reset(token)
+    except ValueError:
+        logger = logging.getLogger(__name__)
+        logger.debug(
+            "correlation_id reset skipped (token from different context)",
+            exc_info=True,
+        )
 
 
 @contextmanager

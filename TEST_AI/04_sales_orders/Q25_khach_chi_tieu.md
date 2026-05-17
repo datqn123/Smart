@@ -4,12 +4,16 @@
 - **Câu hỏi:** Khách hàng nào có tổng chi tiêu cao nhất?
 - **Nhóm:** system_data_query (sales_orders)
 - **Intent dự kiến:** `system_data_query`
-- **Ngày test:**
-- **Thời gian phản hồi:**
-- **Trạng thái:** ⬜ Chưa test / ✅ Pass / ❌ Fail / ⚠️ Partial
+- **Ngày test:** 17/05/2026 17:34:57
+- **Thời gian phản hồi:** 4177ms
+- **Trạng thái:** ✅ Pass
 
 ## Response từ AI
-_(Chưa có)_
+**Trả lời:**
+
+Dá»±a trÃªn dá»¯ liá»u ÄÃ£ cho, khÃ¡ch hÃ ng cÃ³ tá»ng chi tiÃªu cao nháº¥t lÃ  **KhÃ¡ch láº»** vá»i tá»ng chi tiÃªu lÃ  **297.700**.
+
+
 
 ## Kiểm tra
 - [ ] Intent đúng với dự kiến

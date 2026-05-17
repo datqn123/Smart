@@ -26,6 +26,7 @@ from app.graph.nodes.summarize import make_summarize_answer_node
 from app.graph.catalog_draft_subgraph import build_catalog_draft_subgraph
 from app.graph.inventory_draft_subgraph import build_inventory_draft_subgraph
 from app.graph.sql_subgraph import build_sql_subgraph
+from app.graph.progress import wrap_node_with_stream_progress as wrap
 from app.graph.state import AgentState
 
 
@@ -34,19 +35,19 @@ def build_main_graph(deps: GraphDeps):
     sql_inner = build_sql_subgraph(deps)
     catalog_inner = build_catalog_draft_subgraph(deps)
     inventory_inner = build_inventory_draft_subgraph(deps)
-    g.add_node("domain_guard", make_domain_guard_node(deps))
-    g.add_node("context_compact", make_context_compact_node(deps))
-    g.add_node("classify_intent", make_intent_node(deps))
-    g.add_node("chat_normal", make_chat_normal_node(deps))
+    g.add_node("domain_guard", wrap("domain_guard", make_domain_guard_node(deps)))
+    g.add_node("context_compact", wrap("context_compact", make_context_compact_node(deps)))
+    g.add_node("classify_intent", wrap("classify_intent", make_intent_node(deps)))
+    g.add_node("chat_normal", wrap("chat_normal", make_chat_normal_node(deps)))
     g.add_node("catalog_draft_branch", catalog_inner.compile())
     g.add_node("inventory_draft_branch", inventory_inner.compile())
-    g.add_node("agent_idea", make_agent_idea_node(deps))
+    g.add_node("agent_idea", wrap("agent_idea", make_agent_idea_node(deps)))
     g.add_node("sql_branch", sql_inner.compile())
-    g.add_node("agent_chart", make_agent_chart_node(deps))
-    g.add_node("agent_review", make_agent_review_node(deps))
-    g.add_node("chart_fail_message", make_chart_fail_message_node(deps))
-    g.add_node("emit_query_table", make_emit_query_table_node(deps))
-    g.add_node("summarize_answer", make_summarize_answer_node(deps))
+    g.add_node("agent_chart", wrap("agent_chart", make_agent_chart_node(deps)))
+    g.add_node("agent_review", wrap("agent_review", make_agent_review_node(deps)))
+    g.add_node("chart_fail_message", wrap("chart_fail_message", make_chart_fail_message_node(deps)))
+    g.add_node("emit_query_table", wrap("emit_query_table", make_emit_query_table_node(deps)))
+    g.add_node("summarize_answer", wrap("summarize_answer", make_summarize_answer_node(deps)))
 
     g.add_edge(START, "domain_guard")
     g.add_conditional_edges(
@@ -81,6 +82,7 @@ def build_main_graph(deps: GraphDeps):
             "chart_fail_message": "chart_fail_message",
             "emit_query_table": "emit_query_table",
             "summarize_answer": "summarize_answer",
+            "stop_clarify": END,
         },
     )
     g.add_edge("emit_query_table", "summarize_answer")

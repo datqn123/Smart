@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.example.smart_erp.ai.inventorydraft.dto.DraftReferenceValidationResult;
 import com.example.smart_erp.ai.inventorydraft.dto.InventoryDraftCommitResult;
 import com.example.smart_erp.ai.inventorydraft.dto.InventoryDraftCreateRequest;
 import com.example.smart_erp.ai.inventorydraft.dto.InventoryDraftPatchRequest;
@@ -32,6 +33,16 @@ public class AiInventoryDraftController {
 
 	public AiInventoryDraftController(AiInventoryDraftService service) {
 		this.service = service;
+	}
+
+	@PostMapping("/validate")
+	@PreAuthorize("hasAuthority('can_use_ai') and hasAuthority('can_manage_inventory')")
+	public ResponseEntity<ApiSuccessResponse<DraftReferenceValidationResult>> validate(
+			Authentication authentication,
+			@Valid @RequestBody InventoryDraftCreateRequest body) {
+		DraftReferenceValidationResult data = service.validateReferences(authentication, body);
+		String msg = data.ok() ? "Tham chiếu hợp lệ" : "Có mục chưa khớp dữ liệu hệ thống";
+		return ResponseEntity.ok(ApiSuccessResponse.of(data, msg));
 	}
 
 	@PostMapping

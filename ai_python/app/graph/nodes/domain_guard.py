@@ -8,6 +8,7 @@ from typing import Any
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from app.graph.agent_trace import emit_agent_trace
+from app.graph.answer_quality import finalize_answer
 from app.graph.deps import GraphDeps
 from app.graph.erp_guide.load_index import format_index_for_prompt, load_domain_index
 from app.graph.erp_guide.retrieve import detect_heuristic_misnomers, retrieve_guide_snippets
@@ -20,6 +21,7 @@ from app.graph.erp_guide.slot_resolution import (
     strip_noop_issues,
 )
 from app.graph.message_utils import format_dialog_tail_for_sql, latest_human_question
+from app.graph.progress import emit_progress
 from app.graph.state import AgentState
 from app.llm.schemas import DomainGuardOutput, DomainIssue
 from app.prompts.load import load_agent_json_contract, load_agent_prompt
@@ -152,6 +154,7 @@ def make_domain_guard_node(deps: GraphDeps):
         if not deps.settings.erp_domain_guard_enabled:
             q = latest_human_question(state.get("messages"))
             return {
+                **emit_progress(state, "domain_guard"),
                 "domain_guard_action": "proceed",
                 "normalized_user_question": q,
             }
@@ -185,6 +188,7 @@ def make_domain_guard_node(deps: GraphDeps):
                     index=index,
                 )
             return {
+                **emit_progress(state, "domain_guard"),
                 "domain_guard_action": "proceed",
                 "normalized_user_question": default_normalized_for_proceed(question),
                 "domain_context": {"guide_snippets": snippets},
@@ -219,6 +223,7 @@ def make_domain_guard_node(deps: GraphDeps):
                     index=index,
                 )
             return {
+                **emit_progress(state, "domain_guard"),
                 "domain_guard_action": "proceed",
                 "normalized_user_question": default_normalized_for_proceed(question),
                 "domain_context": {"guide_snippets": snippets},
@@ -239,7 +244,7 @@ def make_domain_guard_node(deps: GraphDeps):
         )
 
         if final.action == "reject":
-            return _pack_reject(final)
+            return _pack_reject(state, final, deps)
         if final.action == "clarify":
             return _pack_clarify(
                 state,
@@ -255,6 +260,7 @@ def make_domain_guard_node(deps: GraphDeps):
 
         normalized = final.normalized_question.strip() or default_normalized_for_proceed(question)
         return {
+            **emit_progress(state, "domain_guard"),
             "domain_guard_action": "proceed",
             "normalized_user_question": normalized,
             "domain_context": {
@@ -268,9 +274,17 @@ def make_domain_guard_node(deps: GraphDeps):
     return domain_guard
 
 
-def _pack_reject(final: DomainGuardOutput) -> dict:
+def _pack_reject(state: AgentState, final: DomainGuardOutput, deps: GraphDeps) -> dict:
     msg = final.assistant_message or "Yêu cầu ngoài phạm vi Mini ERP."
+    msg = finalize_answer(
+        msg,
+        deps=deps,
+        node_name="domain_guard",
+        scenario="domain_reject",
+        fallback_template_id="domain_reject_stub_vi",
+    )
     return {
+        **emit_progress(state, "domain_guard"),
         "domain_guard_action": "reject",
         "final_answer": msg,
         "messages": [AIMessage(content=msg)],
@@ -308,6 +322,7 @@ def _pack_clarify(
     }
     msg = _short_clarify_intro(issues)
     return {
+        **emit_progress(state, "domain_guard"),
         "domain_guard_action": "clarify",
         "domain_clarify_sse": clarify_sse,
         "final_answer": msg,

@@ -15,6 +15,12 @@ Review **SELECT-only** SQL for safety and relevance to the user question.
 ## Do not reject (stylistic only)
 
 - LIMIT on aggregate queries when executor injects LIMIT — not a policy failure.
+- **Division by zero** when the SQL has no `/` operator — do not invent this issue.
+- **Missing date range** for snapshot stock questions (tồn kho, hết hàng, low stock) — current `inventory.quantity` does not require a period filter unless the user asked for a time range.
+- **Missing date range on `productpricehistory`** when the user filters by **giá vốn / cost_price** without asking for a month/year — a simple `cost_price > N` filter is acceptable.
+- **Canonical table name `productpricehistory`** (no underscores) — do **not** suggest `product_price_history`, `product_stock_prices`, or other invented tables if SQL already uses allowlisted names.
+- **JOIN … ON** present — do not claim «join without ON clause».
+- «Latest price only» / LATERAL missing — stylistic for listing products; not ok=false unless SQL clearly uses a wrong fact table.
 
 ## JSON output contract
 

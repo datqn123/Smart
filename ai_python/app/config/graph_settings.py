@@ -93,6 +93,22 @@ class GraphSettings(BaseSettings):
         description="Minimum artifact table count before LLM table-pick may run.",
     )
     sql_max_selected_tables: int = Field(default=8, ge=1, le=32)
+    sql_allowlist_fk_expand: bool = Field(
+        default=True,
+        description="When table selection is on, add FK ref_table neighbors to validation/prompt allowlist.",
+    )
+    sql_allowlist_fk_hops: int = Field(
+        default=1,
+        ge=0,
+        le=4,
+        description="FK expansion depth for effective SQL allowlist (0 = selected tables only).",
+    )
+    sql_allowlist_fk_extra_slots: int = Field(
+        default=6,
+        ge=0,
+        le=16,
+        description="Extra table slots beyond sql_max_selected_tables for FK join partners.",
+    )
     sql_hybrid_similarity_enabled: bool = Field(
         default=False,
         description="Compare new SQL to local pool (SimTok + SimAST); may add policy feedback.",
@@ -207,6 +223,23 @@ class GraphSettings(BaseSettings):
         le=10,
         description="Recent user turns kept verbatim after compaction.",
     )
+    # --- Answer quality (final_answer enrich) ---
+    answer_quality_enabled: bool = Field(
+        default=True,
+        description="Heuristic gate + optional LLM enrich on final_answer (ANSWER_QUALITY_ENABLED=0 to disable).",
+    )
+    answer_quality_max_chars: int = Field(
+        default=2000,
+        ge=200,
+        le=16000,
+        description="Truncate final_answer after quality pass.",
+    )
+    answer_enrich_timeout_sec: float = Field(
+        default=15.0,
+        ge=3.0,
+        le=120.0,
+        description="Max seconds for one answer_enrich LLM call.",
+    )
 
     @field_validator("ai_display_timezone", mode="before")
     @classmethod
@@ -261,9 +294,22 @@ class GraphSettings(BaseSettings):
             return bool(s)
         return bool(v)
 
+    @field_validator("answer_quality_enabled", mode="before")
+    @classmethod
+    def coerce_answer_quality_enabled(cls, v: object) -> object:
+        if isinstance(v, str):
+            s = v.strip().lower()
+            if s in ("0", "false", "no", "off"):
+                return False
+            if s in ("1", "true", "yes", "on"):
+                return True
+            return bool(s)
+        return bool(v)
+
     @field_validator(
         "sql_enriched_schema_prompt",
         "sql_table_selection_enabled",
+        "sql_allowlist_fk_expand",
         "sql_table_pick_use_llm",
         "sql_hybrid_similarity_enabled",
         "sql_exploit_on_retry",

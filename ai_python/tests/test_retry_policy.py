@@ -75,3 +75,29 @@ def test_policy_budget_blocks_regen() -> None:
     }
     d = decide_sql_retry(state, kind="policy")
     assert d.action == RetryAction.FAIL
+
+
+def test_intent_review_many_issues_still_regen_by_attempt_count() -> None:
+    """Multiple issues in one review round must not exhaust retry before MAX_SQL_ATTEMPTS."""
+    state = {
+        "intent": "system_data_query",
+        "sql_attempt_count": 2,
+        "validation_feedback": {
+            "policy": [],
+            "result": [],
+            "exec": [],
+            "intent_review": ["a", "b", "c", "d", "e"],
+        },
+    }
+    d = decide_sql_retry(state, kind="intent_review")
+    assert d.action == RetryAction.REGEN_SQL
+
+
+def test_intent_review_budget_exhausted_at_max_attempts() -> None:
+    state = {
+        "intent": "system_data_query",
+        "sql_attempt_count": 3,
+        "validation_feedback": {"policy": [], "result": [], "exec": [], "intent_review": ["x"]},
+    }
+    d = decide_sql_retry(state, kind="intent_review")
+    assert d.action == RetryAction.FAIL

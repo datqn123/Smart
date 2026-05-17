@@ -25,7 +25,8 @@
 ## Bắt buộc
 
 - Ít nhất **1 dòng**; tối đa **20 dòng**.
-- `skuCode` phải có trên mỗi dòng (sản phẩm đã tồn tại trong hệ thống — user sẽ chọn/sửa nếu sai).
+- `skuCode` và NCC phải **đã có trong database** (Active). Chỉ dùng mã/tên thật user cung cấp — **không bịa** SKU hay NCC mới.
+- Nếu không chắc mã, hãy hỏi lại user thay vì điền giá trị giả.
 - Không dùng cột catalog (`salePrice`, `customerCode`, …).
 - Không sinh `productId`, `supplierId`, `unitId` — hệ thống resolve lúc commit.
 

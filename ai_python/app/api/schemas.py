@@ -69,3 +69,17 @@ class StreamEvent(BaseModel):
     delta: str | None = None
     data: dict[str, Any] | str | None = None
     is_terminal: bool
+
+
+class TranscribeResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    correlation_id: str
+    transcript: str = ""
+    language: str | None = None
+    error: ErrorObject | None = None
+
+
+class SynthesizeRequest(BaseModel):
+    text: str = Field(min_length=1)
+    voice: str | None = None

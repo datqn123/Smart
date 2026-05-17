@@ -26,6 +26,11 @@ import {
 } from "@/lib/data-table-layout"
 import { cn } from "@/lib/utils"
 import type { QueryTableColumn, QueryTablePayload } from "../api/aiQueryTableTypes"
+import {
+  buildVisibleQueryTableColumns,
+  filterVisibleQueryTableColumns,
+  getQueryTableColumnLabel,
+} from "../lib/queryTableColumnLabels"
 import { AiChatArtifactSummary } from "./AiChatArtifactSummary"
 
 type Props = {
@@ -35,7 +40,23 @@ type Props = {
 const PREVIEW_ROWS = 4
 
 const INPUT_CLASS =
-  "h-9 w-full min-w-[88px] border-slate-200 bg-white px-2 text-sm shadow-none focus-visible:border-slate-900 focus-visible:ring-0"
+  "h-9 w-full border-slate-200 bg-white px-2 text-sm shadow-none focus-visible:border-slate-900 focus-visible:ring-0"
+
+const DIALOG_TABLE_CLASS =
+  "w-max min-w-full text-sm border-separate border-spacing-0 table-auto"
+
+function columnCellClass(key: string, editable: boolean, compact?: boolean): string {
+  const k = key.toLowerCase()
+  if (!editable) {
+    return compact ? "min-w-[120px] max-w-[220px]" : "min-w-[140px] max-w-[320px]"
+  }
+  if (k === "sku_code" || k === "barcode") return "min-w-[148px]"
+  if (k === "name") return "min-w-[220px]"
+  if (k === "description" || k === "image_url") return "min-w-[180px]"
+  if (k.endsWith("_at")) return "min-w-[128px]"
+  if (k === "status" || k === "weight") return "min-w-[112px]"
+  return "min-w-[140px]"
+}
 
 function cloneRows(rows: QueryTablePayload["rows"]): QueryTablePayload["rows"] {
   return rows.map((r) => ({ ...r }))
@@ -52,21 +73,37 @@ function displayCell(value: unknown): string {
   return s === "" ? "—" : s
 }
 
+function findColumn(columns: QueryTableColumn[], key: string): QueryTableColumn | undefined {
+  const kl = key.toLowerCase()
+  return columns.find((c) => c.key.toLowerCase() === kl)
+}
+
+function rowCellValue(row: Record<string, unknown>, key: string): unknown {
+  if (key in row) return row[key]
+  const kl = key.toLowerCase()
+  const match = Object.keys(row).find((k) => k.toLowerCase() === kl)
+  return match ? row[match] : undefined
+}
+
 function isReadOnlyColumn(key: string): boolean {
   const k = key.toLowerCase()
   return k === "id" || k.endsWith("_id")
 }
 
 function rowsToCsv(columns: QueryTableColumn[], rows: QueryTablePayload["rows"]): string {
-  const keys = columns.map((c) => c.key)
-  const header = keys.map((k) => columns.find((c) => c.key === k)?.label ?? k)
+  const visible = filterVisibleQueryTableColumns(columns)
+  const keys = visible.map((c) => c.key)
+  const header = keys.map((k) => {
+    const col = findColumn(visible, k)
+    return getQueryTableColumnLabel(k, col?.label)
+  })
   const escape = (v: string) => {
     if (/[",\n]/.test(v)) return `"${v.replace(/"/g, '""')}"`
     return v
   }
   const lines = [
     header.map(escape).join(","),
-    ...rows.map((row) => keys.map((k) => escape(formatCell(row[k]))).join(",")),
+    ...rows.map((row) => keys.map((k) => escape(formatCell(rowCellValue(row, k)))).join(",")),
   ]
   return lines.join("\n")
 }
@@ -89,20 +126,26 @@ function QueryResultTable({
   onCellChange,
 }: TableProps) {
   return (
-    <div className={cn(DATA_TABLE_SCROLL_CLASS, "overflow-x-auto", compact && "max-h-[200px]")}>
-      <Table
-        className={cn(
-          "w-full text-sm border-separate border-spacing-0",
-          editable ? "min-w-[720px] table-auto" : compact ? "min-w-[480px]" : "min-w-[640px]"
-        )}
-      >
+    <div className={cn("w-full overflow-x-auto overflow-y-auto", compact && "max-h-[200px]")}>
+      <Table className={DIALOG_TABLE_CLASS}>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
-            {columns.map((col) => (
-              <TableHead key={col.key} className={cn(TABLE_HEAD_CLASS, "whitespace-nowrap")}>
-                {col.label ?? col.key}
-              </TableHead>
-            ))}
+            {colKeys.map((key) => {
+              const col = findColumn(columns, key)
+              if (!col) return null
+              return (
+                <TableHead
+                  key={col.key}
+                  className={cn(
+                    TABLE_HEAD_CLASS,
+                    "whitespace-nowrap",
+                    columnCellClass(col.key, Boolean(editable), compact)
+                  )}
+                >
+                  {getQueryTableColumnLabel(col.key, col.label)}
+                </TableHead>
+              )
+            })}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -119,30 +162,31 @@ function QueryResultTable({
             rows.map((row, idx) => (
               <TableRow key={idx} className="hover:bg-slate-50/80">
                 {colKeys.map((key) => {
-                  const col = columns.find((c) => c.key === key)
+                  const col = findColumn(columns, key)
                   const readOnly = !editable || isReadOnlyColumn(key)
-                  const raw = formatCell(row[key])
+                  const cellVal = rowCellValue(row, key)
+                  const raw = formatCell(cellVal)
                   return (
                     <TableCell
                       key={key}
                       className={cn(
                         "align-top py-2 px-2",
-                        !editable && (compact ? "max-w-[180px] truncate" : "max-w-[280px] truncate")
+                        columnCellClass(key, Boolean(editable), compact)
                       )}
                     >
                       {readOnly ? (
                         <span
                           className={cn(
-                            "block text-sm",
+                            "block text-sm truncate",
                             isReadOnlyColumn(key) ? "text-slate-500 tabular-nums" : "text-slate-800"
                           )}
-                          title={displayCell(row[key])}
+                          title={displayCell(cellVal)}
                         >
-                          {displayCell(row[key])}
+                          {displayCell(cellVal)}
                         </span>
                       ) : (
                         <Input
-                          className={INPUT_CLASS}
+                          className={cn(INPUT_CLASS, "min-w-0")}
                           value={raw}
                           inputMode={col?.type === "number" ? "decimal" : "text"}
                           onChange={(e) => onCellChange?.(idx, key, e.target.value)}
@@ -166,12 +210,16 @@ export function AiChatQueryTableCard({ payload }: Props) {
   const [dirty, setDirty] = useState(false)
 
   const { columns, rowCount, truncated, title } = payload
-  const colKeys = useMemo(() => columns.map((c) => c.key), [columns])
+  const visibleColumns = useMemo(
+    () => buildVisibleQueryTableColumns(columns, payload.rows),
+    [columns, payload.rows]
+  )
+  const visibleColKeys = useMemo(() => visibleColumns.map((c) => c.key), [visibleColumns])
   const previewRows = editedRows.slice(0, PREVIEW_ROWS)
   const previewHint =
     editedRows.length > PREVIEW_ROWS
       ? `Hiển thị ${PREVIEW_ROWS}/${editedRows.length} dòng trong xem trước — mở bảng để chỉnh sửa.`
-      : "Mở bảng đầy đủ để chỉnh sửa các ô (trừ cột ID)."
+      : "Mở bảng đầy đủ để chỉnh sửa các ô dữ liệu."
 
   const updateCell = useCallback((rowIndex: number, key: string, value: string) => {
     setEditedRows((prev) =>
@@ -188,12 +236,12 @@ export function AiChatQueryTableCard({ payload }: Props) {
 
   const copyCsv = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(rowsToCsv(columns, editedRows))
+      await navigator.clipboard.writeText(rowsToCsv(visibleColumns, editedRows))
       toast.success("Đã sao chép bảng (CSV) vào clipboard")
     } catch {
       toast.error("Không sao chép được — thử lại hoặc dùng trình duyệt khác")
     }
-  }, [columns, editedRows])
+  }, [visibleColumns, editedRows])
 
   const openDialog = () => {
     if (!dirty) {
@@ -231,8 +279,8 @@ export function AiChatQueryTableCard({ payload }: Props) {
           previewRows.length > 0 ? (
             <div className={cn(DATA_TABLE_SHELL_CLASS, "border border-slate-100 shadow-none")}>
               <QueryResultTable
-                columns={columns}
-                colKeys={colKeys}
+                columns={visibleColumns}
+                colKeys={visibleColKeys}
                 rows={previewRows}
                 compact
               />
@@ -246,13 +294,13 @@ export function AiChatQueryTableCard({ payload }: Props) {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent
           showCloseButton={false}
-          className="flex max-h-[min(90dvh,900px)] w-full max-w-[min(96vw,1100px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(96vw,1100px)]"
+          className="flex max-h-[min(92dvh,920px)] w-[min(98vw,1520px)] max-w-[min(98vw,1520px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(98vw,1520px)]"
         >
           <DialogHeader className="border-b border-slate-100 px-5 py-4 text-left space-y-2">
             <DialogTitle className="text-base">{title ?? "Kết quả truy vấn"}</DialogTitle>
             <p className="text-xs text-slate-500 leading-relaxed">
               Chỉnh sửa trực tiếp trên bảng. Thay đổi chỉ lưu trên phiên chat — không ghi vào cơ sở
-              dữ liệu. Cột ID / mã tham chiếu (…_id) chỉ xem. Dùng sao chép CSV để mang sang Excel.
+              dữ liệu. Dùng sao chép CSV để mang sang Excel.
             </p>
             <div className="flex flex-wrap gap-2">
               <Badge variant="secondary" className="font-mono text-xs">
@@ -273,12 +321,12 @@ export function AiChatQueryTableCard({ payload }: Props) {
           <div
             className={cn(
               DATA_TABLE_SHELL_CLASS,
-              "flex-1 min-h-0 border-0 shadow-none rounded-none max-h-[calc(90dvh-11rem)]"
+              "flex-1 min-h-0 border-0 shadow-none rounded-none max-h-[calc(90dvh-11rem)] overflow-x-auto"
             )}
           >
             <QueryResultTable
-              columns={columns}
-              colKeys={colKeys}
+              columns={visibleColumns}
+              colKeys={visibleColKeys}
               rows={editedRows}
               editable
               onCellChange={updateCell}

@@ -14,6 +14,7 @@ from app.graph.message_utils import (
     messages_for_llm_context,
 )
 from app.graph.interaction_mode import resolve_mode_override
+from app.graph.progress import emit_progress
 from app.graph.registry import normalize_intent
 from app.graph.state import AgentState
 from app.llm.schemas import IntentOutput
@@ -66,7 +67,7 @@ def make_intent_node(deps: GraphDeps):
                     f"câu_hỏi={_user_question_snippet(state)}"
                 ),
             )
-            return mode_patch
+            return {**emit_progress(state, "classify_intent"), **mode_patch}
         reg = deps.llm_registry
         if reg is None:
             emit_agent_trace(
@@ -76,7 +77,7 @@ def make_intent_node(deps: GraphDeps):
                 phase="Kết luận (stub, không gọi LLM)",
                 detail="intent=general_chat",
             )
-            return {"intent": "general_chat"}
+            return {**emit_progress(state, "classify_intent"), "intent": "general_chat"}
         messages = _messages_for_intent(state)
         client = reg.get("intent")
         try:
@@ -95,7 +96,7 @@ def make_intent_node(deps: GraphDeps):
                 phase="Lỗi LLM — fallback",
                 detail="intent=general_chat",
             )
-            return {"intent": "general_chat"}
+            return {**emit_progress(state, "classify_intent"), "intent": "general_chat"}
         normalized = normalize_intent(raw)
         emit_agent_trace(
             logger,
@@ -108,7 +109,7 @@ def make_intent_node(deps: GraphDeps):
                 f"câu_hỏi={_user_question_snippet(state)}"
             ),
         )
-        return {"intent": normalized}
+        return {**emit_progress(state, "classify_intent"), "intent": normalized}
 
     return intent
 

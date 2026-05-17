@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.graph.column_labels_vi import resolve_column_label
 from app.graph.datetime_display import localize_query_result_for_display
 
 MAX_DISPLAY_ROWS = 200
+
+# Hidden from chat query-table UI (still allowed in SQL for JOIN/WHERE).
+_HIDDEN_COLUMN_KEYS = frozenset({"id", "category_id"})
 
 
 def _rows_from_query_result(qr: Any) -> list[dict[str, Any]]:
@@ -48,13 +52,14 @@ def _column_defs(qr: dict[str, Any], rows: list[dict[str, Any]]) -> list[dict[st
             keys.append(c)
     if not keys and rows:
         keys = list(rows[0].keys())
+    keys = [k for k in keys if k.lower() not in _HIDDEN_COLUMN_KEYS]
     out: list[dict[str, str]] = []
     for key in keys:
         col_type = types.get(key) or _infer_column_type([r.get(key) for r in rows])
         out.append(
             {
                 "key": key,
-                "label": labels.get(key) or key,
+                "label": resolve_column_label(key, labels.get(key)),
                 "type": col_type,
             }
         )
@@ -78,6 +83,12 @@ def build_query_table_sse(
     total = len(rows)
     truncated = total > max_rows
     display_rows = rows[:max_rows]
+    hidden = _HIDDEN_COLUMN_KEYS
+
+    def _strip_row(row: dict[str, Any]) -> dict[str, Any]:
+        return {k: v for k, v in row.items() if k.lower() not in hidden}
+
+    display_rows = [_strip_row(r) for r in display_rows]
     return {
         "title": title,
         "columns": _column_defs(localized, rows),

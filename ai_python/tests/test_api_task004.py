@@ -17,9 +17,28 @@ class _MockRuntime:
             "correlation_id": correlation_id,
         }
 
-    def stream(self, request: Any, *, correlation_id: str):  # noqa: ANN001
+    def stream(self, request: Any, *, correlation_id: str, bearer_token: str | None = None):  # noqa: ANN001
         yield {"chat_normal": {"final_answer": "partial"}}
         yield {"chat_normal": {"final_answer": f"done:{request.message}"}}
+
+
+class _SqlFailThenSummarizeRuntime:
+    """Mimic sql_branch error_payload then summarize_answer final_answer (answer quality path)."""
+
+    def invoke(self, request: Any, *, correlation_id: str) -> dict[str, Any]:
+        return {"final_answer": "enriched-user-reply", "error_payload": {"error": "max_sql_attempts"}}
+
+    def stream(self, request: Any, *, correlation_id: str, bearer_token: str | None = None):  # noqa: ANN001
+        yield {
+            "sql_branch": {
+                "error_payload": {"error": "max_sql_attempts", "attempts": 2},
+            },
+        }
+        yield {
+            "summarize_answer": {
+                "final_answer": "enriched-user-reply",
+            },
+        }
 
 
 class _StreamFailureRuntime:
@@ -30,7 +49,7 @@ class _StreamFailureRuntime:
             "correlation_id": correlation_id,
         }
 
-    def stream(self, request: Any, *, correlation_id: str):  # noqa: ANN001
+    def stream(self, request: Any, *, correlation_id: str, bearer_token: str | None = None):  # noqa: ANN001
         yield {"chat_normal": {"final_answer": "x"}}
         raise RuntimeError("mock stream exploded")
 
@@ -39,7 +58,7 @@ class _NeverRunRuntime:
     def invoke(self, request: Any, *, correlation_id: str) -> dict[str, Any]:
         raise AssertionError("Runtime must not execute.")
 
-    def stream(self, request: Any, *, correlation_id: str):  # noqa: ANN001
+    def stream(self, request: Any, *, correlation_id: str, bearer_token: str | None = None):  # noqa: ANN001
         raise AssertionError("Runtime must not execute.")
 
 
@@ -167,6 +186,29 @@ def test_stream_emits_delta_then_done(monkeypatch) -> None:  # noqa: ANN001
     assert names[-1] == "done"
     assert any("partial" in d for _, d in evs if _ == "delta")
     assert any("done:abc" in d for _, d in evs if _ == "delta")
+    app.dependency_overrides.clear()
+
+
+def test_stream_sql_fail_with_summarize_answer_skips_error_event(monkeypatch) -> None:  # noqa: ANN001
+    client = _build_client(monkeypatch, auth_dev_bypass="1")
+    app.dependency_overrides[get_graph_runtime] = lambda: _SqlFailThenSummarizeRuntime()
+
+    res = client.post(
+        "/api/v1/ai/chat/stream",
+        headers={"X-Correlation-Id": "cid-sql-fail-enriched"},
+        json={
+            "message": "tồn kho",
+            "metadata": {"tenant_id": "t-1", "user_id": "u-1"},
+        },
+    )
+
+    assert res.status_code == 200
+    evs = _parse_sse_named_events(res.text)
+    names = [e[0] for e in evs]
+    assert "error" not in names
+    deltas = [d for n, d in evs if n == "delta"]
+    assert any("enriched-user-reply" in d for d in deltas)
+    assert names[-1] == "done"
     app.dependency_overrides.clear()
 
 

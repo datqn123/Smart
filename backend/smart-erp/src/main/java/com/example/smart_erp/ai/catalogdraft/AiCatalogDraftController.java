@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.example.smart_erp.ai.catalogdraft.dto.CatalogDraftCommitResult;
 import com.example.smart_erp.ai.catalogdraft.dto.CatalogDraftCreateRequest;
+import com.example.smart_erp.ai.catalogdraft.dto.CatalogDraftReferenceValidationResult;
 import com.example.smart_erp.ai.catalogdraft.dto.CatalogDraftPatchRequest;
 import com.example.smart_erp.ai.catalogdraft.dto.CatalogDraftResponse;
 import com.example.smart_erp.common.api.ApiSuccessResponse;
@@ -32,6 +33,16 @@ public class AiCatalogDraftController {
 
 	public AiCatalogDraftController(AiCatalogDraftService service) {
 		this.service = service;
+	}
+
+	@PostMapping("/validate")
+	@PreAuthorize("hasAuthority('can_use_ai')")
+	public ResponseEntity<ApiSuccessResponse<CatalogDraftReferenceValidationResult>> validate(
+			Authentication authentication,
+			@Valid @RequestBody CatalogDraftCreateRequest body) {
+		CatalogDraftReferenceValidationResult data = service.validateReferences(authentication, body);
+		String msg = data.ok() ? "Tham chiếu hợp lệ" : "Có mục chưa khớp dữ liệu hệ thống";
+		return ResponseEntity.ok(ApiSuccessResponse.of(data, msg));
 	}
 
 	@PostMapping

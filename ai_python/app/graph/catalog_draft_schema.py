@@ -13,7 +13,8 @@ ENTITY_COLUMNS: dict[str, list[dict[str, Any]]] = {
     "product": [
         {"key": "skuCode", "label": "Mã SKU", "type": "string", "required": True},
         {"key": "name", "label": "Tên SP", "type": "string", "required": True},
-        {"key": "categoryName", "label": "Danh mục", "type": "string", "required": False},
+        {"key": "categoryName", "label": "Danh mục (tên)", "type": "string", "required": False},
+        {"key": "categoryCode", "label": "Mã danh mục", "type": "string", "required": False},
         {"key": "baseUnitName", "label": "Đơn vị", "type": "string", "required": True},
         {"key": "costPrice", "label": "Giá vốn", "type": "number", "required": True},
         {"key": "salePrice", "label": "Giá bán", "type": "number", "required": True},
@@ -63,6 +64,8 @@ def validate_draft_rows(entity_type: str, rows: list[dict[str, Any]]) -> list[st
     if len(rows) > MAX_CATALOG_DRAFT_ROWS:
         issues.append(f"Tối đa {MAX_CATALOG_DRAFT_ROWS} dòng")
     required = REQUIRED_KEYS.get(entity_type, [])
+    seen_codes: set[str] = set()
+    seen_names: set[str] = set()
     for i, row in enumerate(rows):
         values = row.get("values") if isinstance(row.get("values"), dict) else row
         if not isinstance(values, dict):
@@ -72,6 +75,39 @@ def validate_draft_rows(entity_type: str, rows: list[dict[str, Any]]) -> list[st
             val = values.get(key)
             if val is None or (isinstance(val, str) and not val.strip()):
                 issues.append(f"Dòng {i + 1}: thiếu {key}")
+        if entity_type == "product":
+            cat_name = (values.get("categoryName") or "").strip()
+            cat_code = (values.get("categoryCode") or "").strip()
+            if not cat_name and not cat_code:
+                issues.append(f"Dòng {i + 1}: thiếu danh mục (categoryName hoặc categoryCode)")
+            sku = (values.get("skuCode") or "").strip().lower()
+            if sku:
+                if sku in seen_codes:
+                    issues.append(f"Dòng {i + 1}: SKU trùng trong bảng nháp")
+                seen_codes.add(sku)
+        elif entity_type == "category":
+            code = (values.get("categoryCode") or "").strip().lower()
+            name = (values.get("name") or "").strip().lower()
+            if code:
+                if code in seen_codes:
+                    issues.append(f"Dòng {i + 1}: mã danh mục trùng trong bảng nháp")
+                seen_codes.add(code)
+            if name:
+                if name in seen_names:
+                    issues.append(f"Dòng {i + 1}: tên danh mục trùng trong bảng nháp")
+                seen_names.add(name)
+        elif entity_type == "supplier":
+            code = (values.get("supplierCode") or "").strip().lower()
+            if code:
+                if code in seen_codes:
+                    issues.append(f"Dòng {i + 1}: mã NCC trùng trong bảng nháp")
+                seen_codes.add(code)
+        elif entity_type == "customer":
+            code = (values.get("customerCode") or "").strip().lower()
+            if code:
+                if code in seen_codes:
+                    issues.append(f"Dòng {i + 1}: mã KH trùng trong bảng nháp")
+                seen_codes.add(code)
     return issues
 
 
@@ -90,6 +126,8 @@ _VALUE_ALIASES: dict[str, str] = {
     "category": "categoryName",
     "danh_muc": "categoryName",
     "category_name": "categoryName",
+    "ma_danh_muc": "categoryCode",
+    "category_code": "categoryCode",
     "gia_ban": "salePrice",
     "gia": "salePrice",
     "price": "salePrice",
@@ -180,9 +218,7 @@ def enrich_catalog_draft_rows(
         if entity_type == "product":
             if not values.get("name") or not str(values.get("name", "")).strip():
                 values["name"] = f"{theme} {idx}"
-            if not values.get("skuCode") or not str(values.get("skuCode", "")).strip():
-                slug = re.sub(r"[^A-Za-z0-9]+", "-", theme.upper())[:12].strip("-") or "SP"
-                values["skuCode"] = f"{slug}-{idx:03d}"
+            # skuCode must be explicit for DB validation (no duplicate / missing category checks).
             if not values.get("baseUnitName") or not str(values.get("baseUnitName", "")).strip():
                 values["baseUnitName"] = "Cái"
             sale = values.get("salePrice")
@@ -196,35 +232,17 @@ def enrich_catalog_draft_rows(
                     values["costPrice"] = int(round(float(sp) * 0.8))
                 elif price is not None:
                     values["costPrice"] = int(round(price * 0.8))
-            if not values.get("categoryName") and theme != "Sản phẩm":
-                values["categoryName"] = theme
+            # categoryName/categoryCode must exist in DB — do not invent.
             if not values.get("status"):
                 values["status"] = "Active"
         elif entity_type == "category":
-            if not values.get("name"):
-                values["name"] = f"{theme} {idx}"
-            if not values.get("categoryCode"):
-                values["categoryCode"] = f"CAT-{idx:03d}"
+            # categoryCode/name must be user/LLM provided — validated against DB before HITL UI.
             if not values.get("status"):
                 values["status"] = "Active"
         elif entity_type == "supplier":
-            if not values.get("name"):
-                values["name"] = f"NCC {theme} {idx}"
-            if not values.get("supplierCode"):
-                values["supplierCode"] = f"NCC-{idx:03d}"
-            if not values.get("contactPerson"):
-                values["contactPerson"] = "Liên hệ"
-            if not values.get("phone"):
-                values["phone"] = f"090000{idx:04d}"
             if not values.get("status"):
                 values["status"] = "Active"
         elif entity_type == "customer":
-            if not values.get("name"):
-                values["name"] = f"Khách {theme} {idx}"
-            if not values.get("customerCode"):
-                values["customerCode"] = f"KH-{idx:03d}"
-            if not values.get("phone"):
-                values["phone"] = f"091000{idx:04d}"
             if not values.get("status"):
                 values["status"] = "Active"
 

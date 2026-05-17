@@ -8,7 +8,7 @@ from langchain_core.messages import HumanMessage
 from app.config.graph_settings import GraphSettings, load_graph_settings
 from app.graph import compile_agent_graph, default_initial_state
 from app.graph.deps import GraphDeps
-from app.graph.nodes.sql_pipeline import _benign_sql_review_issue
+from app.graph.nodes.sql_pipeline import _benign_sql_review_issue, _spurious_sql_review_issue
 from app.graph.retry import can_regen_sql
 from app.graph.sql_executor import StubSqlExecutor
 from app.graph.dbmeta import ColumnMeta, SchemaArtifact, TableMeta
@@ -164,6 +164,36 @@ def test_benign_sql_review_issue_limit_with_aggregate() -> None:
     )
     assert _benign_sql_review_issue(msg) is True
     assert _benign_sql_review_issue("Missing column revenue in schema") is False
+
+
+def test_spurious_sql_review_issue_division_and_date() -> None:
+    sql = "SELECT p.id FROM products p JOIN inventory i ON i.product_id = p.id LIMIT 10"
+    q = "Có bao nhiêu sản phẩm đang hết hàng"
+    assert _spurious_sql_review_issue("Potential division by zero in calculation", sql, q) is True
+    assert _spurious_sql_review_issue("Lack of explicit date range filter", sql, q) is True
+    assert _spurious_sql_review_issue("Potential division by zero", "SELECT a / b FROM t", q) is False
+    assert _spurious_sql_review_issue("Lack of explicit date range filter", sql, "doanh thu tháng 5") is False
+
+
+def test_spurious_sql_review_productpricehistory_false_rename() -> None:
+    sql = (
+        "SELECT p.sku_code, pph.cost_price FROM products p "
+        "JOIN productpricehistory pph ON p.id = pph.product_id "
+        "WHERE pph.cost_price > 200000 LIMIT 100"
+    )
+    q = "Tìm các sản phẩm có giá vốn trên 200000"
+    assert _spurious_sql_review_issue(
+        "Wrong table name in JOIN: productpricehistory should be product_price_history",
+        sql,
+        q,
+    )
+    assert _spurious_sql_review_issue(
+        "Wrong table join - should use product_stock_prices instead of productpricehistory",
+        sql,
+        q,
+    )
+    assert _spurious_sql_review_issue("Join without ON clause", sql, q)
+    assert _spurious_sql_review_issue("No date range filter for price history", sql, q)
 
 
 def test_sql_review_retries_then_pass(monkeypatch: pytest.MonkeyPatch, patch_pg_schema_v1: None) -> None:

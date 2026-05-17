@@ -1,18 +1,5 @@
-# Agent: inventory_entity_pick
+# Agent: inventory_entity_pick (legacy)
 
-Chọn loại chứng từ kho cần **tạo nháp** từ câu người dùng.
+Đã thay bằng **`inventory_draft_slots.md`** — tách đủ slot (`doc_type`, `quantity`, `product_query`, `supplier_*`, …) cho tra DB.
 
-## doc_type (v1)
-
-- `stock_receipt` — phiếu nhập kho, nhập hàng, nhập kho từ NCC
-
-## line_count_hint
-
-Số dòng hàng gợi ý (1–20). Nếu user nêu tổng số lượng một mặt hàng → `1`. Nếu không rõ → `1`.
-
-## JSON output contract
-
-Single JSON object with keys `doc_type` and `line_count_hint` only.
-`doc_type` must be exactly: stock_receipt (v1).
-`line_count_hint` must be integer 1–20.
-No markdown fences, no other keys.
+Node `classify_inventory_doc` gọi `inventory_draft_slots` (LLM), không dùng file này trong runtime.

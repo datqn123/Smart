@@ -16,7 +16,17 @@ from app.graph.ledger_metrics import (
     resolve_metric,
 )
 from app.graph.message_utils import latest_human_question
+from app.graph.progress import emit_progress
 from app.graph.reference_joins import join_hints_for_plan, tables_for_dimensions
+from app.graph.sql_query_domain import (
+    default_tables_for_domain,
+    detect_sql_query_domain,
+    sql_hints_for_domain,
+)
+from app.graph.sql_table_selection import (
+    ensure_context_tables_for_question,
+    ensure_domain_tables_for_question,
+)
 from app.graph.schema_tools import (
     build_artifact_for_tables,
     format_catalog_for_prompt,
@@ -40,8 +50,12 @@ def _merge_plan_tables(
     *,
     max_tables: int,
     force_financeledger: bool = True,
+    domain_seeds: list[str] | None = None,
 ) -> list[str]:
-    seed = default_tables_for_metric(metric_id, dimensions)  # type: ignore[arg-type]
+    if domain_seeds:
+        seed = list(domain_seeds)
+    else:
+        seed = default_tables_for_metric(metric_id, dimensions)  # type: ignore[arg-type]
     for t in tables_for_dimensions(dimensions):
         if t not in seed:
             seed.append(t)
@@ -60,6 +74,7 @@ def make_schema_explore_node(deps: GraphDeps):
             return {}
 
         user_q = latest_human_question(state.get("messages"))
+        query_domain = detect_sql_query_domain(user_q)
         metric_id = resolve_metric(user_q)
         dimensions = detect_dimensions(user_q)
         catalog, cerr = list_tables(deps.settings)
@@ -73,6 +88,7 @@ def make_schema_explore_node(deps: GraphDeps):
                 detail=cerr,
             )
             return {
+                **emit_progress(state, "schema_explore"),
                 "error_payload": {
                     "error": "schema_catalog_failed",
                     "detail": cerr,
@@ -111,12 +127,29 @@ def make_schema_explore_node(deps: GraphDeps):
                 logger.warning("schema_plan structured_predict failed; using defaults", exc_info=True)
 
         is_chart = state.get("intent") == "system_data_chart"
+        domain_seeds = default_tables_for_domain(query_domain)
+        if query_domain != "ledger" and domain_seeds:
+            metric_id = f"domain_{query_domain}"  # type: ignore[assignment]
         tables = _merge_plan_tables(
             llm_tables,
             metric_id,
             llm_dims,
             max_tables=int(deps.settings.sql_max_selected_tables),
-            force_financeledger=not is_chart,
+            force_financeledger=not is_chart and query_domain == "ledger",
+            domain_seeds=domain_seeds,
+        )
+        known_names = {r.get("table_name", "") for r in catalog if r.get("table_name")}
+        tables = ensure_domain_tables_for_question(
+            user_q,
+            tables,
+            max_tables=int(deps.settings.sql_max_selected_tables),
+            known_tables=known_names,
+        )
+        tables = ensure_context_tables_for_question(
+            user_q,
+            tables,
+            max_tables=int(deps.settings.sql_max_selected_tables),
+            known_tables=known_names,
         )
         join_hints = join_hints_for_plan(tables=tables, dimensions=llm_dims)
 
@@ -145,19 +178,27 @@ def make_schema_explore_node(deps: GraphDeps):
                 detail=aerr or "unknown",
             )
             return {
+                **emit_progress(state, "schema_explore"),
                 "error_payload": {
                     "error": "schema_load_failed",
                     "detail": aerr or "artifact build failed",
                 },
             }
 
+        domain_hints = sql_hints_for_domain(query_domain)
+        ledger_hints = (
+            ledger_sql_hints(metric_id)
+            if metric_id in ("ledger_revenue", "ledger_expense", "ledger_net_cashflow", "ledger_by_dimension")
+            else []
+        )
         plan_dict = {
             "metric_id": metric_id,
             "tables": tables,
             "dimensions": llm_dims,
             "ambiguity_note": ambiguity,
-            "sql_hints": ledger_sql_hints(metric_id),
+            "sql_hints": domain_hints + ledger_hints,
             "join_hints": join_hints,
+            "query_domain": query_domain,
         }
         emit_agent_trace(
             logger,
@@ -167,6 +208,7 @@ def make_schema_explore_node(deps: GraphDeps):
             detail=json.dumps(plan_dict, ensure_ascii=False)[:1200],
         )
         return {
+            **emit_progress(state, "schema_explore"),
             "schema_plan": plan_dict,
             "ledger_metric_id": metric_id,
             "schema_join_hints": join_hints,

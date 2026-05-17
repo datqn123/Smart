@@ -53,12 +53,10 @@ public class AppSecurityProperties {
 		private String audience = "";
 
 		/**
-		 * Thời gian sống access JWT (phút), tối thiểu 1. Mặc định 5 — cùng cửa sổ với
-		 * {@link com.example.smart_erp.auth.session.RefreshAccessThrottle} (SRS §7.2) để một phiên hợp lệ
-		 * có thể refresh khi access hết hạn mà vẫn giới hạn tần suất gọi {@code /auth/refresh}. Env
+		 * Thời gian sống access JWT (phút), tối thiểu 1. Mặc định 30. Env
 		 * {@code JWT_ACCESS_TTL_MINUTES} / property ghi đè khi deploy.
 		 */
-		private int accessTtlMinutes = 5;
+		private int accessTtlMinutes = 30;
 
 		public String getSecret() {
 			return secret;

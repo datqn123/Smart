@@ -22,6 +22,10 @@ _STRUCTURED_ROLES = (
     "chart",
     "chart_critic",
     "review",
+    "catalog_draft",
+    "catalog_draft_slots",
+    "inventory_draft",
+    "inventory_draft_slots",
 )
 
 

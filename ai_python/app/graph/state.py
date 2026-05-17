@@ -30,6 +30,7 @@ class AgentState(TypedDict, total=False):
     error_payload: dict[str, Any] | None
     # Task007 — SQL-Factory-lite (optional keys; safe for old checkpoints)
     selected_tables: list[str] | None
+    sql_allowlist_tables: list[str] | None
     sql_gen_mode: Literal["explore", "exploit"] | None
     sql_attempt_history: list[str] | None
     sql_local_pool: list[str] | None
@@ -54,12 +55,14 @@ class AgentState(TypedDict, total=False):
     # Catalog draft HITL (optional)
     catalog_entity_type: str | None
     catalog_row_count_hint: int | None
+    catalog_draft_slots: dict[str, Any] | None
     catalog_draft_payload: dict[str, Any] | None
     catalog_draft_id: str | None
     catalog_draft_sse: dict[str, Any] | None
     # Inventory document draft HITL (Task111)
     inventory_doc_type: str | None
     inventory_line_count_hint: int | None
+    inventory_draft_slots: dict[str, Any] | None
     inventory_draft_payload: dict[str, Any] | None
     inventory_draft_id: str | None
     inventory_draft_sse: dict[str, Any] | None
@@ -76,6 +79,8 @@ class AgentState(TypedDict, total=False):
     # Context compaction (conversation memory)
     conversation_summary: str | None
     context_compact_generation: int | None
+    # SSE progress text shown to user during processing
+    progress_text: str | None
 
 
 def default_initial_state() -> AgentState:

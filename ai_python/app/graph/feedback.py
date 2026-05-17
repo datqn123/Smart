@@ -39,7 +39,12 @@ def append_feedback(state: AgentState, source: FeedbackSource, detail: str) -> V
     return new
 
 
-def render_for_prompt(fb: ValidationFeedback | None, *, latest_only: bool = False) -> str:
+def render_for_prompt(
+    fb: ValidationFeedback | None,
+    *,
+    latest_only: bool = False,
+    max_items_per_bucket: int | None = None,
+) -> str:
     """Render only buckets with content — NFR token cost (ADR-003 §5.5)."""
     if not fb:
         return ""
@@ -49,9 +54,15 @@ def render_for_prompt(fb: ValidationFeedback | None, *, latest_only: bool = Fals
         if not items:
             continue
         if latest_only:
-            parts.append(f"[{k}] {items[-1]}")
+            slice_items = items[-1:]
+        elif max_items_per_bucket is not None and max_items_per_bucket > 0:
+            slice_items = items[-max_items_per_bucket:]
         else:
-            parts.append(f"[{k}] " + "; ".join(items))
+            slice_items = items
+        if len(slice_items) == 1:
+            parts.append(f"[{k}] {slice_items[0]}")
+        else:
+            parts.append(f"[{k}] " + "; ".join(slice_items))
     if fb.get("attempts"):
         parts.append(f"attempts={fb['attempts']}")
     return "\n".join(parts)

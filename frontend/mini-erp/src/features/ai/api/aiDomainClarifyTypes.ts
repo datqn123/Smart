@@ -9,6 +9,8 @@ export type DomainClarifyIssue = {
 
 export type DomainClarifyPayload = {
   questions: string[]
+  /** Main explanation text (inventory/catalog clarify). */
+  assistantIntro?: string
   issues: DomainClarifyIssue[]
   guideRefs: string[]
   /** Original user message (may contain wrong terms). */

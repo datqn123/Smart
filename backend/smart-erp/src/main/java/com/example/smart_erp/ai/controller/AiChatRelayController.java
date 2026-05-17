@@ -1,6 +1,8 @@
 package com.example.smart_erp.ai.controller;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URI;
@@ -18,13 +20,18 @@ import java.util.concurrent.Executors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -39,6 +46,9 @@ public class AiChatRelayController {
 	private static final Logger log = LoggerFactory.getLogger(AiChatRelayController.class);
 
 	public record AiChatRelayRequest(String message, String conversationId, String interactionMode) {
+	}
+
+	public record SynthesizeRelayRequest(String text, String voice) {
 	}
 
 	private final String pythonBaseUrl;
@@ -233,5 +243,127 @@ public class AiChatRelayController {
 		});
 
 		return emitter;
+	}
+
+	/**
+	 * Relay voice transcription: browser multipart → Python {@code POST /api/v1/ai/chat/transcribe}.
+	 */
+	@PostMapping(path = "/chat/transcribe", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+	public ResponseEntity<String> transcribePost(@RequestPart("file") MultipartFile file,
+			@RequestParam(value = "language", required = false) String language,
+			@AuthenticationPrincipal Jwt jwt, HttpServletRequest httpRequest) throws IOException {
+		String authz = httpRequest.getHeader("Authorization");
+		if (authz == null || !authz.startsWith("Bearer ")) {
+			return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+					.body("{\"error\":{\"code\":\"AI_AUTH_INVALID\",\"message\":\"Thiếu Authorization Bearer.\"}}");
+		}
+		if (file == null || file.isEmpty()) {
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+					.body("{\"error\":{\"code\":\"AI_VALIDATION_FAILED\",\"message\":\"Thiếu file audio.\"}}");
+		}
+
+		String correlationId = UUID.randomUUID().toString();
+		URI uri = URI.create(pythonBaseUrl + "/api/v1/ai/chat/transcribe");
+		String boundary = "----AiRelayBoundary" + UUID.randomUUID();
+		byte[] body = buildTranscribeMultipart(boundary, file, language);
+
+		try {
+			HttpRequest req = HttpRequest.newBuilder(uri).version(Version.HTTP_1_1)
+					.timeout(Duration.ofSeconds(120))
+					.header("Authorization", authz)
+					.header("X-Correlation-Id", correlationId)
+					.header("Content-Type", "multipart/form-data; boundary=" + boundary)
+					.POST(HttpRequest.BodyPublishers.ofByteArray(body))
+					.build();
+
+			HttpResponse<String> res = httpClient.send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+			return ResponseEntity.status(res.statusCode()).body(res.body());
+		}
+		catch (Exception e) {
+			log.error("AI transcribe relay failed: {}", uri, e);
+			String msg = relayErrorDetail(e).replace("\"", "'");
+			return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+					.body("{\"error\":{\"code\":\"AI_RELAY_ERROR\",\"message\":\"" + msg + "\"}}");
+		}
+	}
+
+	private static byte[] buildTranscribeMultipart(String boundary, MultipartFile file, String language)
+			throws IOException {
+		String filename = file.getOriginalFilename();
+		if (filename == null || filename.isBlank()) {
+			filename = "recording.wav";
+		}
+		String contentType = file.getContentType();
+		if (contentType == null || contentType.isBlank()) {
+			contentType = "application/octet-stream";
+		}
+		byte[] fileBytes = file.getBytes();
+		ByteArrayOutputStream out = new ByteArrayOutputStream(fileBytes.length + 512);
+		String crlf = "\r\n";
+		out.write(("--" + boundary + crlf).getBytes(StandardCharsets.UTF_8));
+		out.write(("Content-Disposition: form-data; name=\"file\"; filename=\"" + filename + "\"" + crlf)
+				.getBytes(StandardCharsets.UTF_8));
+		out.write(("Content-Type: " + contentType + crlf + crlf).getBytes(StandardCharsets.UTF_8));
+		out.write(fileBytes);
+		out.write(crlf.getBytes(StandardCharsets.UTF_8));
+		if (language != null && !language.isBlank()) {
+			out.write(("--" + boundary + crlf).getBytes(StandardCharsets.UTF_8));
+			out.write(("Content-Disposition: form-data; name=\"language\"" + crlf + crlf).getBytes(StandardCharsets.UTF_8));
+			out.write(language.trim().getBytes(StandardCharsets.UTF_8));
+			out.write(crlf.getBytes(StandardCharsets.UTF_8));
+		}
+		out.write(("--" + boundary + "--" + crlf).getBytes(StandardCharsets.UTF_8));
+		return out.toByteArray();
+	}
+
+	/**
+	 * Relay TTS: JSON body → Python {@code POST /api/v1/ai/chat/synthesize} → audio/wav bytes.
+	 */
+	@PostMapping(path = "/chat/synthesize", consumes = MediaType.APPLICATION_JSON_VALUE)
+	public ResponseEntity<byte[]> synthesizePost(@RequestBody SynthesizeRelayRequest body,
+			@AuthenticationPrincipal Jwt jwt, HttpServletRequest httpRequest) throws IOException {
+		String authz = httpRequest.getHeader("Authorization");
+		if (authz == null || !authz.startsWith("Bearer ")) {
+			return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+					.body("{\"error\":{\"code\":\"AI_AUTH_INVALID\",\"message\":\"Thiếu Authorization Bearer.\"}}"
+							.getBytes(StandardCharsets.UTF_8));
+		}
+		if (body == null || body.text() == null || body.text().isBlank()) {
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+					.body("{\"error\":{\"code\":\"AI_VALIDATION_FAILED\",\"message\":\"Thiếu nội dung text.\"}}"
+							.getBytes(StandardCharsets.UTF_8));
+		}
+
+		String correlationId = UUID.randomUUID().toString();
+		URI uri = URI.create(pythonBaseUrl + "/api/v1/ai/chat/synthesize");
+		ObjectNode payload = objectMapper.createObjectNode();
+		payload.put("text", body.text().trim());
+		if (body.voice() != null && !body.voice().isBlank()) {
+			payload.put("voice", body.voice().trim());
+		}
+		byte[] jsonBytes = objectMapper.writeValueAsBytes(payload);
+
+		try {
+			HttpRequest req = HttpRequest.newBuilder(uri).version(Version.HTTP_1_1)
+					.timeout(Duration.ofSeconds(120))
+					.header("Authorization", authz)
+					.header("X-Correlation-Id", correlationId)
+					.header("Content-Type", MediaType.APPLICATION_JSON_VALUE)
+					.POST(HttpRequest.BodyPublishers.ofByteArray(jsonBytes))
+					.build();
+
+			HttpResponse<byte[]> res = httpClient.send(req, HttpResponse.BodyHandlers.ofByteArray());
+			MediaType contentType = res.headers().firstValue("Content-Type")
+					.map(MediaType::parseMediaType)
+					.orElse(MediaType.parseMediaType("audio/wav"));
+			return ResponseEntity.status(res.statusCode()).contentType(contentType).body(res.body());
+		}
+		catch (Exception e) {
+			log.error("AI synthesize relay failed: {}", uri, e);
+			String msg = relayErrorDetail(e).replace("\"", "'");
+			return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+					.body(("{\"error\":{\"code\":\"AI_RELAY_ERROR\",\"message\":\"" + msg + "\"}}")
+							.getBytes(StandardCharsets.UTF_8));
+		}
 	}
 }

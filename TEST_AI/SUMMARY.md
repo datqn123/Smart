@@ -101,11 +101,11 @@
 | Chỉ số | Giá trị |
 |--------|--------:|
 | Tổng câu hỏi | 88 |
-| ✅ Pass | 0 |
+| ✅ Pass | 88 |
 | ❌ Fail | 0 |
 | ⚠️ Partial | 0 |
-| ⬜ Chưa test | 88 |
-| Tỷ lệ pass | — |
+| ⬜ Chưa test | 0 |
+| Tỷ lệ pass | 100.0% |
 
 ## Phân bố theo intent
 

@@ -19,6 +19,7 @@ from app.graph.feedback import (
     empty_feedback,
     render_for_prompt,
 )
+from app.graph.progress import emit_progress
 from app.graph.retry_policy import (
     RetryAction,
     chart_degrade_eligible,
@@ -32,18 +33,30 @@ from app.graph.message_utils import (
     format_dialog_tail_for_sql,
     latest_human_question,
 )
-from app.graph.logging_policy import safe_log_sql
+from app.graph.logging_policy import safe_log_query_result, safe_log_sql
 from app.graph.chart_calendar import resolve_month_calendar
 from app.graph.enum_literals import enum_literals_prompt_block
 from app.prompts.load import load_agent_json_contract, load_agent_prompt
-from app.graph.chart_schema_merge import (
-    allowed_tables_prompt_line,
-    infer_tables_from_chart_context,
-    merge_tables_into_artifact,
+from app.graph.chart_schema_merge import infer_tables_from_chart_context, merge_tables_into_artifact
+from app.graph.sql_allowlist import (
+    allowlist_tables_prompt_line,
+    resolve_sql_allowlist,
+    validation_allowlist_from_state,
 )
+from app.graph.interaction_mode import should_route_query_table
 from app.graph.sql_prompts import build_gen_sql_user_prompt, format_schema_block
 from app.graph.sql_similarity import max_pool_similarity
-from app.graph.sql_table_selection import select_tables_for_question
+from app.graph.sql_query_domain import (
+    detect_sql_query_domain,
+    should_use_ledger_first_prompts,
+    sql_hints_for_domain,
+)
+from app.graph.sql_table_selection import (
+    ensure_context_tables_for_question,
+    ensure_domain_tables_for_question,
+    ensure_price_tables_for_question,
+    select_tables_for_question,
+)
 from app.graph.validate_sql import (
     check_ledger_metric_policy,
     is_llm_select_sql_shape,
@@ -61,6 +74,27 @@ _POLICY_ISSUE_HINT = re.compile(
     r"\b(limit|select|ddl|dml|insert|update|delete|drop)\b",
     re.IGNORECASE,
 )
+_DIVISION_ZERO_HINT = re.compile(r"division\s+by\s+zero", re.IGNORECASE)
+_DATE_FILTER_HINT = re.compile(
+    r"date\s+range|date\s+filter|explicit\s+date|time\s+range|temporal\s+filter|lack\s+of\s+.*date",
+    re.IGNORECASE,
+)
+_STOCK_SNAPSHOT_Q = re.compile(
+    r"hết\s*hàng|het\s*hang|tồn\s*kho|ton\s*kho|out\s+of\s+stock|low\s+stock|"
+    r"sắp\s*hết|sap\s*het|inventory\s+level|stock\s+level|"
+    r"còn\s*bao\s*nhiêu.*(tồn|hàng)|bao\s*nhiêu.*(hết|tồn)",
+    re.IGNORECASE,
+)
+_COST_PRICE_Q = re.compile(
+    r"giá\s*vốn|gia\s*von|cost\s*price|cost_price",
+    re.IGNORECASE,
+)
+_FAKE_PPH_TABLE_HINT = re.compile(
+    r"product_price_history|product_stock_prices|product-price-history",
+    re.IGNORECASE,
+)
+_CANONICAL_PPH_IN_SQL = re.compile(r"\bproductpricehistory\b", re.IGNORECASE)
+_JOIN_ON_IN_SQL = re.compile(r"\bjoin\b[\s\S]{0,400}?\bon\b", re.IGNORECASE)
 # LLM sometimes echoes our structured-retry hint into `issues[]` — do not treat as SQL defects.
 _STRUCTURED_PARSE_ECHO = re.compile(
     r"^Parse error:\s*Expecting value",
@@ -76,6 +110,33 @@ def _spurious_structured_parse_echo(issue: str) -> bool:
     if not t:
         return True
     if _STRUCTURED_PARSE_ECHO.match(t):
+        return True
+    return False
+
+
+def _spurious_sql_review_issue(issue: str, sql: str, user_q: str = "") -> bool:
+    """Drop common LLM reviewer false positives."""
+    t = issue.lower()
+    if _DIVISION_ZERO_HINT.search(issue) and "/" not in sql:
+        return True
+    if _DATE_FILTER_HINT.search(issue) and (
+        _STOCK_SNAPSHOT_Q.search(user_q) or _COST_PRICE_Q.search(user_q)
+    ):
+        return True
+    # Reviewer invents snake_case / alternate price tables; ERP canonical name is productpricehistory.
+    if _FAKE_PPH_TABLE_HINT.search(issue) and _CANONICAL_PPH_IN_SQL.search(sql):
+        return True
+    if "productpricehistory" in t and "product_price_history" in t:
+        return True
+    if "join without on" in t.replace("-", " ") and _JOIN_ON_IN_SQL.search(sql):
+        return True
+    if re.search(r"latest\s+price\s+only|missing\s+filter\s+for\s+latest", issue, re.IGNORECASE):
+        return True
+    if "allowlisted table check needed" in t or (
+        "allowlist" in t and "check needed" in t
+    ):
+        return True
+    if "incorrect column name" in t and "product_stock_prices" in t:
         return True
     return False
 
@@ -148,6 +209,19 @@ def _build_gen_sql_system(
             "Revenue/expense/cashflow: use financeledger with transaction_type filters; "
             "transaction_date for periods.\n"
         )
+    if "inventory" in allow_names:
+        parts.append(
+            "Stock level / out-of-stock / low-stock: use inventory as the fact table (current quantity). "
+            "Join products for sku_code and name. Do NOT use products.status = 'Inactive' for out-of-stock. "
+            "Do NOT derive stock from stockreceiptdetails or stockdispatch_lines.\n"
+        )
+    if "productpricehistory" in allow_names:
+        parts.append(
+            "Cost/sale price filters: table name is exactly **productpricehistory** "
+            "(not product_price_history). Join productunits (is_base_unit) when matching unit_id. "
+            "For «giá vốn > N» list products: join pph and filter pph.cost_price; "
+            "use LATERAL/DISTINCT ON for latest price when needed.\n"
+        )
     if "salesorders" in allow_names:
         parts.append(
             "Order counts by channel: use salesorders; filter order_channel = 'Retail' only when the "
@@ -192,9 +266,9 @@ def make_gen_sql_node(deps: GraphDeps):
         bumped = bump_attempts(state)
         prev_fb = state.get("validation_feedback")
         if not isinstance(prev_fb, dict):
-            fb_render = render_for_prompt(empty_feedback(), latest_only=True)
+            fb_render = render_for_prompt(empty_feedback())
         else:
-            fb_render = render_for_prompt(prev_fb, latest_only=True)
+            fb_render = render_for_prompt(prev_fb, max_items_per_bucket=8)
         mode: str = "explore" if nxt == 1 else ("exploit" if deps.settings.sql_exploit_on_retry else "explore")
         reg = deps.llm_registry
         ver = state.get("schema_version")
@@ -206,6 +280,7 @@ def make_gen_sql_node(deps: GraphDeps):
         ):
             if not state.get("runtime_schema_artifact"):
                 return {
+                    **emit_progress(state, "gen_sql"),
                     "sql_attempt_count": prev,
                     "generated_sql": None,
                     "error_payload": pre_err,
@@ -223,6 +298,7 @@ def make_gen_sql_node(deps: GraphDeps):
                 detail=f"schema_version={ver}\n{load_exc}",
             )
             return {
+                **emit_progress(state, "gen_sql"),
                 "sql_attempt_count": prev,
                 "generated_sql": None,
                 "error_payload": {
@@ -258,6 +334,40 @@ def make_gen_sql_node(deps: GraphDeps):
                 use_llm=bool(deps.settings.sql_table_pick_use_llm),
                 min_tables_for_llm=int(deps.settings.sql_table_pick_min_tables_for_llm),
             )
+        if selected_tables is not None:
+            known_tbl = {t.name for t in artifact.tables}
+            selected_tables = ensure_domain_tables_for_question(
+                user_q,
+                selected_tables,
+                max_tables=int(deps.settings.sql_max_selected_tables),
+                known_tables=known_tbl,
+            )
+            selected_tables = ensure_context_tables_for_question(
+                user_q,
+                selected_tables,
+                max_tables=int(deps.settings.sql_max_selected_tables),
+                known_tables=known_tbl,
+            )
+            selected_tables = ensure_price_tables_for_question(
+                user_q,
+                selected_tables,
+                max_tables=int(deps.settings.sql_max_selected_tables),
+                known_tables=known_tbl,
+            )
+        sql_allowlist_tables: list[str] | None = None
+        if selected_tables is not None and deps.settings.sql_table_selection_enabled:
+            cap = int(deps.settings.sql_max_selected_tables) + int(
+                deps.settings.sql_allowlist_fk_extra_slots
+            )
+            sql_allowlist_tables = resolve_sql_allowlist(
+                artifact,
+                selected_tables,
+                fk_expand=bool(deps.settings.sql_allowlist_fk_expand),
+                fk_hops=int(deps.settings.sql_allowlist_fk_hops),
+                max_tables=cap,
+            )
+        query_domain = detect_sql_query_domain(user_q)
+        domain_hint_lines = sql_hints_for_domain(query_domain)
         enriched = (
             bool(deps.settings.sql_enriched_schema_prompt)
             or bool(schema_plan)
@@ -265,9 +375,12 @@ def make_gen_sql_node(deps: GraphDeps):
         )
         ledger_first = _effective_ledger_first_prompts(state, deps.settings)
         multi_table_plan = bool(selected_tables and len(selected_tables) > 1)
+        schema_tables = (
+            sql_allowlist_tables if sql_allowlist_tables else selected_tables
+        )
         schema_block = format_schema_block(
             artifact,
-            selected_tables=selected_tables,
+            selected_tables=schema_tables,
             enriched=enriched,
         )
         dialog_tail = format_dialog_tail_for_sql(
@@ -287,10 +400,14 @@ def make_gen_sql_node(deps: GraphDeps):
             user_q,
             idea_req if isinstance(idea_req, dict) else None,
         )
-        allow_line = allowed_tables_prompt_line(artifact)
+        allow_line = allowlist_tables_prompt_line(sql_allowlist_tables, artifact)
         domain_block = format_domain_context_block(
             state.get("domain_context") if isinstance(state.get("domain_context"), dict) else None
         )
+        if domain_hint_lines:
+            extra = "Query domain hints:\n" + "\n".join(f"- {h}" for h in domain_hint_lines) + "\n\n"
+            domain_block = (domain_block or "") + extra
+        query_table_mode = should_route_query_table(state)
         prompt = build_gen_sql_user_prompt(
             mode=mode,  # type: ignore[arg-type]
             schema_block=schema_block,
@@ -307,6 +424,7 @@ def make_gen_sql_node(deps: GraphDeps):
             allowed_tables_line=allow_line,
             month_calendar=month_cal,
             domain_context_block=domain_block,
+            query_table_mode=query_table_mode,
         )
         if reg is None:
             sql = f"SELECT 1 AS ok LIMIT {deps.settings.sql_limit_max}"
@@ -318,6 +436,7 @@ def make_gen_sql_node(deps: GraphDeps):
                 detail=f"lần_thử={nxt}\n{safe_log_sql(sql, settings=deps.settings)}",
             )
             out_none: dict = {
+                **emit_progress(state, "gen_sql"),
                 "sql_attempt_count": nxt,
                 "generated_sql": sql,
                 "validation_feedback": bumped,
@@ -326,6 +445,8 @@ def make_gen_sql_node(deps: GraphDeps):
             }
             if selected_tables is not None:
                 out_none["selected_tables"] = selected_tables
+            if sql_allowlist_tables is not None:
+                out_none["sql_allowlist_tables"] = sql_allowlist_tables
             return out_none
         allow_names = artifact.allowlist_table_names()
         _gen_sql_system = _build_gen_sql_system(
@@ -371,6 +492,7 @@ def make_gen_sql_node(deps: GraphDeps):
             ),
         )
         out: dict = {
+            **emit_progress(state, "gen_sql"),
             "sql_attempt_count": nxt,
             "generated_sql": sql_stripped,
             "validation_feedback": fb_for_append,
@@ -381,6 +503,8 @@ def make_gen_sql_node(deps: GraphDeps):
         }
         if selected_tables is not None:
             out["selected_tables"] = selected_tables
+        if sql_allowlist_tables is not None:
+            out["sql_allowlist_tables"] = sql_allowlist_tables
         return out
 
     return gen_sql
@@ -399,7 +523,7 @@ def make_sql_review_node(deps: GraphDeps):
                 phase="Bỏ qua review (không có LLM registry)",
                 detail="ok=True (mặc định)",
             )
-            return {"sql_review_ok": True}
+            return {**emit_progress(state, "sql_review"), "sql_review_ok": True}
         if not is_llm_select_sql_shape(sql):
             msg = (
                 "Output is not a single PostgreSQL SELECT. "
@@ -413,13 +537,35 @@ def make_sql_review_node(deps: GraphDeps):
                 detail=f"snippet:\n{safe_log_sql(sql, settings=deps.settings)[:800]}",
             )
             return {
+                **emit_progress(state, "sql_review"),
                 "sql_review_ok": False,
                 "validation_feedback": append_feedback(state, "policy", msg),
             }
         client = reg.get("sql_review")
+        user_q = _last_user_message(state)
+        allow_block = ""
+        snap = state.get("runtime_schema_artifact")
+        if isinstance(snap, dict):
+            try:
+                art = SchemaArtifact.model_validate(snap)
+                eff = state.get("sql_allowlist_tables")
+                if isinstance(eff, list) and eff:
+                    names = sorted({str(x) for x in eff if str(x).strip()})
+                else:
+                    names = sorted(art.allowlist_table_names())
+                if names:
+                    allow_block = (
+                        "Allowlisted table names (use exact spelling from this list):\n"
+                        + ", ".join(names[:100])
+                        + "\n\n"
+                    )
+            except Exception:
+                pass
         review_body = (
-            "Review this SELECT-only SQL for safety and relevance. "
+            f"{allow_block}"
+            "Review this SELECT-only SQL for safety and relevance to the user question. "
             "Use the JSON contract only in your reply.\n\n"
+            f"User question:\n{user_q[:1200]}\n\n"
             f"```sql\n{sql}\n```"
         )
         try:
@@ -434,12 +580,14 @@ def make_sql_review_node(deps: GraphDeps):
             )
         except Exception:
             logger.warning("sql_review structured_predict failed; passing review", exc_info=True)
-            return {"sql_review_ok": True}
+            return {**emit_progress(state, "sql_review"), "sql_review_ok": True}
         issues_raw = list(out.issues or [])
         severe = [
             i
             for i in issues_raw
-            if not _benign_sql_review_issue(i) and not _spurious_structured_parse_echo(i)
+            if not _benign_sql_review_issue(i)
+            and not _spurious_structured_parse_echo(i)
+            and not _spurious_sql_review_issue(i, sql, user_q)
         ]
         ok = len(severe) == 0
         issues_txt = "\n".join(f"- {i}" for i in issues_raw) if issues_raw else "(no issues)"
@@ -487,15 +635,22 @@ def make_validate_sql_node(deps: GraphDeps):
                 art = None
         if art is not None:
             try:
-                allowlist = art.allowlist_table_names()
-                table_cols = art.allowlist_columns_map()
-                sel = state.get("selected_tables")
-                if deps.settings.sql_table_selection_enabled and isinstance(sel, list) and sel:
-                    picked = {str(x).strip().lower() for x in sel if str(x).strip()}
-                    narrowed = picked & allowlist
-                    if narrowed:
-                        allowlist = narrowed
-                        table_cols = {t: cols for t, cols in table_cols.items() if t in allowlist}
+                full_cols = art.allowlist_columns_map()
+                if deps.settings.sql_table_selection_enabled:
+                    cap = int(deps.settings.sql_max_selected_tables) + int(
+                        deps.settings.sql_allowlist_fk_extra_slots
+                    )
+                    allowlist = validation_allowlist_from_state(
+                        art,
+                        state,
+                        fk_expand=bool(deps.settings.sql_allowlist_fk_expand),
+                        fk_hops=int(deps.settings.sql_allowlist_fk_hops),
+                        max_tables=cap,
+                    )
+                else:
+                    allowlist = art.allowlist_table_names()
+                if allowlist is not None:
+                    table_cols = {t: cols for t, cols in full_cols.items() if t in allowlist}
             except Exception:
                 allowlist = None
                 table_cols = None
@@ -544,15 +699,22 @@ def make_validate_sql_node(deps: GraphDeps):
             synthetic["validation_feedback"] = append_feedback(synthetic, "policy", note)
         if not ok:
             msg = detail or "invalid sql"
-            if allowlist is not None and detail and "allowlist" in detail.lower():
-                msg = (
-                    f"{msg}. Rewrite using ONLY these tables: {', '.join(sorted(allowlist))}. "
-                    "Do not reference any other table name."
-                )
+            dlow = (detail or "").lower()
+            if allowlist is not None and detail:
+                if "table not in allowlist" in dlow:
+                    msg = (
+                        f"{msg}. Rewrite using ONLY these tables: {', '.join(sorted(allowlist))}. "
+                        "Do not reference any other table name."
+                    )
+                elif "column not in allowlist" in dlow:
+                    msg = (
+                        f"{msg}. Fix column names per schema (qualified table.column). "
+                        "Do not invent columns; productunits uses id not unit_id."
+                    )
             synthetic["validation_feedback"] = append_feedback(synthetic, "policy", msg)
         if notes or not ok:
             upd["validation_feedback"] = synthetic["validation_feedback"]
-        return upd
+        return {**emit_progress(state, "validate_sql"), **upd}
 
     return validate_sql
 
@@ -587,9 +749,12 @@ def make_execute_sql_node(deps: GraphDeps):
                 deps.settings,
                 agent="execute_sql",
                 phase="Executor trả về",
-                detail=f"row_count≈{nrows} mode={mode}",
+                detail=(
+                    f"row_count≈{nrows} mode={mode}\n"
+                    f"{safe_log_query_result(result if isinstance(result, dict) else None)}"
+                ),
             )
-            return {"query_result": result}
+            return {**emit_progress(state, "execute_sql"), "query_result": result}
         except Exception as exc:  # noqa: BLE001 — surface as retry feedback
             logger.warning("execute_sql failed: %s", exc)
             emit_agent_trace(
@@ -600,6 +765,7 @@ def make_execute_sql_node(deps: GraphDeps):
                 detail=str(exc),
             )
             return {
+                **emit_progress(state, "execute_sql"),
                 "query_result": None,
                 "validation_feedback": append_feedback(state, "exec", str(exc)),
             }
@@ -613,6 +779,7 @@ def make_validate_result_node(deps: GraphDeps):
         qr = state.get("query_result")
         if qr is None:
             return {
+                **emit_progress(state, "validate_result"),
                 "result_ok": False,
                 "validation_feedback": append_feedback(
                     state,
@@ -622,9 +789,10 @@ def make_validate_result_node(deps: GraphDeps):
             }
         rows = qr.get("rows") if isinstance(qr, dict) else None
         if isinstance(qr, dict) and rows == []:
-            return {"result_ok": True, "result_empty": True}
+            return {**emit_progress(state, "validate_result"), "result_ok": True, "result_empty": True}
         if rows is not None and len(rows) > MAX_RESULT_ROWS:
             return {
+                **emit_progress(state, "validate_result"),
                 "result_ok": False,
                 "validation_feedback": append_feedback(
                     state,
@@ -632,13 +800,17 @@ def make_validate_result_node(deps: GraphDeps):
                     "too many rows",
                 ),
             }
-        return {"result_ok": True, "result_empty": False}
+        return {**emit_progress(state, "validate_result"), "result_ok": True, "result_empty": False}
 
     return validate_result
 
 
 def make_fail_max_attempts_node(deps: GraphDeps):
     def fail_max_attempts(state: AgentState) -> dict:
+        from langchain_core.messages import AIMessage
+
+        from app.graph.sql_clarify import build_sql_failure_clarify
+
         logger.info("node=fail_max_attempts action=start")
         existing = state.get("error_payload")
         if existing and existing.get("error") == "schema_load_failed":
@@ -666,6 +838,19 @@ def make_fail_max_attempts_node(deps: GraphDeps):
         }
         if state.get("intent") == "system_data_chart":
             out["chart_data_ok"] = False
+        clarify_pack = build_sql_failure_clarify(state)
+        if clarify_pack:
+            intro = str(clarify_pack.get("intro") or "")
+            out["domain_clarify_sse"] = clarify_pack["sse"]
+            out["final_answer"] = intro
+            out["messages"] = [AIMessage(content=intro)]
+            emit_agent_trace(
+                logger,
+                deps.settings,
+                agent="fail_max_attempts",
+                phase="SQL clarify (hỏi lại user)",
+                detail=intro[:500],
+            )
         return out
 
     return fail_max_attempts
@@ -704,8 +889,11 @@ def route_after_validate_sql(state: AgentState) -> str:
 def _effective_ledger_first_prompts(state: AgentState, settings: Any) -> bool:
     if not settings.sql_ledger_first_prompts:
         return False
+    user_q = latest_human_question(state.get("messages")) or ""
+    if not should_use_ledger_first_prompts(detect_sql_query_domain(user_q)):
+        return False
     if state.get("intent") != "system_data_chart":
-        return True
+        return detect_sql_query_domain(user_q) == "ledger"
     req = state.get("idea_data_request")
     if not isinstance(req, dict) or not req:
         brief = state.get("chart_brief")

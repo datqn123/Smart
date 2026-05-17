@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.example.smart_erp.ai.catalogdraft.dto.CatalogDraftCommitResult;
 import com.example.smart_erp.ai.catalogdraft.dto.CatalogDraftCreateRequest;
+import com.example.smart_erp.ai.catalogdraft.dto.CatalogDraftReferenceValidationResult;
 import com.example.smart_erp.ai.catalogdraft.dto.CatalogDraftPatchRequest;
 import com.example.smart_erp.ai.catalogdraft.dto.CatalogDraftResponse;
 import com.example.smart_erp.ai.catalogdraft.dto.CatalogDraftRowCommitOutcome;
@@ -29,15 +30,31 @@ public class AiCatalogDraftService {
 
 	private final AiCatalogDraftJdbcRepository repository;
 	private final AiCatalogDraftCommitter committer;
+	private final CatalogDraftReferenceValidator referenceValidator;
 	private final ObjectMapper objectMapper;
 
 	public AiCatalogDraftService(
 			AiCatalogDraftJdbcRepository repository,
 			AiCatalogDraftCommitter committer,
+			CatalogDraftReferenceValidator referenceValidator,
 			ObjectMapper objectMapper) {
 		this.repository = repository;
 		this.committer = committer;
+		this.referenceValidator = referenceValidator;
 		this.objectMapper = objectMapper;
+	}
+
+	@Transactional(readOnly = true)
+	public CatalogDraftReferenceValidationResult validateReferences(
+			Authentication auth,
+			CatalogDraftCreateRequest req) {
+		CatalogEntityType entityType = parseEntity(req.entityType());
+		requireEntityPermission(auth, entityType);
+		validateRowsArray(req.rows());
+		ArrayNode rows = req.rows() != null && req.rows().isArray()
+				? (ArrayNode) req.rows()
+				: objectMapper.createArrayNode();
+		return referenceValidator.validate(entityType, rows);
 	}
 
 	@Transactional
