@@ -21,25 +21,12 @@ from app.graph.retry_policy import (
 )
 from app.graph.state import AgentState
 from app.llm.schemas import ChartReadinessOutput
+from app.prompts.load import load_agent_json_contract, load_agent_prompt
 
 logger = logging.getLogger(__name__)
 
-_READINESS_SYSTEM = (
-    "You judge whether SQL query results are adequate to draw the user's chart.\n"
-    "You do NOT prescribe specific table names. Use the chart brief and the data profile only.\n"
-    "If the brief requires include_zero_months / full month calendar, results must have one row per "
-    "month in range (zeros allowed). If SQL used only fact GROUP BY without generate_series, set ok=false.\n"
-    "If include_zero_months is false and SQL has time grouping with one row, set ok=true with warning "
-    "(sparse data).\n"
-    "Set ok=false with retry_hint only when SQL is clearly wrong (no time bucket, wrong metric, "
-    "contradicts brief) — not merely because row_count is small.\n"
-    "warnings: non-fatal (e.g. only one month of data but chart can still render one bar)."
-)
-
-_READINESS_JSON_CONTRACT = (
-    'Single JSON object with keys: "ok" (boolean), "issues" (array of strings), '
-    '"retry_hint" (string, empty if ok), "warnings" (array of strings). No markdown fences.'
-)
+_READINESS_SYSTEM = load_agent_prompt("chart_readiness")
+_READINESS_JSON_CONTRACT = load_agent_json_contract("chart_readiness") or ""
 
 
 def _expected_shape(chart_brief: dict) -> str:
@@ -76,8 +63,9 @@ def _heuristic_readiness(
                 f"(generate_series + LEFT JOIN + COALESCE); got row_count={rc}"
             )
         elif rc > expected_month_count:
-            warnings.append(
-                f"more rows ({rc}) than calendar months ({expected_month_count}) — verify grouping"
+            issues.append(
+                f"row_count={rc} exceeds calendar span ({expected_month_count} months) — "
+                "likely includes future months; cap generate_series to current month"
             )
 
     if shape == "time_series" or shape == "breakdown":

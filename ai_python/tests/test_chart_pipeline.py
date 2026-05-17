@@ -16,8 +16,27 @@ from app.graph.chart_schema_merge import infer_tables_from_chart_context
 from app.graph.sql_prompts import build_gen_sql_user_prompt
 from app.graph.chart_sql_shape import sql_has_time_grouping
 from app.graph.nodes.chart_readiness import _heuristic_readiness
+from app.graph.nodes.chart_report import build_chart_spec_final
 from app.graph.nodes.sql_pipeline import _effective_ledger_first_prompts
 from app.graph.pg_schema_context import rank_tables_for_question
+
+
+def test_build_chart_spec_final_pie() -> None:
+    rows = [
+        {"channel": "Retail", "total": 120},
+        {"channel": "Wholesale", "total": 80},
+    ]
+    spec = build_chart_spec_final(rows, "pie", "channel", "total", "Doanh thu theo kênh")
+    assert spec["chartType"] == "pie"
+    assert spec["xKey"] == "channel"
+    assert spec["series"][0]["dataKey"] == "total"
+    assert len(spec["data"]) == 2
+
+
+def test_build_chart_spec_final_unknown_type_defaults_bar() -> None:
+    rows = [{"x": "a", "y": 1}]
+    spec = build_chart_spec_final(rows, "donut", "x", "y", "")
+    assert spec["chartType"] == "bar"
 
 
 def test_build_query_result_profile_time_columns() -> None:
@@ -118,6 +137,30 @@ def test_wants_zero_fill_months_from_phrase() -> None:
     assert wants_zero_fill_months(q, None) is True
 
 
+def test_resolve_month_calendar_caps_current_year_to_now_month(monkeypatch) -> None:
+    from datetime import datetime
+
+    import app.graph.chart_calendar as cal_mod
+
+    class _FakeDatetime:
+        @classmethod
+        def now(cls):
+            return datetime(2026, 5, 16)
+
+    monkeypatch.setattr(cal_mod, "datetime", _FakeDatetime)
+    q = "Hãy vẽ biểu đồ báo cáo tình hình đơn hàng bán lẻ từ đầu năm 2026"
+    spec = resolve_month_calendar(
+        q,
+        {
+            "include_zero_months": True,
+            "calendar": {"year": 2026, "from_month": 1, "to_month": 12},
+        },
+    )
+    assert spec is not None
+    assert spec.to_month == 5
+    assert spec.month_count == 5
+
+
 def test_resolve_month_calendar_jan_to_april() -> None:
     q = "đơn bán lẻ tháng 1-4 năm 2026, tháng không có đơn cũng vẽ"
     spec = resolve_month_calendar(q, {"include_zero_months": True})
@@ -136,6 +179,17 @@ def test_calendar_spine_prompt_block_mentions_generate_series() -> None:
     assert "generate_series" in block
     assert "LEFT JOIN" in block
     assert "4" in block
+
+
+def test_heuristic_too_many_rows_future_months_fails() -> None:
+    ok, issues, _ = _heuristic_readiness(
+        {"row_count": 12, "time_like_columns": ["month"]},
+        expected_shape="time_series",
+        generated_sql="WITH months AS (SELECT 1) SELECT 1",
+        expected_month_count=5,
+    )
+    assert not ok
+    assert any("exceeds calendar" in i for i in issues)
 
 
 def test_heuristic_zero_fill_one_row_fails() -> None:

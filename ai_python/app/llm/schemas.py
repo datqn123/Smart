@@ -8,7 +8,12 @@ from pydantic import BaseModel, Field
 
 
 class IntentOutput(BaseModel):
-    intent: Literal["general_chat", "system_data_query", "system_data_chart"]
+    intent: Literal[
+        "general_chat",
+        "system_data_query",
+        "system_data_chart",
+        "catalog_data_entry",
+    ]
 
 
 class SqlReviewOutput(BaseModel):
@@ -82,7 +87,7 @@ class ChartReadinessOutput(BaseModel):
 class ChartSpecDraftOutput(BaseModel):
     """Agent_Chart — column keys before review."""
 
-    chart_type: Literal["line", "bar"]
+    chart_type: Literal["line", "bar", "pie"]
     x_key: str
     y_key: str
     title: str = ""
@@ -91,8 +96,31 @@ class ChartSpecDraftOutput(BaseModel):
 class ChartReviewOutput(BaseModel):
     """Agent_Review — aligned keys + summary."""
 
-    chart_type: Literal["line", "bar"]
+    chart_type: Literal["line", "bar", "pie"]
     x_key: str
     y_key: str
     title: str = ""
     final_answer: str = ""
+
+
+class CatalogEntityPickOutput(BaseModel):
+    entity_type: Literal["product", "category", "supplier", "customer"] = "product"
+    row_count_hint: int = Field(default=3, ge=1, le=50)
+
+
+class CatalogDraftColumnOutput(BaseModel):
+    key: str
+    label: str = ""
+    type: str = "string"
+    required: bool = False
+    options: list[str] | None = None
+
+
+class CatalogDraftRowOutput(BaseModel):
+    rowId: str = "r1"
+    values: dict[str, Any] = Field(default_factory=dict)
+
+
+class CatalogDraftGenerateOutput(BaseModel):
+    columns: list[CatalogDraftColumnOutput] = Field(default_factory=list)
+    rows: list[CatalogDraftRowOutput] = Field(default_factory=list)

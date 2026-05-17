@@ -57,6 +57,51 @@ def test_validate_sql_deterministic_applies_enum_fix() -> None:
     assert any("Approved" in n for n in notes)
 
 
+def test_validate_sql_allows_with_months_cte_calendar_spine() -> None:
+    sql = """
+    WITH months AS (
+      SELECT (generate_series(
+        DATE '2026-01-01',
+        DATE '2026-12-01',
+        INTERVAL '1 month'
+      ))::date AS month_bucket
+    )
+    SELECT m.month_bucket AS month, COALESCE(COUNT(s.id), 0) AS metric_value
+    FROM months m
+    LEFT JOIN salesorders s ON DATE_TRUNC('month', s.created_at)::date = m.month_bucket
+      AND EXTRACT(YEAR FROM s.created_at) = 2026
+      AND s.order_channel = 'Retail'
+    GROUP BY m.month_bucket
+    ORDER BY m.month_bucket
+    LIMIT 1000
+    """
+    allow = {"salesorders"}
+    cols = {
+        "salesorders": {
+            "id",
+            "created_at",
+            "order_channel",
+            "status",
+        },
+    }
+    ok, detail, sanitized, _ = validate_sql_deterministic(
+        sql,
+        GraphSettings(),
+        allowlist_tables=allow,
+        table_columns=cols,
+    )
+    assert ok, detail
+    assert sanitized is not None
+    assert "FROM months" in sanitized or "from months" in sanitized.lower()
+
+
+def test_extract_cte_names_multiple() -> None:
+    from app.graph.validate_sql import extract_cte_names
+
+    sql = "WITH a AS (SELECT 1), b AS (SELECT 2) SELECT * FROM a JOIN b ON true"
+    assert extract_cte_names(sql) == {"a", "b"}
+
+
 def test_chart_retry_route_ignores_same_turn_feedback() -> None:
     state = {
         "intent": "system_data_chart",

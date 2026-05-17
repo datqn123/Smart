@@ -1,4 +1,5 @@
 import { getApiUrl } from "@/lib/api/config"
+import type { CatalogDraftTablePayload } from "./aiCatalogDraftApi"
 
 type OpenAiChatStreamArgs = {
   query: string
@@ -8,6 +9,8 @@ type OpenAiChatStreamArgs = {
   onError: (message: string) => void
   /** When FastAPI emits SSE `chart` (JSON one line). */
   onChart?: (spec: Record<string, unknown>) => void
+  /** When FastAPI emits SSE `draft` (catalog HITL table). */
+  onDraft?: (payload: CatalogDraftTablePayload) => void
 }
 
 export type AiChatStreamHandle = { abort: () => void }
@@ -92,6 +95,14 @@ export function startAiChatPostStream(args: OpenAiChatStreamArgs): AiChatStreamH
               /* ignore malformed chart payload */
             }
           }
+          if (parsed.event === "draft" && parsed.data.length > 0 && args.onDraft) {
+            try {
+              const draft = JSON.parse(parsed.data) as CatalogDraftTablePayload
+              if (draft?.draftId) args.onDraft(draft)
+            } catch {
+              /* ignore malformed draft payload */
+            }
+          }
           if (parsed.event === "done") args.onDone()
           if (parsed.event === "error") {
             args.onError(parsed.data.length > 0 ? parsed.data : "Không thể kết nối trợ lý AI.")
@@ -107,6 +118,14 @@ export function startAiChatPostStream(args: OpenAiChatStreamArgs): AiChatStreamH
           try {
             const spec = JSON.parse(parsed.data) as Record<string, unknown>
             if (spec && typeof spec === "object") args.onChart(spec)
+          } catch {
+            /* ignore */
+          }
+        }
+        if (parsed?.event === "draft" && parsed.data.length > 0 && args.onDraft) {
+          try {
+            const draft = JSON.parse(parsed.data) as CatalogDraftTablePayload
+            if (draft?.draftId) args.onDraft(draft)
           } catch {
             /* ignore */
           }

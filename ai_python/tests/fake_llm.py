@@ -96,4 +96,29 @@ class FakeLlmClient:
                     "ambiguity_note": None,
                 },
             )
+        if schema.__name__ == "CatalogEntityPickOutput":
+            return schema.model_validate(  # type: ignore[return-value]
+                {"entity_type": "product", "row_count_hint": 2},
+            )
+        if schema.__name__ == "CatalogDraftGenerateOutput":
+            return schema.model_validate(  # type: ignore[return-value]
+                {
+                    "columns": [
+                        {"key": "skuCode", "label": "Mã SKU", "type": "string", "required": True},
+                        {"key": "name", "label": "Tên", "type": "string", "required": True},
+                    ],
+                    "rows": [
+                        {
+                            "rowId": "r1",
+                            "values": {
+                                "skuCode": "T-1",
+                                "name": "Test",
+                                "baseUnitName": "Cái",
+                                "costPrice": 10000,
+                                "salePrice": 15000,
+                            },
+                        },
+                    ],
+                },
+            )
         raise NotImplementedError(schema)

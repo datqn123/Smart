@@ -7,7 +7,7 @@ import logging
 import re
 from typing import Any
 
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.graph.agent_trace import emit_agent_trace
 from app.graph.dbmeta import SchemaArtifact
@@ -30,6 +30,7 @@ from app.graph.message_utils import format_dialog_tail_for_sql, latest_human_que
 from app.graph.logging_policy import safe_log_sql
 from app.graph.chart_calendar import resolve_month_calendar
 from app.graph.enum_literals import enum_literals_prompt_block
+from app.prompts.load import load_agent_json_contract, load_agent_prompt
 from app.graph.chart_schema_merge import (
     allowed_tables_prompt_line,
     infer_tables_from_chart_context,
@@ -61,14 +62,8 @@ _STRUCTURED_PARSE_ECHO = re.compile(
     re.IGNORECASE,
 )
 
-_SQL_REVIEW_JSON_CONTRACT = (
-    'Return ONLY one JSON object with keys "ok" (boolean) and "issues" (array of strings). '
-    "If the input is not a single SELECT statement (e.g. prose in any language), set ok=false "
-    "and issues explaining that. "
-    "If the SQL is a safe read-only SELECT (allowlisted tables, no DDL/DML), set ok=true and issues=[]. "
-    "If there are real problems (forbidden operations, obvious wrong logic), set ok=false and list short issues. "
-    "No markdown fences, no prose outside the JSON."
-)
+_SQL_REVIEW_SYSTEM = load_agent_prompt("sql_review")
+_SQL_REVIEW_JSON_CONTRACT = load_agent_json_contract("sql_review") or ""
 
 
 def _spurious_structured_parse_echo(issue: str) -> bool:
@@ -140,12 +135,7 @@ def _build_gen_sql_system(
     ledger_first: bool,
     month_calendar: bool = False,
 ) -> str:
-    parts = [
-        "Reply with ONLY one PostgreSQL SELECT (read-only). ",
-        "No natural-language before or after the SQL (any language). ",
-        "Do not apologize or explain missing data in prose—only as SQL.\n",
-        "Use ONLY table names present in the user prompt schema block — never invent tables.\n",
-    ]
+    parts = [load_agent_prompt("gen_sql") + "\n"]
     if ledger_first and "financeledger" in allow_names:
         parts.append(
             "Revenue/expense/cashflow: use financeledger with transaction_type filters; "
@@ -167,10 +157,7 @@ def _build_gen_sql_system(
             "you MUST use generate_series + LEFT JOIN so every month in range appears; "
             "use COALESCE(COUNT(...), 0) for empty months.\n"
         )
-    parts.append(enum_literals_prompt_block())
-    parts.append(
-        "\nIf a table is not in the schema block, you must not reference it — pick the closest allowed table."
-    )
+    parts.append("\n" + enum_literals_prompt_block())
     return "".join(parts)
 
 
@@ -425,7 +412,10 @@ def make_sql_review_node(deps: GraphDeps):
         )
         try:
             out = client.structured_predict(
-                [HumanMessage(content=review_body)],
+                [
+                    SystemMessage(content=_SQL_REVIEW_SYSTEM),
+                    HumanMessage(content=review_body),
+                ],
                 SqlReviewOutput,
                 json_output_contract=_SQL_REVIEW_JSON_CONTRACT,
                 max_retries=5,

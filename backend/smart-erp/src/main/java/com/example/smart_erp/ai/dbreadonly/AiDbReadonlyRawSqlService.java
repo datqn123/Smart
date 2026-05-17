@@ -66,6 +66,15 @@ public class AiDbReadonlyRawSqlService {
 		}
 	}
 
+	/** SELECT and WITH ... SELECT (CTE) for chart calendar spine queries. */
+	private static boolean isReadOnlySelect(Statement st, String q) {
+		if (st instanceof Select) {
+			return true;
+		}
+		String normalized = q.strip().replaceAll("\\s+", " ").toUpperCase(Locale.ROOT);
+		return normalized.startsWith("WITH ") && normalized.contains(" SELECT ");
+	}
+
 	private static void guardParseAndValidate(String q, String cid) {
 		if (q.isEmpty()) {
 			throw reject("DB_QUERY_REJECTED", "Query must not be blank", cid);
@@ -82,12 +91,14 @@ public class AiDbReadonlyRawSqlService {
 		}
 		try {
 			Statement st = CCJSqlParserUtil.parse(q);
-			if (!(st instanceof Select)) {
+			if (!isReadOnlySelect(st, q)) {
 				throw reject("DB_QUERY_REJECTED", "Only SELECT statements are allowed", cid);
 			}
 			// Disallow explicit non-public schema qualifiers on Table AST nodes only.
 			// Do not scan raw text for "a.b" — that misclassifies table.column and aliases (e.g. p.name).
-			validateExplicitSchemas((Select) st, cid);
+			if (st instanceof Select select) {
+				validateExplicitSchemas(select, cid);
+			}
 		}
 		catch (McpToolInvocationException ex) {
 			throw ex;

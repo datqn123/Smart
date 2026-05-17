@@ -24,6 +24,10 @@ class GraphSettings(BaseSettings):
         default=None,
         description="Read-only Postgres URL for ai_table_description + introspection (optional; falls back to DATABASE_URL_RO).",
     )
+    spring_api_base_url: str | None = Field(
+        default="http://127.0.0.1:8080",
+        description="Spring Mini ERP API base (catalog-drafts, relay).",
+    )
     spring_sql_url: str | None = Field(
         default="http://127.0.0.1:8080/api/v1/ai/db/sql/query-readonly-raw",
         description="Spring AiDbReadonlyController raw SQL endpoint (same host as Mini ERP API by default).",

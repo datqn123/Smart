@@ -1,3 +1,5 @@
+import type { CatalogDraftTablePayload } from "./api/aiCatalogDraftApi"
+
 export type MessageRole = "user" | "assistant" | "system";
 
 export interface ChatMessage {
@@ -13,6 +15,8 @@ export interface ChatMessage {
     extractedData?: unknown
     /** Payload from SSE `chart` (Recharts-friendly), when backend sends chart_spec_final */
     chartSpec?: Record<string, unknown>
+    /** Payload from SSE `draft` — editable catalog table */
+    draftTable?: CatalogDraftTablePayload
   }
 }
 

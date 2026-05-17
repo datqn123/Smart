@@ -18,6 +18,7 @@ from app.graph.nodes.chart_report import (
 from app.graph.nodes.chat_normal import make_chat_normal_node
 from app.graph.nodes.intent import make_intent_node, route_after_intent
 from app.graph.nodes.summarize import make_summarize_answer_node
+from app.graph.catalog_draft_subgraph import build_catalog_draft_subgraph
 from app.graph.sql_subgraph import build_sql_subgraph
 from app.graph.state import AgentState
 
@@ -25,8 +26,10 @@ from app.graph.state import AgentState
 def build_main_graph(deps: GraphDeps):
     g = StateGraph(AgentState)
     sql_inner = build_sql_subgraph(deps)
+    catalog_inner = build_catalog_draft_subgraph(deps)
     g.add_node("classify_intent", make_intent_node(deps))
     g.add_node("chat_normal", make_chat_normal_node(deps))
+    g.add_node("catalog_draft_branch", catalog_inner.compile())
     g.add_node("agent_idea", make_agent_idea_node(deps))
     g.add_node("sql_branch", sql_inner.compile())
     g.add_node("agent_chart", make_agent_chart_node(deps))
@@ -42,9 +45,11 @@ def build_main_graph(deps: GraphDeps):
             "chat_normal": "chat_normal",
             "sql_branch": "sql_branch",
             "agent_idea": "agent_idea",
+            "catalog_draft_branch": "catalog_draft_branch",
         },
     )
     g.add_edge("chat_normal", END)
+    g.add_edge("catalog_draft_branch", END)
     g.add_edge("agent_idea", "sql_branch")
     g.add_conditional_edges(
         "sql_branch",

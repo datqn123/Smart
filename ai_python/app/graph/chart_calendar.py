@@ -117,11 +117,50 @@ def _parse_month_range(text: str, data_request: dict[str, Any] | None) -> tuple[
         a, b = int(m.group(1)), int(m.group(2))
         return max(1, min(12, a)), max(1, min(12, b))
     if "đầu năm" in text or "dau nam" in text:
-        to_m = 12
-        if "hiện tại" in text or "hien tai" in text or "nay" in text:
-            to_m = min(12, datetime.now().month)
-        return 1, to_m
+        return 1, 12
     return None
+
+
+def _explicit_full_calendar_year(text: str, data_request: dict[str, Any] | None) -> bool:
+    """True when user clearly wants all 12 months (including future months in the current year)."""
+    if re.search(r"\b1\s*[-–]\s*12\b", text):
+        return True
+    for phrase in ("đủ 12 tháng", "du 12 thang", "cả năm", "ca nam", "12 tháng", "12 thang"):
+        if phrase in text:
+            return True
+    if isinstance(data_request, dict):
+        cal = data_request.get("calendar")
+        if isinstance(cal, dict):
+            try:
+                fm, tm = int(cal.get("from_month", 1)), int(cal.get("to_month", 12))
+                if fm == 1 and tm == 12 and data_request.get("full_year_calendar") is True:
+                    return True
+            except (TypeError, ValueError):
+                pass
+    return False
+
+
+def cap_calendar_to_elapsed(
+    spec: MonthCalendarSpec,
+    *,
+    user_q: str,
+    data_request: dict[str, Any] | None = None,
+) -> MonthCalendarSpec:
+    """
+    For the current calendar year, end month spine at today unless user asked for full 12 months.
+  """
+    text = _blob(user_q, data_request)
+    if _explicit_full_calendar_year(text, data_request):
+        return spec
+    now = datetime.now()
+    if spec.year < now.year:
+        return spec
+    if spec.year > now.year:
+        return MonthCalendarSpec(year=spec.year, from_month=spec.from_month, to_month=spec.from_month)
+    cap = now.month
+    if spec.to_month > cap:
+        return MonthCalendarSpec(year=spec.year, from_month=spec.from_month, to_month=cap)
+    return spec
 
 
 def wants_zero_fill_months(user_q: str, data_request: dict[str, Any] | None = None) -> bool:
@@ -156,7 +195,8 @@ def resolve_month_calendar(
         fm, tm = 1, 12
     if fm > tm:
         fm, tm = tm, fm
-    return MonthCalendarSpec(year=year, from_month=fm, to_month=tm)
+    spec = MonthCalendarSpec(year=year, from_month=fm, to_month=tm)
+    return cap_calendar_to_elapsed(spec, user_q=user_q, data_request=data_request)
 
 
 def calendar_spine_prompt_block(spec: MonthCalendarSpec) -> str:
@@ -169,6 +209,8 @@ def calendar_spine_prompt_block(spec: MonthCalendarSpec) -> str:
         "COALESCE(COUNT(...), 0) or COALESCE(COUNT(DISTINCT id), 0).\n"
         "- Do NOT use GROUP BY on the fact table alone (that drops empty months).\n"
         "- ORDER BY month bucket ascending.\n"
+        "- For the **current** calendar year, end the spine at the **current month** unless the "
+        "user explicitly asked for all 12 months / full year.\n"
         "Pattern (adapt table/column/filter names from schema and brief):\n"
         f"  WITH months AS (\n"
         f"    SELECT (generate_series(\n"

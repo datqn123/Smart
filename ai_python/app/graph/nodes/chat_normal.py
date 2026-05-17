@@ -10,8 +10,11 @@ from app.graph.agent_trace import emit_agent_trace
 from app.graph.deps import GraphDeps
 from app.graph.display_format import format_display_for_chat_ui
 from app.graph.state import AgentState
+from app.prompts.load import load_agent_prompt
 
 logger = logging.getLogger(__name__)
+
+_CHAT_SYSTEM = load_agent_prompt("chat_normal")
 
 
 def make_chat_normal_node(deps: GraphDeps):
@@ -34,19 +37,7 @@ def make_chat_normal_node(deps: GraphDeps):
             c = getattr(m, "content", "")
             parts.append(str(c))
         text = "\n".join(parts)[-4000:]
-        ans = reg.get("chat").invoke_text(
-            text,
-            system=(
-                "Bạn là trợ lý ERP. Nhánh chat chung này không kèm kết quả truy vấn SQL từ backend "
-                "(chỉ có ngữ cảnh hội thoại), nên không khẳng định số tồn kho/doanh thu cụ thể từ CSDL "
-                "và không nói toàn bộ hệ thống 'không có quyền đọc DB' — quyền đọc nằm ở luồng câu hỏi "
-                "báo cáo/dữ liệu. Nếu user cần số thực tế, gợi ý họ đặt một câu hỏi báo cáo rõ (vd. "
-                "tồn kho SKU X, doanh thu hôm nay). Không tiết lộ schema/tên bảng nội bộ. "
-                "Trả lời gọn, tiếng Việt nếu user dùng tiếng Việt. "
-                "Khi có nhiều ý hoặc bước, dùng Markdown (xuống dòng, danh sách `- ` mỗi mục một dòng); "
-                "không bọc fence ```."
-            ),
-        )
+        ans = reg.get("chat").invoke_text(text, system=_CHAT_SYSTEM)
         ans = format_display_for_chat_ui(ans)
         preview = ans if len(ans) <= 1200 else ans[:1200] + "…"
         emit_agent_trace(

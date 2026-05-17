@@ -22,8 +22,13 @@ from app.llm.schemas import (
     ChartSpecDraftOutput,
     IdeaPlannerOutput,
 )
+from app.prompts.load import load_agent_json_contract, load_agent_prompt
 
 logger = logging.getLogger(__name__)
+
+_IDEA_SYSTEM = load_agent_prompt("idea")
+_CHART_SYSTEM = load_agent_prompt("chart")
+_REVIEW_SYSTEM = load_agent_prompt("chart_review")
 
 
 def _rows_from_query_result(qr: Any) -> list[dict[str, Any]]:
@@ -65,60 +70,14 @@ def compact_query_result_for_chart_prompt(
     return blob[: max_chars - 1] + "…"
 
 
-_IDEA_SYSTEM = (
-    "Bạn là Agent_Idea — soạn chart brief (JSON) cho pipeline biểu đồ ERP.\n"
-    "data_request: mô tả metric bằng ngôn ngữ nghiệp vụ (không bắt buộc tên bảng DB). "
-    "Thêm expected_result_shape: time_series | single_kpi | breakdown.\n"
-    "Nếu người dùng muốn xu hướng / nhiều tháng / so sánh theo thời gian → time_series.\n"
-    "Doanh thu/chi phí/dòng tiền: ghi rõ nguồn sổ cái (financeledger, transaction_type) — "
-    "không dùng salesorders làm nguồn tổng hợp thu/chi.\n"
-    "Câu hỏi kho/xuất kho/đơn giao: mô tả entity (đơn xuất, dispatch…) — không ép sổ cái.\n"
-    "chart_idea: chart_type gợi ý (line|bar), trục X/Y bằng ngôn ngữ nghiệp vụ.\n"
-    "Kênh Retail/POS: chỉ thêm filter khi người dùng nói rõ bán lẻ/Retail/POS.\n"
-    "Nếu người dùng muốn biểu đồ theo tháng và nói tháng không có đơn/dữ liệu vẫn hiển thị, "
-    "đủ 12 tháng, hoặc month 1-12: set data_request.include_zero_months=true và "
-    "calendar {year, from_month, to_month} (mặc định 1-12 trong năm được nêu).\n"
-    "Nếu có prior thread context và câu chart cùng chủ đề với câu trước, brief phải khớp metric/thời gian "
-    "với câu trả lời số trước (không đổi bảng/metric ngầm)."
-)
-
-
 def _idea_json_contract() -> str:
-    return (
-        'Single JSON object with exactly two keys: "data_request" and "chart_idea". '
-        "Both values must be JSON objects (possibly empty). No markdown fences, no other keys."
-    )
+    return load_agent_json_contract("idea") or ""
 
 
-_CHART_SYSTEM = (
-    "Bạn là Agent_Chart. Đọc chart brief, profile cột và mẫu dữ liệu.\n"
-    "Chọn chart_type line hoặc bar. x_key/y_key phải là tên cột thật trong profile.\n"
-    "Nếu warnings nói chỉ một bucket thời gian, vẫn chọn cột hợp lệ — đừng bịa cột."
-)
+_CHART_JSON_CONTRACT = load_agent_json_contract("chart") or ""
 
 
-_CHART_JSON_CONTRACT = (
-    'Single JSON object with keys: "chart_type" (exactly line or bar), "x_key" (string), '
-    '"y_key" (string), "title" (string, may be empty). No markdown fences, no other keys.'
-)
-
-
-_REVIEW_SYSTEM = (
-    "Bạn là Agent_Review. Căn chỉnh chart_type, x_key, y_key cho đúng với danh sách cột thật; "
-    "viết final_answer ngắn tiếng Việt, chỉ dựa trên số liệu trong sample_rows (không bịa).\n"
-    "Khi đọc giá trị trục thời gian (tháng): **bám đúng** chuỗi/ISO trong sample_rows (vd. 2026-05-01…). "
-    "Không đổi sang \"tháng 1\" / \"tháng 4\" trừ khi bucket trong sample_rows thật sự là tháng đó — "
-    "tránh hiểu nhầm định dạng ngày.\n"
-    "Nếu chỉ có **một** bucket thời gian nhưng vẫn có số đếm, vẫn coi là đủ để vẽ một cột/điểm; "
-    "final_answer ghi rõ đúng tháng/năm đó và số liệu, **không** nói \"không đủ dữ liệu\" chỉ vì ít hơn hai tháng "
-    "trừ khi người dùng yêu cầu bắt buộc ≥2 tháng mới có ý nghĩa."
-)
-
-
-_REVIEW_JSON_CONTRACT = (
-    'Single JSON object with keys: "chart_type" (line or bar), "x_key", "y_key", "title", '
-    '"final_answer" (Vietnamese text). No markdown fences, no other keys.'
-)
+_REVIEW_JSON_CONTRACT = load_agent_json_contract("chart_review") or ""
 
 
 def _draft_to_dict(d: ChartSpecDraftOutput) -> dict[str, Any]:
@@ -140,7 +99,7 @@ def build_chart_spec_final(
     row_limit: int = 200,
 ) -> dict[str, Any]:
     """Build Recharts-friendly payload with embedded data (truncated)."""
-    ct = chart_type if chart_type in ("line", "bar") else "bar"
+    ct = chart_type if chart_type in ("line", "bar", "pie") else "bar"
     if not rows:
         return {
             "chartType": ct,

@@ -51,6 +51,13 @@ class AgentState(TypedDict, total=False):
     schema_plan: dict[str, Any] | None
     ledger_metric_id: str | None
     schema_join_hints: list[str] | None
+    # Catalog draft HITL (optional)
+    catalog_entity_type: str | None
+    catalog_row_count_hint: int | None
+    catalog_draft_payload: dict[str, Any] | None
+    catalog_draft_id: str | None
+    catalog_draft_sse: dict[str, Any] | None
+    spring_bearer_token: str | None
 
 
 def default_initial_state() -> AgentState:

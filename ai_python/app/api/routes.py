@@ -150,6 +150,7 @@ def _sse_user_facing_error(final_error: dict[str, Any]) -> str:
 async def stream_chat(
     request: ChatRequest,
     correlation_id: str = Header(alias="X-Correlation-Id"),
+    authorization: str | None = Header(default=None, alias="Authorization"),
     claims: dict[str, Any] = Depends(_validate_auth),
     runtime: GraphRuntime = Depends(get_graph_runtime),
 ) -> StreamingResponse:
@@ -158,9 +159,15 @@ async def stream_chat(
     async def event_gen():
         prev_answer = ""
         chart_sent = False
+        draft_sent = False
+        bearer = authorization
         final_error: dict[str, Any] | None = None
         try:
-            for chunk in runtime.stream(request, correlation_id=correlation_id):
+            for chunk in runtime.stream(
+                request,
+                correlation_id=correlation_id,
+                bearer_token=bearer,
+            ):
                 update = _extract_partial_update(chunk)
                 spec = update.get("chart_spec_final")
                 if not chart_sent and isinstance(spec, dict) and spec:
@@ -170,6 +177,14 @@ async def stream_chat(
                         payload = "{}"
                     yield _sse_ui_event("chart", payload)
                     chart_sent = True
+                draft_spec = update.get("catalog_draft_sse")
+                if not draft_sent and isinstance(draft_spec, dict) and draft_spec:
+                    try:
+                        draft_payload = json.dumps(draft_spec, ensure_ascii=False)
+                    except (TypeError, ValueError):
+                        draft_payload = "{}"
+                    yield _sse_ui_event("draft", draft_payload)
+                    draft_sent = True
                 if "final_answer" in update and update["final_answer"]:
                     current = str(update["final_answer"])
                     if current.startswith(prev_answer) and len(current) > len(prev_answer):

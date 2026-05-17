@@ -115,6 +115,21 @@ def test_enforce_read_only_blocks_insert() -> None:
         enforce_read_only_sql("INSERT INTO t VALUES (1)")
 
 
+def test_enforce_read_only_allows_with_select_cte() -> None:
+    sql = """
+    WITH months AS (SELECT generate_series(
+      DATE '2026-01-01', DATE '2026-12-01', INTERVAL '1 month')::date AS month_bucket)
+    SELECT m.month_bucket FROM months m
+    LEFT JOIN salesorders s ON true
+    """
+    enforce_read_only_sql(sql)
+
+
+def test_enforce_read_only_rejects_with_without_select() -> None:
+    with pytest.raises(SqlSafetyError):
+        enforce_read_only_sql("WITH x AS (SELECT 1) UPDATE foo SET bar = 1")
+
+
 def test_scan_sqlite_memory() -> None:
     engine = create_engine("sqlite:///:memory:")
     md = MetaData()

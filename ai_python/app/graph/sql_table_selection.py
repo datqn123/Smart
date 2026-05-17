@@ -8,12 +8,16 @@ from typing import TYPE_CHECKING
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.graph.dbmeta import SchemaArtifact
+from app.prompts.load import load_agent_json_contract, load_agent_prompt
 from app.llm.schemas import SqlTablePickOutput
 
 if TYPE_CHECKING:
     from app.graph.deps import GraphDeps
 
 logger = logging.getLogger(__name__)
+
+_TABLE_PICK_SYSTEM = load_agent_prompt("sql_table_pick")
+_TABLE_PICK_JSON_CONTRACT = load_agent_json_contract("sql_table_pick")
 
 
 def expand_fk_neighbors(artifact: SchemaArtifact, seeds: list[str]) -> list[str]:
@@ -97,11 +101,6 @@ def refine_tables_with_llm(
         extra = f" — {desc}" if desc else ""
         lines.append(f"- {t.name}{extra}")
     catalog = "\n".join(lines)
-    sys = (
-        "You choose which database tables are needed to answer the user question. "
-        "Reply ONLY with JSON matching the schema: tables = array of table names. "
-        "Every name MUST appear exactly as in the catalog list."
-    )
     human = (
         f"Catalog:\n{catalog}\n\n"
         f"Heuristic shortlist (hint): {', '.join(heuristic) or '(none)'}\n\n"
@@ -110,8 +109,11 @@ def refine_tables_with_llm(
     )
     try:
         client = reg.get("sql_table_pick")
-        messages = [SystemMessage(content=sys), HumanMessage(content=human)]
-        out = client.structured_predict(messages, SqlTablePickOutput)
+        messages = [SystemMessage(content=_TABLE_PICK_SYSTEM), HumanMessage(content=human)]
+        kwargs: dict = {}
+        if _TABLE_PICK_JSON_CONTRACT:
+            kwargs["json_output_contract"] = _TABLE_PICK_JSON_CONTRACT
+        out = client.structured_predict(messages, SqlTablePickOutput, **kwargs)
     except Exception:
         logger.warning("sql_table_pick structured_predict failed; using heuristic", exc_info=True)
         return heuristic

@@ -21,10 +21,22 @@ logger = logging.getLogger(__name__)
 
 
 class GraphRuntime(Protocol):
-    def invoke(self, request: ChatRequest, *, correlation_id: str) -> dict[str, Any]:
+    def invoke(
+        self,
+        request: ChatRequest,
+        *,
+        correlation_id: str,
+        bearer_token: str | None = None,
+    ) -> dict[str, Any]:
         ...
 
-    def stream(self, request: ChatRequest, *, correlation_id: str) -> Any:
+    def stream(
+        self,
+        request: ChatRequest,
+        *,
+        correlation_id: str,
+        bearer_token: str | None = None,
+    ) -> Any:
         ...
 
 
@@ -32,14 +44,34 @@ class LangGraphRuntime:
     def __init__(self, compiled: Any) -> None:
         self._compiled = compiled
 
-    def invoke(self, request: ChatRequest, *, correlation_id: str) -> dict[str, Any]:
-        state = _build_state(request=request, correlation_id=correlation_id)
+    def invoke(
+        self,
+        request: ChatRequest,
+        *,
+        correlation_id: str,
+        bearer_token: str | None = None,
+    ) -> dict[str, Any]:
+        state = _build_state(
+            request=request,
+            correlation_id=correlation_id,
+            bearer_token=bearer_token,
+        )
         config = _build_graph_config(request, correlation_id=correlation_id)
         out = self._compiled.invoke(state, config)
         return dict(out or {})
 
-    def stream(self, request: ChatRequest, *, correlation_id: str) -> Any:
-        state = _build_state(request=request, correlation_id=correlation_id)
+    def stream(
+        self,
+        request: ChatRequest,
+        *,
+        correlation_id: str,
+        bearer_token: str | None = None,
+    ) -> Any:
+        state = _build_state(
+            request=request,
+            correlation_id=correlation_id,
+            bearer_token=bearer_token,
+        )
         config = _build_graph_config(request, correlation_id=correlation_id)
         return iter_graph_stream(
             self._compiled,
@@ -49,7 +81,12 @@ class LangGraphRuntime:
         )
 
 
-def _build_state(*, request: ChatRequest, correlation_id: str) -> dict[str, Any]:
+def _build_state(
+    *,
+    request: ChatRequest,
+    correlation_id: str,
+    bearer_token: str | None = None,
+) -> dict[str, Any]:
     state = dict(default_initial_state())
     state["messages"] = [HumanMessage(content=request.message)]
     state["correlation_id"] = correlation_id
@@ -88,6 +125,12 @@ def _build_state(*, request: ChatRequest, correlation_id: str) -> dict[str, Any]
     state["chart_retry_hint"] = None
     state["chart_result_profile"] = None
     state["chart_degraded"] = None
+    state["catalog_entity_type"] = None
+    state["catalog_row_count_hint"] = None
+    state["catalog_draft_payload"] = None
+    state["catalog_draft_id"] = None
+    state["catalog_draft_sse"] = None
+    state["spring_bearer_token"] = bearer_token
     return state
 
 

@@ -12,8 +12,11 @@ from app.graph.deps import GraphDeps
 from app.graph.display_format import format_display_for_chat_ui
 from app.graph.message_utils import format_dialog_tail_for_sql, latest_human_question
 from app.graph.state import AgentState
+from app.prompts.load import load_agent_prompt
 
 logger = logging.getLogger(__name__)
+
+_SUMMARIZE_SYSTEM = load_agent_prompt("summarize")
 
 
 def make_summarize_answer_node(deps: GraphDeps):
@@ -97,13 +100,7 @@ def make_summarize_answer_node(deps: GraphDeps):
         )
         ans = reg.get("summarize").invoke_text(
             prompt,
-            system=(
-                "Bạn là trợ lý ERP. Tóm tắt số liệu chính xác, không bịa, locale vi-VN. "
-                "Dùng đoạn hội thoại gần nhất (nếu có) chỉ để hiểu đại từ / tham chiếu (vd. đơn đó); "
-                "mọi con số trong câu trả lời phải bám đúng rows, không chép số từ chat nếu không khớp rows. "
-                "Luôn tách các mục (đơn hàng, bản ghi) bằng dòng trống để dễ đọc."
-                + tz_note
-            ),
+            system=_SUMMARIZE_SYSTEM + tz_note,
         )
         ans = format_display_for_chat_ui(ans)
         preview = ans if len(ans) <= 1200 else ans[:1200] + "…"

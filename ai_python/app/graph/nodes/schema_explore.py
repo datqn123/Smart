@@ -25,26 +25,12 @@ from app.graph.schema_tools import (
 from app.graph.spring_describe_client import build_spring_describe_client
 from app.graph.state import AgentState
 from app.llm.schemas import SchemaPlanOutput
+from app.prompts.load import load_agent_json_contract, load_agent_prompt
 
 logger = logging.getLogger(__name__)
 
-_SCHEMA_PLAN_SYSTEM = (
-    "You are a schema planner for a read-only PostgreSQL ERP analytics database.\n"
-    "financeledger is the CANONICAL fact table for revenue, expense, and cashflow "
-    "(filter transaction_type; use transaction_date for periods).\n"
-    "salesorders and related tables are DIMENSION tables joined via "
-    "financeledger.reference_type and reference_id (e.g. SalesOrder), not alternate revenue sources.\n"
-    "Pick table names ONLY from the catalog. Always include financeledger for ledger metrics.\n"
-    "Add salesorders/customers/orderdetails/products only when the question needs channel, customer, or SKU breakdown."
-)
-
-_SCHEMA_PLAN_JSON_CONTRACT = (
-    'Single JSON object with keys: "metric_id" (ledger_revenue|ledger_expense|'
-    "ledger_net_cashflow|ledger_by_dimension), "
-    '"tables" (array of table name strings from catalog), '
-    '"dimensions" (array: order_channel, customer, product, fund — may be empty), '
-    '"ambiguity_note" (string or null). No markdown fences, no other keys.'
-)
+_SCHEMA_PLAN_SYSTEM = load_agent_prompt("schema_explore")
+_SCHEMA_PLAN_JSON_CONTRACT = load_agent_json_contract("schema_explore") or ""
 
 
 def _merge_plan_tables(

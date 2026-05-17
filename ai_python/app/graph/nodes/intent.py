@@ -12,31 +12,12 @@ from app.graph.message_utils import latest_human_question
 from app.graph.registry import normalize_intent
 from app.graph.state import AgentState
 from app.llm.schemas import IntentOutput
+from app.prompts.load import load_agent_json_contract, load_agent_prompt
 
 logger = logging.getLogger(__name__)
 
-# Criteria only — no few-shot utterances; model must judge from conversation.
-_INTENT_CLASSIFY_SYSTEM = (
-    "Bạn phân loại một lượt hội thoại trong ứng dụng ERP để hệ thống chọn nhánh xử lý.\n\n"
-    "Ba loại đích:\n"
-    "• general_chat — trao đổi thông thường: chào hỏi, giải thích khái niệm, "
-    "hướng dẫn thao tác giao diện ở mức chung, ý kiến cá nhân, hoặc nội dung "
-    "không yêu cầu đọc dữ liệu vận hành đang lưu trong kho của ứng dụng để khẳng định sự kiện.\n"
-    "• system_data_query — người dùng cần câu trả lời bám dữ liệu vận hành thực "
-    "(thống kê, bảng kết quả, đối chiếu, mức số liệu hiện tại trong hệ thống) dưới dạng "
-    "chữ / bảng / số, không yêu cầu vẽ biểu đồ.\n"
-    "• system_data_chart — cùng cần dữ liệu vận hành nhưng người dùng muốn báo cáo "
-    "dưới dạng biểu đồ / đồ thị / visualization (doanh thu, dòng tiền, số lượng hàng, xu hướng theo thời gian, …).\n\n"
-    "Tự suy luận từ toàn bộ ngữ cảnh được cung cấp. Không liệt kê câu hỏi mẫu. "
-    "Không mô tả hay tiết lộ schema hay tên bảng database."
-)
-
-_INTENT_JSON_CONTRACT = (
-    'Single JSON object with exactly one key "intent". '
-    "The value must be exactly one of: general_chat, system_data_query, system_data_chart "
-    "(ASCII, lowercase, underscore as shown). "
-    "No markdown fences, no other keys, no explanation text."
-)
+_INTENT_CLASSIFY_SYSTEM = load_agent_prompt("intent")
+_INTENT_JSON_CONTRACT = load_agent_json_contract("intent") or ""
 
 _INTENT_MESSAGE_TAIL = 24
 
@@ -108,6 +89,8 @@ def make_intent_node(deps: GraphDeps):
 
 def route_after_intent(state: AgentState) -> str:
     intent = state.get("intent") or "general_chat"
+    if intent == "catalog_data_entry":
+        return "catalog_draft_branch"
     if intent == "system_data_chart":
         return "agent_idea"
     if intent == "system_data_query":

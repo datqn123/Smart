@@ -51,6 +51,42 @@ _SQL_AS_ALIAS_SKIP_NAMES = frozenset(
 _AS_PROJECTION_ALIAS = re.compile(r"(?is)\bAS\s+([a-zA-Z_][\w]*)")
 
 
+def extract_cte_names(sql: str) -> set[str]:
+    """
+    Lowercase names declared in WITH ... AS (...), including WITH RECURSIVE.
+    Used to exclude CTEs from physical-table allowlist checks.
+    """
+    text = (sql or "").strip()
+    if not re.match(r"(?is)^\s*with\s", text):
+        return set()
+    body = re.sub(r"(?is)^\s*with\s+", "", text, count=1)
+    if re.match(r"(?is)^\s*recursive\s+", body):
+        body = re.sub(r"(?is)^\s*recursive\s+", "", body, count=1)
+    names: set[str] = set()
+    while body:
+        body = body.lstrip()
+        m = re.match(r'(?is)^"?([a-zA-Z_][\w]*)"?\s+as\s*\(', body)
+        if not m:
+            break
+        names.add(m.group(1).lower())
+        body = body[m.end() :]
+        depth = 1
+        i = 0
+        while i < len(body) and depth > 0:
+            ch = body[i]
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+            i += 1
+        body = body[i:].lstrip()
+        if body.startswith(","):
+            body = body[1:]
+            continue
+        break
+    return names
+
+
 def _join_clause_tokens(stmt: Statement) -> list:
     """Tokens strictly between the top-level FROM keyword and WHERE / GROUP / ORDER / HAVING."""
     tks = stmt.tokens
@@ -277,8 +313,10 @@ def _validate_columns_for_map(
     *,
     table_columns: dict[str, set[str]],
     alias_map: dict[str, str],
+    cte_names: set[str] | None = None,
 ) -> str | None:
-    canonical_tables = set(alias_map.values())
+    ctes = cte_names or set()
+    canonical_tables = {t for t in alias_map.values() if t not in ctes}
     union_cols: set[str] = set()
     for t in canonical_tables:
         union_cols |= table_columns.get(t, set())
@@ -295,10 +333,14 @@ def _validate_columns_for_map(
             continue
         if parent:
             tbl = _resolve_canonical_table(parent, alias_map)
+            if tbl in ctes:
+                continue
             allowed = table_columns.get(tbl)
             if allowed is None or real_l not in allowed:
                 return f"column not in allowlist: {real_l}"
         else:
+            if real_l in ctes:
+                continue
             if real_l in _SQL_KEYWORDS:
                 continue
             if real_l in _SQL_BUILTIN_IDENTIFIERS:
@@ -397,14 +439,20 @@ def validate_sql_deterministic(
         else:
             allow = None
 
-    tables = _extract_from_join_tables_stmt(stmt)
+    cte_names = extract_cte_names(s)
+    tables = _extract_from_join_tables_stmt(stmt) - cte_names
     if allow is not None:
         if tables and not tables <= allow:
             return False, f"table not in allowlist {sorted(allow)}", None, notes
 
     if table_columns is not None:
         alias_map = _from_join_alias_map_stmt(stmt)
-        col_err = _validate_columns_for_map(stmt, table_columns=table_columns, alias_map=alias_map)
+        col_err = _validate_columns_for_map(
+            stmt,
+            table_columns=table_columns,
+            alias_map=alias_map,
+            cte_names=cte_names,
+        )
         if col_err:
             return False, col_err, None, notes
 

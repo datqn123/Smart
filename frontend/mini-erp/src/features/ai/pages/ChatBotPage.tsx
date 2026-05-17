@@ -5,6 +5,8 @@ import type { ChatMessage } from "../types"
 import { Button } from "@/components/ui/button"
 import { startAiChatPostStream, type AiChatStreamHandle } from "../api/aiChatSse"
 import { AiChatChartCard } from "../components/AiChatChartCard"
+import { AiChatDraftTableCard } from "../components/AiChatDraftTableCard"
+import type { CatalogDraftTablePayload } from "../api/aiCatalogDraftApi"
 
 export function ChatBotPage() {
   const { setTitle } = usePageTitle()
@@ -137,6 +139,15 @@ export function ChatBotPage() {
           )
         )
       },
+      onDraft: (payload: CatalogDraftTablePayload) => {
+        setMessages(prev =>
+          prev.map(m =>
+            m.id === assistantId
+              ? { ...m, metadata: { ...m.metadata, draftTable: payload } }
+              : m
+          )
+        )
+      },
       onDone: () => {
         setIsTyping(false)
         streamRef.current = null
@@ -197,9 +208,13 @@ export function ChatBotPage() {
 
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 scroll-smooth scrollbar-hide">
-        {messages.map((msg) => (
+        {messages.map((msg) => {
+          const hasChart = msg.role === "assistant" && Boolean(msg.metadata?.chartSpec)
+          const hasDraft = msg.role === "assistant" && Boolean(msg.metadata?.draftTable)
+          const wideBubble = hasChart || hasDraft
+          return (
           <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-            <div className={`flex gap-3 max-w-[85%] sm:max-w-[70%] ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
+            <div className={`flex gap-3 ${wideBubble ? "max-w-[96%] sm:max-w-[min(920px,96%)]" : "max-w-[85%] sm:max-w-[70%]"} ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
               {/* Avatar */}
               <div className={`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
                 msg.role === "assistant" ? "bg-blue-600 text-white" : "bg-slate-200 text-slate-600"
@@ -208,7 +223,7 @@ export function ChatBotPage() {
               </div>
 
               {/* Message Content */}
-              <div className="space-y-1">
+              <div className="min-w-0 flex-1 space-y-2">
                 <div className={`px-4 py-3 rounded-2xl text-[15px] leading-relaxed shadow-sm ${
                   msg.role === "user" 
                     ? "bg-blue-600 text-white rounded-tr-none" 
@@ -233,17 +248,20 @@ export function ChatBotPage() {
                   ) : (
                     msg.content
                   )}
-                  {msg.role === "assistant" && msg.metadata?.chartSpec && (
-                    <AiChatChartCard spec={msg.metadata.chartSpec} />
-                  )}
                 </div>
+                {hasChart ? (
+                  <AiChatChartCard spec={msg.metadata!.chartSpec as Record<string, unknown>} />
+                ) : null}
+                {hasDraft && msg.metadata?.draftTable ? (
+                  <AiChatDraftTableCard initial={msg.metadata.draftTable} />
+                ) : null}
                 <div className={`text-[10px] font-bold uppercase tracking-widest text-slate-400 ${msg.role === "user" ? "text-right" : "text-left"}`}>
                   {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </div>
               </div>
             </div>
           </div>
-        ))}
+        )})}
 
         {isTyping && (
           <div className="flex justify-start">
