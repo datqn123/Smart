@@ -15,7 +15,15 @@ Mỗi file `.md` = **system prompt** cho một node LLM trong graph. Code load q
 | `chart_readiness.md` | `chart_readiness` | `chart_critic` |
 | `chart.md` | `agent_chart` | `chart` |
 | `chart_review.md` | `agent_review` | `review` |
+| `catalog_entity_pick.md` | `classify_catalog_entity` | `catalog_entity` |
+| `catalog_draft.md` | `generate_catalog_draft` (base) | `catalog_draft` |
+| `catalog_draft_product.md` | (playbook, nối runtime) | — |
+| `catalog_draft_category.md` | (playbook, nối runtime) | — |
+| `catalog_draft_supplier.md` | (playbook, nối runtime) | — |
+| `catalog_draft_customer.md` | (playbook, nối runtime) | — |
 
-Phần sau tiêu đề `## JSON output contract` = ràng buộc JSON (giữ trong cùng file).
+**Catalog draft:** node `generate_catalog_draft` **không** gọi `load_agent_prompt("catalog_draft")` trực tiếp — dùng `load_catalog_draft_system_prompt(entity_type)` để ghép base + playbook entity.
+
+Phần sau tiêu đề `## JSON output contract` = ràng buộc JSON (giữ trong cùng file; chỉ `catalog_draft.md` cho nhánh catalog).
 
 Quy tắc **deterministic** (allowlist, enum case, CTE, retry) vẫn nằm trong code Python — không duplicate dài trong MD.

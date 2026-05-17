@@ -1,0 +1,21 @@
+# Test Result — Q1: Chào hỏi
+
+## Thông tin
+- **Câu hỏi:** Chào bạn, bạn làm được những gì?
+- **Nhóm:** general_chat
+- **Intent dự kiến:** `general_chat`
+- **Ngày test:**
+- **Thời gian phản hồi:**
+- **Trạng thái:** ⬜ Chưa test / ✅ Pass / ❌ Fail / ⚠️ Partial
+
+## Response từ AI
+_(Chưa có)_
+
+## Kiểm tra
+- [ ] Intent đúng với dự kiến
+- [ ] Response không rỗng
+- [ ] Nội dung liên quan đến câu hỏi
+- [ ] Không hallucination/bịa số liệu
+
+## Ghi chú
+

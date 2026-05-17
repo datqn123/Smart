@@ -212,9 +212,15 @@ export function ChatBotPage() {
           const hasChart = msg.role === "assistant" && Boolean(msg.metadata?.chartSpec)
           const hasDraft = msg.role === "assistant" && Boolean(msg.metadata?.draftTable)
           const wideBubble = hasChart || hasDraft
+          const layoutClass = hasDraft
+            ? "w-full max-w-[min(960px,100%)]"
+            : wideBubble
+              ? "max-w-[96%] sm:max-w-[min(640px,88%)]"
+              : "max-w-[85%] sm:max-w-[70%]"
+          const assistantText = (msg.content ?? "").replace(/\*\*/g, "")
           return (
-          <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-            <div className={`flex gap-3 ${wideBubble ? "max-w-[96%] sm:max-w-[min(920px,96%)]" : "max-w-[85%] sm:max-w-[70%]"} ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
+          <div key={msg.id} className={`flex w-full ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+            <div className={`flex gap-3 ${layoutClass} ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
               {/* Avatar */}
               <div className={`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
                 msg.role === "assistant" ? "bg-blue-600 text-white" : "bg-slate-200 text-slate-600"
@@ -244,7 +250,7 @@ export function ChatBotPage() {
                      </div>
                   )}
                   {msg.role === "assistant" ? (
-                    <span className="whitespace-pre-line break-words">{msg.content}</span>
+                    <span className="whitespace-pre-line break-words">{assistantText}</span>
                   ) : (
                     msg.content
                   )}

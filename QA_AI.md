@@ -207,11 +207,11 @@
 
 | Chỉ số | Giá trị |
 |--------|--------:|
-| **Tổng số câu hỏi** | 83 |
+| **Tổng số câu hỏi** | 88 |
 | **General chat** | 7 |
 | **System data query** | 52 |
 | **System data chart** | 10 |
-| **Đa luồng** | 5 (10 lượt hỏi) |
+| **Đa luồng** | 10 (5 cặp) |
 | **Edge cases** | 6 |
 | **Đạt** | — |
 | **Không đạt** | — |

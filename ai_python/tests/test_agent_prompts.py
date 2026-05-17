@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from app.prompts.load import list_agent_prompt_ids, load_agent_json_contract, load_agent_prompt
+from app.prompts.load import (
+    catalog_draft_entity_prompt_id,
+    list_agent_prompt_ids,
+    load_agent_json_contract,
+    load_agent_prompt,
+    load_catalog_draft_system_prompt,
+)
 
 _EXPECTED_IDS = frozenset(
     {
@@ -21,6 +27,20 @@ _EXPECTED_IDS = frozenset(
         "chart_review",
         "catalog_entity_pick",
         "catalog_draft",
+        "catalog_draft_product",
+        "catalog_draft_category",
+        "catalog_draft_supplier",
+        "catalog_draft_customer",
+    }
+)
+
+# Entity playbooks: contract lives in catalog_draft.md only (merged at runtime).
+_CATALOG_DRAFT_ENTITY_PLAYBOOKS = frozenset(
+    {
+        "catalog_draft_product",
+        "catalog_draft_category",
+        "catalog_draft_supplier",
+        "catalog_draft_customer",
     }
 )
 
@@ -36,7 +56,14 @@ def test_load_agent_prompt_non_empty(agent_id: str) -> None:
     assert len(text) > 40
 
 
-@pytest.mark.parametrize("agent_id", sorted(_EXPECTED_IDS - {"chat_normal", "summarize", "gen_sql"}))
+@pytest.mark.parametrize(
+    "agent_id",
+    sorted(
+        _EXPECTED_IDS
+        - {"chat_normal", "summarize", "gen_sql"}
+        - _CATALOG_DRAFT_ENTITY_PLAYBOOKS
+    ),
+)
 def test_load_agent_json_contract_non_empty(agent_id: str) -> None:
     contract = load_agent_json_contract(agent_id)
     assert contract
@@ -46,3 +73,27 @@ def test_load_agent_json_contract_non_empty(agent_id: str) -> None:
 def test_gen_sql_mentions_with_cte() -> None:
     body = load_agent_prompt("gen_sql")
     assert "WITH" in body or "generate_series" in body
+
+
+@pytest.mark.parametrize(
+    "entity_type,needle",
+    [
+        ("product", "skuCode"),
+        ("category", "categoryCode"),
+        ("supplier", "supplierCode"),
+        ("customer", "customerCode"),
+    ],
+)
+def test_load_catalog_draft_system_prompt_includes_entity_playbook(
+    entity_type: str, needle: str
+) -> None:
+    text = load_catalog_draft_system_prompt(entity_type)
+    assert "Playbook bắt buộc" in text
+    assert needle in text
+    assert load_agent_prompt("catalog_draft") in text
+    assert load_agent_prompt(catalog_draft_entity_prompt_id(entity_type)) in text
+
+
+def test_catalog_draft_entity_prompt_id_rejects_unknown() -> None:
+    with pytest.raises(ValueError, match="unknown catalog"):
+        catalog_draft_entity_prompt_id("warehouse")

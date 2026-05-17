@@ -9,6 +9,7 @@ from langchain_core.messages import AIMessage, SystemMessage
 from app.graph.agent_trace import emit_agent_trace
 from app.graph.catalog_draft_schema import (
     default_columns,
+    enrich_catalog_draft_rows,
     normalize_rows,
     validate_draft_rows,
 )
@@ -17,14 +18,18 @@ from app.graph.message_utils import latest_human_question
 from app.graph.spring_catalog_draft_client import post_catalog_draft
 from app.graph.state import AgentState
 from app.llm.schemas import CatalogDraftGenerateOutput, CatalogEntityPickOutput
-from app.prompts.load import load_agent_json_contract, load_agent_prompt
+from app.prompts.load import (
+    load_agent_json_contract,
+    load_agent_prompt,
+    load_catalog_draft_json_contract,
+    load_catalog_draft_system_prompt,
+)
 
 logger = logging.getLogger(__name__)
 
 _ENTITY_PICK_SYSTEM = load_agent_prompt("catalog_entity_pick")
 _ENTITY_PICK_CONTRACT = load_agent_json_contract("catalog_entity_pick") or ""
-_DRAFT_SYSTEM = load_agent_prompt("catalog_draft")
-_DRAFT_CONTRACT = load_agent_json_contract("catalog_draft") or ""
+_DRAFT_CONTRACT = load_catalog_draft_json_contract() or ""
 
 
 def make_classify_catalog_entity_node(deps: GraphDeps):
@@ -69,24 +74,34 @@ def make_generate_catalog_draft_node(deps: GraphDeps):
         rows: list[dict] = []
         reg = deps.llm_registry
         if reg is not None:
-            client = reg.get("gen_sql")
+            try:
+                client = reg.get("chat")
+            except KeyError:
+                client = reg.get("default")
+            draft_system = load_catalog_draft_system_prompt(entity_type)
             user_block = (
                 f"entity_type={entity_type}\nrow_count_hint={row_hint}\n\n"
                 f"Câu người dùng:\n{question}"
             )
             try:
                 out = client.structured_predict(
-                    [SystemMessage(content=_DRAFT_SYSTEM), SystemMessage(content=user_block)],
+                    [SystemMessage(content=draft_system), SystemMessage(content=user_block)],
                     CatalogDraftGenerateOutput,
                     json_output_contract=_DRAFT_CONTRACT,
                 )
                 if out.columns:
                     columns = [c.model_dump() for c in out.columns]
-                rows = normalize_rows([r.model_dump() for r in out.rows])
+                raw = [r.model_dump() for r in out.rows]
+                rows = enrich_catalog_draft_rows(
+                    entity_type,
+                    normalize_rows(raw),
+                    user_prompt=question,
+                )
             except Exception:
                 logger.warning("catalog draft LLM failed; using stub rows", exc_info=True)
         if not rows:
             rows = _stub_rows(entity_type, row_hint)
+        rows = enrich_catalog_draft_rows(entity_type, rows, user_prompt=question)
         payload = {
             "entityType": entity_type,
             "columns": columns,
