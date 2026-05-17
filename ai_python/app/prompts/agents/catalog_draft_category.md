@@ -1,34 +1,34 @@
-# Playbook: catalog_draft — `category` (danh mục sản phẩm)
+# Playbook: catalog_draft — `category` (product categories)
 
-## Cột hợp lệ (`columns` và `values`)
+## Valid columns (`columns` and `values`)
 
 | key | label | type | required |
 |-----|-------|------|----------|
-| categoryCode | Mã DM | string | yes |
-| name | Tên danh mục | string | yes |
-| parentName | Danh mục cha | string | no |
-| description | Mô tả | string | no |
-| sortOrder | Thứ tự | number | no |
-| status | Trạng thái | enum | no — `Active` \| `Inactive` |
+| categoryCode | Category Code | string | yes |
+| name | Category Name | string | yes |
+| parentName | Parent Category | string | no |
+| description | Description | string | no |
+| sortOrder | Sort Order | number | no |
+| status | Status | enum | no — `Active` \| `Inactive` |
 
-## Bắt buộc mỗi dòng (`values`)
+## Required per row (`values`)
 
-Mỗi dòng **phải có đủ**: `categoryCode`, `name`.
+Each row **must include**: `categoryCode`, `name`.
 
-- `categoryCode`: duy nhất trong bảng; gợi ý `CAT-DIEN-TU-001`, `DM-AI-001`.
-- `name`: tên danh mục hiển thị; không để trống.
-- `parentName`: tên danh mục cha (text) nếu user nói cấp con; **không** dùng `parentId`.
-- `sortOrder`: số nguyên ≥ 0 nếu có; có thể bỏ qua.
-- `status`: mặc định `Active`.
+- `categoryCode`: unique within the table; suggested format `CAT-ELECTRONICS-001`, `CAT-AI-001`.
+- `name`: display name for the category; must not be empty.
+- `parentName`: parent category name (text) if the user mentions a sub-category; **do not** use `parentId`.
+- `sortOrder`: integer ≥ 0 if provided; may be omitted.
+- `status`: defaults to `Active`.
 
-## Không được
+## Do not
 
-- Trùng `categoryCode` giữa các dòng.
-- Dùng key sản phẩm/NCC/KH (`skuCode`, `supplierCode`, …).
-- Sinh `parentId` hoặc id database.
+- Duplicate `categoryCode` across rows.
+- Use keys from other entities (`skuCode`, `supplierCode`, …).
+- Generate `parentId` or database IDs.
 
-## Ví dụ một dòng
+## Example row
 
 ```json
-{ "rowId": "r1", "values": { "categoryCode": "CAT-DT-001", "name": "Điện tử", "parentName": "Hàng hóa", "status": "Active" } }
+{ "rowId": "r1", "values": { "categoryCode": "CAT-EL-001", "name": "Electronics", "parentName": "Goods", "status": "Active" } }
 ```

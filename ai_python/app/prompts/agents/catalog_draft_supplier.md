@@ -1,37 +1,37 @@
-# Playbook: catalog_draft — `supplier` (nhà cung cấp / NCC)
+# Playbook: catalog_draft — `supplier` (suppliers)
 
-## Cột hợp lệ (`columns` và `values`)
+## Valid columns (`columns` and `values`)
 
 | key | label | type | required |
 |-----|-------|------|----------|
-| supplierCode | Mã NCC | string | yes |
-| name | Tên NCC | string | yes |
-| contactPerson | Người liên hệ | string | yes |
-| phone | SĐT | string | yes |
+| supplierCode | Supplier Code | string | yes |
+| name | Supplier Name | string | yes |
+| contactPerson | Contact Person | string | yes |
+| phone | Phone | string | yes |
 | email | Email | string | no |
-| address | Địa chỉ | string | no |
-| taxCode | MST | string | no |
-| status | Trạng thái | enum | no — `Active` \| `Inactive` |
+| address | Address | string | no |
+| taxCode | Tax Code | string | no |
+| status | Status | enum | no — `Active` \| `Inactive` |
 
-## Bắt buộc mỗi dòng (`values`)
+## Required per row (`values`)
 
-Mỗi dòng **phải có đủ**: `supplierCode`, `name`, `contactPerson`, `phone`.
+Each row **must include**: `supplierCode`, `name`, `contactPerson`, `phone`.
 
-- `supplierCode`: duy nhất trong bảng; gợi ý `NCC-AI-001`, `NCC-HN-001`.
-- `name`: tên công ty / nhà cung cấp; không để trống.
-- `contactPerson`: tên người liên hệ; nếu user không nêu → `"Liên hệ"`.
-- `phone`: SĐT Việt Nam hợp lệ (10–11 chữ số); các dòng khác nhau không trùng số nếu có thể.
-- `email`, `address`, `taxCode`: điền khi user cung cấp hoặc suy hợp lý; có thể bỏ qua.
-- `status`: mặc định `Active`.
+- `supplierCode`: unique within the table; suggested format `SUP-AI-001`, `SUP-HN-001`.
+- `name`: company or supplier name; must not be empty.
+- `contactPerson`: contact person name; if the user does not specify → use `"Contact"`.
+- `phone`: valid Vietnamese phone number (10–11 digits); rows should not share the same phone if possible.
+- `email`, `address`, `taxCode`: fill in when the user provides them or infer reasonably; may be omitted.
+- `status`: defaults to `Active`.
 
-## Không được
+## Do not
 
-- Trùng `supplierCode` giữa các dòng.
-- Bỏ trống `contactPerson` hoặc `phone`.
-- Dùng key entity khác (`skuCode`, `customerCode`, …).
+- Duplicate `supplierCode` across rows.
+- Leave `contactPerson` or `phone` empty.
+- Use keys from other entities (`skuCode`, `customerCode`, …).
 
-## Ví dụ một dòng
+## Example row
 
 ```json
-{ "rowId": "r1", "values": { "supplierCode": "NCC-001", "name": "Công ty ABC", "contactPerson": "Nguyễn Văn A", "phone": "0901234567", "email": "abc@example.com", "status": "Active" } }
+{ "rowId": "r1", "values": { "supplierCode": "SUP-001", "name": "ABC Company", "contactPerson": "Nguyen Van A", "phone": "0901234567", "email": "abc@example.com", "status": "Active" } }
 ```

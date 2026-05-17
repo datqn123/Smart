@@ -1,34 +1,34 @@
-# Playbook: catalog_draft — `customer` (khách hàng)
+# Playbook: catalog_draft — `customer` (customers)
 
-## Cột hợp lệ (`columns` và `values`)
+## Valid columns (`columns` and `values`)
 
 | key | label | type | required |
 |-----|-------|------|----------|
-| customerCode | Mã KH | string | yes |
-| name | Tên KH | string | yes |
-| phone | SĐT | string | yes |
+| customerCode | Customer Code | string | yes |
+| name | Customer Name | string | yes |
+| phone | Phone | string | yes |
 | email | Email | string | no |
-| address | Địa chỉ | string | no |
-| status | Trạng thái | enum | no — `Active` \| `Inactive` |
+| address | Address | string | no |
+| status | Status | enum | no — `Active` \| `Inactive` |
 
-## Bắt buộc mỗi dòng (`values`)
+## Required per row (`values`)
 
-Mỗi dòng **phải có đủ**: `customerCode`, `name`, `phone`.
+Each row **must include**: `customerCode`, `name`, `phone`.
 
-- `customerCode`: duy nhất trong bảng; gợi ý `KH-AI-001`, `KH-VIP-001`.
-- `name`: tên khách / công ty; không để trống.
-- `phone`: SĐT Việt Nam (10–11 chữ số); các dòng khác nhau không trùng nếu có thể.
-- `email`, `address`: điền khi user nêu; có thể bỏ qua.
-- `status`: mặc định `Active`.
+- `customerCode`: unique within the table; suggested format `CUS-AI-001`, `CUS-VIP-001`.
+- `name`: customer or company name; must not be empty.
+- `phone`: Vietnamese phone number (10–11 digits); rows should not share the same phone if possible.
+- `email`, `address`: fill in when the user provides them; may be omitted.
+- `status`: defaults to `Active`.
 
-## Không được
+## Do not
 
-- Trùng `customerCode` giữa các dòng.
-- Bỏ trống `phone`.
-- Dùng key entity khác (`skuCode`, `supplierCode`, …).
+- Duplicate `customerCode` across rows.
+- Leave `phone` empty.
+- Use keys from other entities (`skuCode`, `supplierCode`, …).
 
-## Ví dụ một dòng
+## Example row
 
 ```json
-{ "rowId": "r1", "values": { "customerCode": "KH-001", "name": "Khách lẻ Nguyễn A", "phone": "0912345678", "address": "Hà Nội", "status": "Active" } }
+{ "rowId": "r1", "values": { "customerCode": "CUS-001", "name": "Walk-in Customer Nguyen A", "phone": "0912345678", "address": "Hanoi", "status": "Active" } }
 ```

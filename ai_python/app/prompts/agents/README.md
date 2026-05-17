@@ -1,8 +1,8 @@
 # Runtime agent playbooks (LangGraph)
 
-Mỗi file `.md` = **system prompt** cho một node LLM trong graph. Code load qua `app.prompts.load.load_agent_prompt(<id>)`.
+Each `.md` file = **system prompt** for one LLM node in the graph. Loaded via `app.prompts.load.load_agent_prompt(<id>)`.
 
-| File | Node graph | Registry key (LLM) |
+| File | Graph node | Registry key (LLM) |
 |------|------------|-------------------|
 | `intent.md` | `classify_intent` | `intent` |
 | `chat_normal.md` | `chat_normal` | `chat` |
@@ -17,13 +17,13 @@ Mỗi file `.md` = **system prompt** cho một node LLM trong graph. Code load q
 | `chart_review.md` | `agent_review` | `review` |
 | `catalog_entity_pick.md` | `classify_catalog_entity` | `catalog_entity` |
 | `catalog_draft.md` | `generate_catalog_draft` (base) | `catalog_draft` |
-| `catalog_draft_product.md` | (playbook, nối runtime) | — |
-| `catalog_draft_category.md` | (playbook, nối runtime) | — |
-| `catalog_draft_supplier.md` | (playbook, nối runtime) | — |
-| `catalog_draft_customer.md` | (playbook, nối runtime) | — |
+| `catalog_draft_product.md` | (playbook, appended at runtime) | — |
+| `catalog_draft_category.md` | (playbook, appended at runtime) | — |
+| `catalog_draft_supplier.md` | (playbook, appended at runtime) | — |
+| `catalog_draft_customer.md` | (playbook, appended at runtime) | — |
 
-**Catalog draft:** node `generate_catalog_draft` **không** gọi `load_agent_prompt("catalog_draft")` trực tiếp — dùng `load_catalog_draft_system_prompt(entity_type)` để ghép base + playbook entity.
+**Catalog draft:** the `generate_catalog_draft` node does **not** call `load_agent_prompt("catalog_draft")` directly — it uses `load_catalog_draft_system_prompt(entity_type)` to concatenate the base prompt + the entity-specific playbook.
 
-Phần sau tiêu đề `## JSON output contract` = ràng buộc JSON (giữ trong cùng file; chỉ `catalog_draft.md` cho nhánh catalog).
+Everything after the `## JSON output contract` heading = JSON constraints (kept in the same file; only `catalog_draft.md` for the catalog branch).
 
-Quy tắc **deterministic** (allowlist, enum case, CTE, retry) vẫn nằm trong code Python — không duplicate dài trong MD.
+**Deterministic** rules (allowlists, enum casing, CTEs, retries) remain in the Python code — not duplicated at length in MD.

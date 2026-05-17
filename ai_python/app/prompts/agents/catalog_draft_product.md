@@ -1,38 +1,38 @@
-# Playbook: catalog_draft — `product` (sản phẩm / SKU)
+# Playbook: catalog_draft — `product` (products / SKUs)
 
-## Cột hợp lệ (`columns` và `values`)
+## Valid columns (`columns` and `values`)
 
 | key | label | type | required |
 |-----|-------|------|----------|
-| skuCode | Mã SKU | string | yes |
-| name | Tên SP | string | yes |
-| categoryName | Danh mục | string | no |
-| baseUnitName | Đơn vị | string | yes |
-| costPrice | Giá vốn | number | yes |
-| salePrice | Giá bán | number | yes |
+| skuCode | SKU Code | string | yes |
+| name | Product Name | string | yes |
+| categoryName | Category | string | no |
+| baseUnitName | Unit | string | yes |
+| costPrice | Cost Price | number | yes |
+| salePrice | Sale Price | number | yes |
 | barcode | Barcode | string | no |
-| status | Trạng thái | enum | no — `Active` \| `Inactive` |
+| status | Status | enum | no — `Active` \| `Inactive` |
 
-## Bắt buộc mỗi dòng (`values`)
+## Required per row (`values`)
 
-Mỗi dòng **phải có đủ**: `skuCode`, `name`, `baseUnitName`, `costPrice`, `salePrice`.
+Each row **must include**: `skuCode`, `name`, `baseUnitName`, `costPrice`, `salePrice`.
 
-- `skuCode`: duy nhất trong bảng; gợi ý dạng `DIEN-TU-001`, `SP-AI-001` (chữ/số/gạch).
-- `name`: không để trống; suy từ chủ đề user (vd. "điện tử" → "Sản phẩm điện tử 1", "Sản phẩm điện tử 2").
-- `baseUnitName`: mặc định `"Cái"` nếu user không nêu đơn vị.
-- `costPrice`, `salePrice`: số ≥ 0; nếu user chỉ nêu một giá → coi là `salePrice`, `costPrice` ≈ 80% giá bán (làm tròn số nguyên).
-- `categoryName`: tên danh mục (text), **không** dùng `categoryId`; có thể bỏ qua nếu user không nhắc danh mục.
-- `status`: mặc định `Active`.
+- `skuCode`: unique within the table; suggested format `ELECTRONICS-001`, `SP-AI-001` (letters/digits/hyphens).
+- `name`: must not be empty; infer from the user's topic (e.g. "electronics" → "Electronics Product 1", "Electronics Product 2").
+- `baseUnitName`: defaults to `"Piece"` if the user does not specify a unit.
+- `costPrice`, `salePrice`: numbers ≥ 0; if the user mentions only one price → treat it as `salePrice`, set `costPrice` ≈ 80% of sale price (round to integer).
+- `categoryName`: category name (text), **do not** use `categoryId`; may be omitted if the user does not mention a category.
+- `status`: defaults to `Active`.
 
-## Không được
+## Do not
 
-- Bỏ trống `skuCode`, `name`, `baseUnitName`, `costPrice`, `salePrice`.
-- Trùng `skuCode` giữa các dòng.
-- Dùng key của entity khác (`supplierCode`, `customerCode`, …).
-- Sinh `categoryId` hoặc id database.
+- Leave `skuCode`, `name`, `baseUnitName`, `costPrice`, or `salePrice` empty.
+- Duplicate `skuCode` across rows.
+- Use keys from other entities (`supplierCode`, `customerCode`, …).
+- Generate `categoryId` or database IDs.
 
-## Ví dụ một dòng
+## Example row
 
 ```json
-{ "rowId": "r1", "values": { "skuCode": "DT-001", "name": "Tai nghe Bluetooth 1", "categoryName": "Điện tử", "baseUnitName": "Cái", "costPrice": 40000, "salePrice": 50000, "status": "Active" } }
+{ "rowId": "r1", "values": { "skuCode": "EL-001", "name": "Bluetooth Headphones 1", "categoryName": "Electronics", "baseUnitName": "Piece", "costPrice": 40000, "salePrice": 50000, "status": "Active" } }
 ```
