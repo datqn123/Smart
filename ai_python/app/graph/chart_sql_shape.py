@@ -18,6 +18,14 @@ _SELECT_TIME_BUCKET = re.compile(
 )
 
 
+def sql_has_calendar_spine(sql: str | None) -> bool:
+    """True when SQL uses generate_series (or similar) for full month calendar."""
+    if not sql:
+        return False
+    s = str(sql).lower()
+    return "generate_series" in s and "left join" in s
+
+
 def sql_has_time_grouping(sql: str | None) -> bool:
     """True when SQL likely buckets by time (GROUP BY + date_trunc/extract in SELECT)."""
     if not sql or not str(sql).strip():

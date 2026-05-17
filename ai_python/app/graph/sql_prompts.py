@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
+from app.graph.chart_calendar import MonthCalendarSpec, calendar_spine_prompt_block
 from app.graph.dbmeta import ColumnMeta, SchemaArtifact
 
 # Cap per-column registry text in enriched schema blocks (token control).
@@ -121,6 +122,7 @@ def build_gen_sql_user_prompt(
     multi_table_plan: bool = False,
     chart_thread_context: str | None = None,
     allowed_tables_line: str | None = None,
+    month_calendar: MonthCalendarSpec | None = None,
 ) -> str:
     tail = (dialog_tail or "").strip()
     dialog_block = (
@@ -140,13 +142,20 @@ def build_gen_sql_user_prompt(
     planner_block = ""
     pj = (planner_data_request_json or "").strip()
     if pj:
+        ts_hint = (
+            "time_series: use month calendar spine (generate_series + LEFT JOIN) when "
+            "include_zero_months is true; otherwise GROUP BY time/category."
+            if month_calendar
+            else "time_series needs multiple buckets or calendar spine when include_zero_months is true."
+        )
         planner_block = (
             "Chart/data planning brief (JSON from Agent_Idea — satisfy this read-only SELECT; "
-            "respect expected_result_shape: time_series needs GROUP BY time/category with multiple rows; "
-            "do not add Retail/channel filters unless the brief says so; "
+            f"{ts_hint} "
+            "Do not add Retail/channel filters unless the brief says so; "
             "map to allowed tables/columns only):\n"
             f"{pj}\n\n"
         )
+    calendar_block = calendar_spine_prompt_block(month_calendar) + "\n\n" if month_calendar else ""
     plan_block = _schema_plan_block(schema_plan)
     allow_block = ""
     al = (allowed_tables_line or "").strip()
@@ -178,6 +187,7 @@ def build_gen_sql_user_prompt(
             f"{dialog_block}"
             f"{chart_ctx_block}"
             f"{planner_block}"
+            f"{calendar_block}"
             f"{plan_block}"
             f"{allow_block}"
             f"Schema (allowlist tables):\n{schema_block}\n\n"
@@ -198,6 +208,7 @@ def build_gen_sql_user_prompt(
         f"{dialog_block}"
         f"{chart_ctx_block}"
         f"{planner_block}"
+        f"{calendar_block}"
         f"{plan_block}"
         f"{allow_block}"
         f"Schema (allowlist tables):\n{schema_block}\n\n"

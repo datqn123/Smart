@@ -8,6 +8,7 @@ import sqlparse
 from sqlparse.sql import Comparison, Function, Identifier, IdentifierList, Parenthesis, Statement, Where
 
 from app.config.graph_settings import GraphSettings
+from app.graph.enum_literals import fix_enum_literals_in_sql
 
 _DDL_DML = re.compile(
     r"\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE|GRANT|REVOKE)\b",
@@ -375,6 +376,8 @@ def validate_sql_deterministic(
     s = normalize_llm_sql_output(sql)
     if not s:
         return False, "empty sql", None, notes
+    s, enum_notes = fix_enum_literals_in_sql(s)
+    notes.extend(enum_notes)
     parsed = sqlparse.parse(s)
     if len(parsed) != 1:
         return False, "only single statement allowed", None, notes

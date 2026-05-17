@@ -28,6 +28,8 @@ from app.graph.retry_policy import (
 from app.graph.state import AgentState
 from app.graph.message_utils import format_dialog_tail_for_sql, latest_human_question
 from app.graph.logging_policy import safe_log_sql
+from app.graph.chart_calendar import resolve_month_calendar
+from app.graph.enum_literals import enum_literals_prompt_block
 from app.graph.chart_schema_merge import (
     allowed_tables_prompt_line,
     infer_tables_from_chart_context,
@@ -132,7 +134,12 @@ def _load_schema_artifact(
     return None, RuntimeError(msg)
 
 
-def _build_gen_sql_system(allow_names: set[str], *, ledger_first: bool) -> str:
+def _build_gen_sql_system(
+    allow_names: set[str],
+    *,
+    ledger_first: bool,
+    month_calendar: bool = False,
+) -> str:
     parts = [
         "Reply with ONLY one PostgreSQL SELECT (read-only). ",
         "No natural-language before or after the SQL (any language). ",
@@ -154,8 +161,15 @@ def _build_gen_sql_system(allow_names: set[str], *, ledger_first: bool) -> str:
         parts.append(
             "Shipment/dispatch metrics: use stockdispatches (e.g. dispatch_date), not salesorders.\n"
         )
+    if month_calendar:
+        parts.append(
+            "Month calendar: when the prompt requires include_zero_months / calendar spine, "
+            "you MUST use generate_series + LEFT JOIN so every month in range appears; "
+            "use COALESCE(COUNT(...), 0) for empty months.\n"
+        )
+    parts.append(enum_literals_prompt_block())
     parts.append(
-        "If a table is not in the schema block, you must not reference it — pick the closest allowed table."
+        "\nIf a table is not in the schema block, you must not reference it — pick the closest allowed table."
     )
     return "".join(parts)
 
@@ -274,6 +288,10 @@ def make_gen_sql_node(deps: GraphDeps):
             except Exception:
                 planner_json = None
         chart_ctx = (state.get("chart_thread_context") or "").strip() or None
+        month_cal = resolve_month_calendar(
+            user_q,
+            idea_req if isinstance(idea_req, dict) else None,
+        )
         allow_line = allowed_tables_prompt_line(artifact)
         prompt = build_gen_sql_user_prompt(
             mode=mode,  # type: ignore[arg-type]
@@ -289,6 +307,7 @@ def make_gen_sql_node(deps: GraphDeps):
             multi_table_plan=multi_table_plan,
             chart_thread_context=chart_ctx,
             allowed_tables_line=allow_line,
+            month_calendar=month_cal,
         )
         if reg is None:
             sql = f"SELECT 1 AS ok LIMIT {deps.settings.sql_limit_max}"
@@ -310,7 +329,11 @@ def make_gen_sql_node(deps: GraphDeps):
                 out_none["selected_tables"] = selected_tables
             return out_none
         allow_names = artifact.allowlist_table_names()
-        _gen_sql_system = _build_gen_sql_system(allow_names, ledger_first=ledger_first)
+        _gen_sql_system = _build_gen_sql_system(
+            allow_names,
+            ledger_first=ledger_first,
+            month_calendar=month_cal is not None,
+        )
         client = reg.get("sql_gen")
         sql = client.invoke_text(prompt, system=_gen_sql_system)
         sql_stripped = normalize_llm_sql_output(sql)

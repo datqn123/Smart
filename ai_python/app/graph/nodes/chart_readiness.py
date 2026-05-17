@@ -8,6 +8,7 @@ import logging
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.graph.agent_trace import emit_agent_trace
+from app.graph.chart_calendar import resolve_month_calendar
 from app.graph.chart_data_profile import build_query_result_profile, profile_for_prompt
 from app.graph.chart_sql_shape import sql_has_time_grouping
 from app.graph.deps import GraphDeps
@@ -26,9 +27,10 @@ logger = logging.getLogger(__name__)
 _READINESS_SYSTEM = (
     "You judge whether SQL query results are adequate to draw the user's chart.\n"
     "You do NOT prescribe specific table names. Use the chart brief and the data profile only.\n"
-    "If executed SQL already has GROUP BY time bucketing (date_trunc/extract) and profile shows a "
-    "time-like column but only one row, set ok=true with a warning — the database may only have one "
-    "period of data; do NOT ask to rewrite SQL.\n"
+    "If the brief requires include_zero_months / full month calendar, results must have one row per "
+    "month in range (zeros allowed). If SQL used only fact GROUP BY without generate_series, set ok=false.\n"
+    "If include_zero_months is false and SQL has time grouping with one row, set ok=true with warning "
+    "(sparse data).\n"
     "Set ok=false with retry_hint only when SQL is clearly wrong (no time bucket, wrong metric, "
     "contradicts brief) — not merely because row_count is small.\n"
     "warnings: non-fatal (e.g. only one month of data but chart can still render one bar)."
@@ -54,6 +56,7 @@ def _heuristic_readiness(
     *,
     expected_shape: str,
     generated_sql: str | None = None,
+    expected_month_count: int | None = None,
 ) -> tuple[bool, list[str], list[str]]:
     """Lightweight shape checks — no table-name rules."""
     issues: list[str] = []
@@ -66,9 +69,21 @@ def _heuristic_readiness(
     shape = expected_shape or ""
     time_cols = profile.get("time_like_columns") or []
     grouped = sql_has_time_grouping(generated_sql)
+    if expected_month_count and expected_month_count > 1:
+        if rc < expected_month_count:
+            issues.append(
+                f"include_zero_months requires {expected_month_count} month rows "
+                f"(generate_series + LEFT JOIN + COALESCE); got row_count={rc}"
+            )
+        elif rc > expected_month_count:
+            warnings.append(
+                f"more rows ({rc}) than calendar months ({expected_month_count}) — verify grouping"
+            )
 
     if shape == "time_series" or shape == "breakdown":
-        if rc == 1:
+        if expected_month_count and expected_month_count > 1:
+            pass
+        elif rc == 1:
             if grouped or time_cols:
                 warnings.append(
                     "only one time bucket in result — chart will be a single bar; "
@@ -110,10 +125,15 @@ def make_chart_readiness_node(deps: GraphDeps):
         profile = build_query_result_profile(qr)
         shape = _expected_shape(brief)
         sql_text = state.get("generated_sql")
+        user_q = latest_human_question(state.get("messages"))
+        dr = brief.get("data_request") if isinstance(brief.get("data_request"), dict) else {}
+        month_cal = resolve_month_calendar(user_q, dr)
+        exp_months = month_cal.month_count if month_cal else None
         ok_h, issues_h, warnings_h = _heuristic_readiness(
             profile,
             expected_shape=shape,
             generated_sql=str(sql_text) if sql_text else None,
+            expected_month_count=exp_months,
         )
 
         issues = list(issues_h)
@@ -203,9 +223,22 @@ def _has_usable_rows(state: AgentState) -> bool:
     return isinstance(rows, list) and len(rows) > 0
 
 
+def _state_for_chart_retry_route(state: AgentState) -> AgentState:
+    """Exclude feedback appended in the same chart_readiness turn (budget is per regen_sql)."""
+    fb = state.get("validation_feedback")
+    if not isinstance(fb, dict):
+        return state
+    result = list(fb.get("result") or [])
+    if not result or "chart readiness" not in str(result[-1]).lower():
+        return state
+    trimmed = {**fb, "result": result[:-1]}
+    return {**state, "validation_feedback": trimmed}
+
+
 def route_after_chart_readiness_in_sql(state: AgentState) -> str:
     if state.get("chart_data_ok"):
         return "done"
-    if decide_chart_readiness_retry(state).action == RetryAction.REGEN_SQL:
+    route_state = _state_for_chart_retry_route(state)
+    if decide_chart_readiness_retry(route_state).action == RetryAction.REGEN_SQL:
         return "gen_sql"
     return "fail_max_attempts"

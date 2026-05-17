@@ -75,6 +75,9 @@ _IDEA_SYSTEM = (
     "Câu hỏi kho/xuất kho/đơn giao: mô tả entity (đơn xuất, dispatch…) — không ép sổ cái.\n"
     "chart_idea: chart_type gợi ý (line|bar), trục X/Y bằng ngôn ngữ nghiệp vụ.\n"
     "Kênh Retail/POS: chỉ thêm filter khi người dùng nói rõ bán lẻ/Retail/POS.\n"
+    "Nếu người dùng muốn biểu đồ theo tháng và nói tháng không có đơn/dữ liệu vẫn hiển thị, "
+    "đủ 12 tháng, hoặc month 1-12: set data_request.include_zero_months=true và "
+    "calendar {year, from_month, to_month} (mặc định 1-12 trong năm được nêu).\n"
     "Nếu có prior thread context và câu chart cùng chủ đề với câu trước, brief phải khớp metric/thời gian "
     "với câu trả lời số trước (không đổi bảng/metric ngầm)."
 )

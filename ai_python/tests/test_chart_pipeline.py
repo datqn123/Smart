@@ -7,7 +7,13 @@ from langchain_core.messages import AIMessage, HumanMessage
 from app.config.graph_settings import GraphSettings
 from app.graph.chart_data_profile import build_query_result_profile
 from app.graph.chart_thread_context import format_prior_turns_for_chart
+from app.graph.chart_calendar import (
+    calendar_spine_prompt_block,
+    resolve_month_calendar,
+    wants_zero_fill_months,
+)
 from app.graph.chart_schema_merge import infer_tables_from_chart_context
+from app.graph.sql_prompts import build_gen_sql_user_prompt
 from app.graph.chart_sql_shape import sql_has_time_grouping
 from app.graph.nodes.chart_readiness import _heuristic_readiness
 from app.graph.nodes.sql_pipeline import _effective_ledger_first_prompts
@@ -105,3 +111,60 @@ def test_format_prior_turns_for_chart() -> None:
     ctx = format_prior_turns_for_chart(msgs, max_turns=2)
     assert "34 đơn" in ctx
     assert "xuất kho" in ctx
+
+
+def test_wants_zero_fill_months_from_phrase() -> None:
+    q = "vẽ biểu đồ đơn bán lẻ 2026, tháng không có đơn cũng vẽ"
+    assert wants_zero_fill_months(q, None) is True
+
+
+def test_resolve_month_calendar_jan_to_april() -> None:
+    q = "đơn bán lẻ tháng 1-4 năm 2026, tháng không có đơn cũng vẽ"
+    spec = resolve_month_calendar(q, {"include_zero_months": True})
+    assert spec is not None
+    assert spec.year == 2026
+    assert spec.from_month == 1
+    assert spec.to_month == 4
+    assert spec.month_count == 4
+
+
+def test_calendar_spine_prompt_block_mentions_generate_series() -> None:
+    from app.graph.chart_calendar import MonthCalendarSpec
+
+    spec = MonthCalendarSpec(year=2026, from_month=1, to_month=4)
+    block = calendar_spine_prompt_block(spec)
+    assert "generate_series" in block
+    assert "LEFT JOIN" in block
+    assert "4" in block
+
+
+def test_heuristic_zero_fill_one_row_fails() -> None:
+    ok, issues, _ = _heuristic_readiness(
+        {"row_count": 1, "time_like_columns": ["month"]},
+        expected_shape="time_series",
+        generated_sql=(
+            "SELECT DATE_TRUNC('month', created_at) AS month, COUNT(*) "
+            "FROM salesorders GROUP BY 1"
+        ),
+        expected_month_count=4,
+    )
+    assert not ok
+    assert any("include_zero_months" in i for i in issues)
+
+
+def test_gen_sql_prompt_includes_calendar_block() -> None:
+    from app.graph.chart_calendar import MonthCalendarSpec
+
+    spec = MonthCalendarSpec(year=2026, from_month=1, to_month=12)
+    prompt = build_gen_sql_user_prompt(
+        mode="exploit",
+        user_q="đơn bán lẻ 2026",
+        schema_block="-- schema",
+        feedback_render="",
+        seed_sql=None,
+        sql_limit_max=500,
+        planner_data_request_json='{"expected_result_shape":"time_series"}',
+        month_calendar=spec,
+    )
+    assert "generate_series" in prompt
+    assert "include_zero_months" in prompt.lower() or "calendar spine" in prompt.lower()
