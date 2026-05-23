@@ -11,10 +11,10 @@
 ## Response từ AI
 **Trả lời:**
 
-Xin lá»i, khÃ´ng hoÃ n táº¥t truy váº¥n (mÃ£ lá»i: max_sql_attempts, attempts=3). Báº¡n cÃ³ thá» thá»­ cÃ¡c cÃ¢u há»i sau:
-- Danh sÃ¡ch sáº£n pháº©m sáº¯p háº¿t háº¡n sá»­ dá»¥ng trong 30 ngÃ y tá»i
-- Sáº£n pháº©m nÃ o cÃ³ sá» lÆ°á»£ng tá»n kho Ã­t hÆ¡n 100
-- Danh sÃ¡ch sáº£n pháº©m ÄÃ£ háº¿t háº¡n sá»­ dá»¥ng
+Xin lỗi, không hoàn tất truy vấn (mã lỗi: max_sql_attempts, attempts=3). Bạn có thể thử các câu hỏi sau:
+- Danh sách sản phẩm sắp hết hạn sử dụng trong 30 ngày tới
+- Sản phẩm nào có số lượng tồn kho ít hơn 100
+- Danh sách sản phẩm đã hết hạn sử dụng
 
 
 

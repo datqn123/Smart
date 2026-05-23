@@ -4,12 +4,13 @@
 - **Câu hỏi:** Khách vãng lai mua lẻ tổng cộng được bao nhiêu?
 - **Nhóm:** natural_language
 - **Intent dự kiến:** `system_data_query`
-- **Ngày test:** 
-- **Thời gian phản hồi:** 
-- **Trạng thái:** ⬜ Chưa test / ✅ Pass / ❌ Fail / ⚠️ Partial
+- **Ngày test:** 17/05/2026 21:27:20
+- **Thời gian phản hồi:** 124181ms
+- **Trạng thái:** ❌ Fail
 
 ## Response từ AI
-_(Chưa có)_
+**Lỗi:** HTTPConnectionPool(host='127.0.0.1', port=8080): Read timed out.
+
 
 ## Kiểm tra
 - [ ] Intent đúng với dự kiến

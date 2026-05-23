@@ -11,11 +11,11 @@
 ## Response từ AI
 **Trả lời:**
 
-CÃ³ 3 giao dá»ch thu chi Äang á» tráº¡ng thÃ¡i Pending:
+Có 3 giao dịch thu chi đang ở trạng thái Pending:
 
-- Thu tiá»n khÃ¡ch láº» (PT-2026-0001): 500.000 VND
-- Chi phÃ­ váº­n hÃ nh (PC-2026-0001): 120.000 VND
-- Chi khÃ¡c (PC-2026-0002): 80.000 VND
+- Thu tiền khách lẻ (PT-2026-0001): 500.000 VND
+- Chi phí vận hành (PC-2026-0001): 120.000 VND
+- Chi khác (PC-2026-0002): 80.000 VND
 
 
 

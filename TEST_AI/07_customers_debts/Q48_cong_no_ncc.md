@@ -11,11 +11,11 @@
 ## Response từ AI
 **Trả lời:**
 
-KhÃ´ng tÃ¬m tháº¥y nhÃ  cung cáº¥p nÃ o cÃ³ cÃ´ng ná»£ chÆ°a thanh toÃ¡n. CÃ³ thá» do thá»i gian thanh toÃ¡n ÄÃ£ háº¿t háº¡n, hoáº·c nhÃ  cung cáº¥p ÄÃ£ thanh toÃ¡n Äáº§y Äá»§. Báº¡n cÃ³ thá» thá»­ há»i vá» cÃ¡c nhÃ  cung cáº¥p ÄÃ£ thanh toÃ¡n, hoáº·c tÃ¬m kiáº¿m thÃ´ng tin vá» cÃ¡c nhÃ  cung cáº¥p cá»¥ thá».
+Không tìm thấy nhà cung cấp nào có công nợ chưa thanh toán. Có thể do thời gian thanh toán đã hết hạn, hoặc nhà cung cấp đã thanh toán đầy đủ. Bạn có thể thử hỏi về các nhà cung cấp đã thanh toán, hoặc tìm kiếm thông tin về các nhà cung cấp cụ thể.
 
-- Báº¡n cÃ³ thá» há»i vá» cÃ¡c nhÃ  cung cáº¥p ÄÃ£ thanh toÃ¡n, hoáº·c tÃ¬m kiáº¿m thÃ´ng tin vá» cÃ¡c nhÃ  cung cáº¥p cá»¥ thá».
-- Báº¡n cÃ³ thá» há»i vá» cÃ¡c nhÃ  cung cáº¥p ÄÃ£ thanh toÃ¡n, hoáº·c tÃ¬m kiáº¿m thÃ´ng tin vá» cÃ¡c nhÃ  cung cáº¥p cá»¥ thá».
-- Báº¡n cÃ³ thá» há»i vá» cÃ¡c nhÃ  cung cáº¥p ÄÃ£ thanh toÃ¡n, hoáº·c tÃ¬m kiáº¿m thÃ´ng tin vá» cÃ¡c nhÃ  cung cáº¥p cá»¥ thá».
+- Bạn có thể hỏi về các nhà cung cấp đã thanh toán, hoặc tìm kiếm thông tin về các nhà cung cấp cụ thể.
+- Bạn có thể hỏi về các nhà cung cấp đã thanh toán, hoặc tìm kiếm thông tin về các nhà cung cấp cụ thể.
+- Bạn có thể hỏi về các nhà cung cấp đã thanh toán, hoặc tìm kiếm thông tin về các nhà cung cấp cụ thể.
 
 
 

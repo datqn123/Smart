@@ -49,6 +49,17 @@ class DomainGuardOutput(BaseModel):
 class SqlReviewOutput(BaseModel):
     ok: bool
     issues: list[str] = Field(default_factory=list)
+    retry_hint: str = Field(
+        default="",
+        description=(
+            "When ok=false: concrete rewrite instructions for gen_sql "
+            "(tables, columns, filters, GROUP BY). Empty when ok=true."
+        ),
+    )
+    suggested_tables: list[str] = Field(
+        default_factory=list,
+        description="Registry table names the next SQL attempt should use (subset of allowlist).",
+    )
 
 
 class SqlTablePickOutput(BaseModel):

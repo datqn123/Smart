@@ -56,6 +56,11 @@ def infer_tables_from_chart_context(
         "order_channel",
         "kênh bán",
         "kenh ban",
+        "nguồn",
+        "nguon",
+        "nguồn doanh thu",
+        "nguon doanh thu",
+        "revenue source",
     )
     if any(p in text for p in order_phrases) or dr.get("entity", "").lower() in (
         "orders",

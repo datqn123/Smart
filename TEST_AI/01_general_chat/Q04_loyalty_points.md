@@ -11,7 +11,7 @@
 ## Response từ AI
 **Trả lời:**
 
-Äiá»m tÃ­ch lÅ©y khÃ¡ch hÃ ng (loyalty_points) lÃ  má»t chÆ°Æ¡ng trÃ¬nh trung thÃ nh khÃ¡ch hÃ ng, cho phÃ©p khÃ¡ch hÃ ng tÃ­ch lÅ©y Äiá»m khi mua sáº¯m vÃ  Äá»i Äiá»m láº¥y pháº§n thÆ°á»ng hoáº·c giáº£m giÃ¡. Trong há» thá»ng ERP, Äiá»m tÃ­ch lÅ©y khÃ¡ch hÃ ng ÄÆ°á»£c quáº£n lÃ½ thÃ´ng qua cÃ¡c quy táº¯c vÃ  chÃ­nh sÃ¡ch.
+Điểm tích lũy khách hàng (loyalty_points) là một chương trình trung thành khách hàng, cho phép khách hàng tích lũy điểm khi mua sắm và đổi điểm lấy phần thưởng hoặc giảm giá. Trong hệ thống ERP, điểm tích lũy khách hàng được quản lý thông qua các quy tắc và chính sách.
 
 
 

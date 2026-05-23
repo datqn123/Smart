@@ -9,7 +9,12 @@
 - **Trạng thái:** ❌ Fail
 
 ## Response từ AI
-_Không có phản hồi._
+**Trả lời:**
+
+Để kiểm tra các sản phẩm sắp hết hạn trong 30 ngày tới, bạn có thể thử các câu hỏi sau:
+- Danh sách sản phẩm nào có ngày hết hạn trong vòng 30 ngày tới?
+- Sản phẩm nào cần được ưu tiên bán trong 30 ngày tới để tránh hết hạn?
+- Có sản phẩm nào cần được xử lý đặc biệt trong 30 ngày tới để tránh lãng phí?
 
 
 ## Kiểm tra

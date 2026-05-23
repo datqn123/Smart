@@ -82,7 +82,14 @@ class FakeLlmClient:
         if schema.__name__ == "SqlReviewOutput":
             if self._sql_review_fail_left > 0:
                 self._sql_review_fail_left -= 1
-                return schema.model_validate({"ok": False, "issues": ["forced fail"]})  # type: ignore[return-value]
+                return schema.model_validate(  # type: ignore[return-value]
+                    {
+                        "ok": False,
+                        "issues": ["forced fail"],
+                        "retry_hint": "Use allowlisted tables only; add LIMIT.",
+                        "suggested_tables": [],
+                    }
+                )
             return schema.model_validate({"ok": True, "issues": []})  # type: ignore[return-value]
         if schema.__name__ == "SqlTablePickOutput":
             picks = self._table_pick if self._table_pick else ["customers"]

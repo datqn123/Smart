@@ -11,12 +11,12 @@
 ## Response từ AI
 **Trả lời:**
 
-CÃ³ 4 phiáº¿u xuáº¥t kho Äang chá» duyá»t (Pending):
+Có 4 phiếu xuất kho đang chờ duyệt (Pending):
 
-- PX3301 (NgÃ y xuáº¥t: 2026-05-02)
-- PX3305 (NgÃ y xuáº¥t: 2026-04-24)
-- PX3309 (NgÃ y xuáº¥t: 2026-04-16, Ghi chÃº: Kiá»m tra seal trÆ°á»c khi giao)
-- PX3313 (NgÃ y xuáº¥t: 2026-04-08)
+- PX3301 (Ngày xuất: 2026-05-02)
+- PX3305 (Ngày xuất: 2026-04-24)
+- PX3309 (Ngày xuất: 2026-04-16, Ghi chú: Kiểm tra seal trước khi giao)
+- PX3313 (Ngày xuất: 2026-04-08)
 
 
 

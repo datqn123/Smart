@@ -11,7 +11,7 @@
 ## Response từ AI
 **Trả lời:**
 
-Dá»±a trÃªn sá» liá»u tá»n kho, sáº£n pháº©m cÃ³ sá» lÆ°á»£ng tá»n kho cao nháº¥t lÃ  nÆ°á»c suá»i 500ml vá»i mÃ£ SKU lÃ  DEMO-NUOC-500 vÃ  sá» lÆ°á»£ng tá»n kho lÃ  240. Äiá»u nÃ y cho tháº¥y sáº£n pháº©m nÃ y Äang ÄÆ°á»£c Æ°u tiÃªn cung cáº¥p vÃ  cÃ³ thá» lÃ  sáº£n pháº©m bÃ¡n cháº¡y nháº¥t trong danh má»¥c sáº£n pháº©m cá»§a cÃ´ng ty.
+Dựa trên số liệu tồn kho, sản phẩm có số lượng tồn kho cao nhất là nước suối 500ml với mã SKU là DEMO-NUOC-500 và số lượng tồn kho là 240. Điều này cho thấy sản phẩm này đang được ưu tiên cung cấp và có thể là sản phẩm bán chạy nhất trong danh mục sản phẩm của công ty.
 
 
 

@@ -11,11 +11,11 @@
 ## Response từ AI
 **Trả lời:**
 
-KhÃ´ng tÃ¬m tháº¥y nhÃ  cung cáº¥p nÃ o Äang á» tráº¡ng thÃ¡i Inactive. CÃ³ thá» do táº¥t cáº£ nhÃ  cung cáº¥p Äá»u Äang hoáº¡t Äá»ng, hoáº·c chÆ°a cÃ³ nhÃ  cung cáº¥p nÃ o ÄÆ°á»£c thiáº¿t láº­p tráº¡ng thÃ¡i Inactive. Báº¡n cÃ³ thá» kiá»m tra láº¡i thÃ´ng tin hoáº·c xem xÃ©t cÃ¡c Äiá»u kiá»n khÃ¡c.
+Không tìm thấy nhà cung cấp nào đang ở trạng thái Inactive. Có thể do tất cả nhà cung cấp đều đang hoạt động, hoặc chưa có nhà cung cấp nào được thiết lập trạng thái Inactive. Bạn có thể kiểm tra lại thông tin hoặc xem xét các điều kiện khác.
 
-- Liá»t kÃª táº¥t cáº£ nhÃ  cung cáº¥p Äang hoáº¡t Äá»ng.
-- TÃ¬m kiáº¿m nhÃ  cung cáº¥p má»i nháº¥t ÄÆ°á»£c thÃªm vÃ o há» thá»ng.
-- Kiá»m tra tráº¡ng thÃ¡i cá»§a má»t nhÃ  cung cáº¥p cá»¥ thá».
+- Liệt kê tất cả nhà cung cấp đang hoạt động.
+- Tìm kiếm nhà cung cấp mới nhất được thêm vào hệ thống.
+- Kiểm tra trạng thái của một nhà cung cấp cụ thể.
 
 
 

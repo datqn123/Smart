@@ -4,12 +4,15 @@
 - **Câu hỏi:** Phiếu nhập kho là gì vậy?
 - **Nhóm:** natural_language
 - **Intent dự kiến:** `general_chat`
-- **Ngày test:** 
-- **Thời gian phản hồi:** 
-- **Trạng thái:** ⬜ Chưa test / ✅ Pass / ❌ Fail / ⚠️ Partial
+- **Ngày test:** 17/05/2026 21:30:05
+- **Thời gian phản hồi:** 11169ms
+- **Trạng thái:** ✅ Pass
 
 ## Response từ AI
-_(Chưa có)_
+**Trả lời:**
+
+Cần làm rõ thêm — xem chi tiết và câu đề xuất trong khung bên dưới.
+
 
 ## Kiểm tra
 - [ ] Intent đúng với dự kiến

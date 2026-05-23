@@ -11,11 +11,11 @@
 ## Response từ AI
 **Trả lời:**
 
-Total operating expense hiá»n táº¡i lÃ  **-230.000** (theo káº¿t quáº£ truy váº¥n SQL, bÃ¡m ÄÃºng sá» liá»u há» thá»ng).
+Total operating expense hiện tại là **-230.000** (theo kết quả truy vấn SQL, bám đúng số liệu hệ thống).
 
-Náº¿u cáº§n chi tiáº¿t theo tá»«ng dÃ²ng (SKU, phiáº¿u, khÃ¡ch hÃ ngâ¦), hÃ£y há»i rÃµ tÃªn hoáº·c mÃ£ Äá» há» thá»ng tráº£ danh sÃ¡ch cá»¥ thá».
+Nếu cần chi tiết theo từng dòng (SKU, phiếu, khách hàng…), hãy hỏi rõ tên hoặc mã để hệ thống trả danh sách cụ thể.
 
-VÃ­ dá»¥: âChi phÃ­ hoáº¡t Äá»ng cá»§a phiáº¿u XK001?â hoáº·c âChi phÃ­ hoáº¡t Äá»ng cá»§a khÃ¡ch hÃ ng ABC?â
+Ví dụ: “Chi phí hoạt động của phiếu XK001?” hoặc “Chi phí hoạt động của khách hàng ABC?”
 
 
 

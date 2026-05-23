@@ -9,7 +9,11 @@
 - **Trạng thái:** ❌ Fail
 
 ## Response từ AI
-_Không có phản hồi._
+**Trả lời:**
+
+So luong mat hang sap het là **3**.
+
+Nếu bạn muốn xem chi tiết theo từng mặt hàng, phiếu hoặc khách hàng, hãy nêu rõ tên hoặc mã cụ thể nhé.
 
 
 ## Kiểm tra

@@ -9,7 +9,14 @@
 - **Trạng thái:** ❌ Fail
 
 ## Response từ AI
-_Không có phản hồi._
+**Trả lời:**
+
+**NCC seed V10 A** — receipt số lượng **11**.
+
+Chi tiết:
+
+- Tên: **NCC seed V10 A**
+- receipt số lượng: **11**
 
 
 ## Kiểm tra

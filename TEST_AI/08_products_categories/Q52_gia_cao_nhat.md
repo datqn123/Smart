@@ -11,20 +11,20 @@
 ## Response từ AI
 **Trả lời:**
 
-Top 10 sáº£n pháº©m cÃ³ giÃ¡ bÃ¡n cao nháº¥t trong há» thá»ng lÃ :
+Top 10 sản phẩm có giá bán cao nhất trong hệ thống là:
 
-- MÃ¡y tÃ­nh (SKU: COMPUTER-005) vá»i giÃ¡ bÃ¡n cao nháº¥t lÃ  **17.000.000**
-- MÃ¡y tÃ­nh (SKU: COMPUTER-004) vá»i giÃ¡ bÃ¡n cao nháº¥t lÃ  **16.500.000**
-- MÃ¡y tÃ­nh (SKU: COMPUTER-003) vá»i giÃ¡ bÃ¡n cao nháº¥t lÃ  **16.000.000**
-- MÃ¡y tÃ­nh (SKU: COMPUTER-002) vá»i giÃ¡ bÃ¡n cao nháº¥t lÃ  **15.500.000**
-- MÃ¡y tÃ­nh (SKU: COMPUTER-001) vá»i giÃ¡ bÃ¡n cao nháº¥t lÃ  **15.000.000**
-- MÃ¡y tÃ­nh (SKU: EL-COM-001) vá»i giÃ¡ bÃ¡n cao nháº¥t lÃ  **10.000.000**
-- Coca 330ml thÃ¹ng 24 (SKU: UONG-COKE-24) vá»i giÃ¡ bÃ¡n cao nháº¥t lÃ  **200.000**
-- Gáº¡o táº» 5kg (SKU: TP-GAO-5) vá»i giÃ¡ bÃ¡n cao nháº¥t lÃ  **100.000**
-- NÆ°á»c máº¯m 40Â°N 500ml (SKU: GV-NM-500) vá»i giÃ¡ bÃ¡n cao nháº¥t lÃ  **32.000**
-- Tokboki (SKU: SP9150) vá»i giÃ¡ bÃ¡n cao nháº¥t lÃ  **30.000**
+- Máy tính (SKU: COMPUTER-005) với giá bán cao nhất là **17.000.000**
+- Máy tính (SKU: COMPUTER-004) với giá bán cao nhất là **16.500.000**
+- Máy tính (SKU: COMPUTER-003) với giá bán cao nhất là **16.000.000**
+- Máy tính (SKU: COMPUTER-002) với giá bán cao nhất là **15.500.000**
+- Máy tính (SKU: COMPUTER-001) với giá bán cao nhất là **15.000.000**
+- Máy tính (SKU: EL-COM-001) với giá bán cao nhất là **10.000.000**
+- Coca 330ml thùng 24 (SKU: UONG-COKE-24) với giá bán cao nhất là **200.000**
+- Gạo tẻ 5kg (SKU: TP-GAO-5) với giá bán cao nhất là **100.000**
+- Nước mắm 40°N 500ml (SKU: GV-NM-500) với giá bán cao nhất là **32.000**
+- Tokboki (SKU: SP9150) với giá bán cao nhất là **30.000**
 
-Nhá»¯ng sáº£n pháº©m nÃ y cÃ³ giÃ¡ bÃ¡n cao nháº¥t trong há» thá»ng vÃ  cÃ³ thá» ÄÆ°á»£c xem xÃ©t cho cÃ¡c chÆ°Æ¡ng trÃ¬nh Æ°u ÄÃ£i hoáº·c khuyáº¿n mÃ£i Äáº·c biá»t.
+Những sản phẩm này có giá bán cao nhất trong hệ thống và có thể được xem xét cho các chương trình ưu đãi hoặc khuyến mãi đặc biệt.
 
 
 

@@ -11,7 +11,7 @@
 ## Response từ AI
 **Trả lời:**
 
-KhÃ´ng tÃ¬m tháº¥y thÃ´ng tin liÃªn quan Äáº¿n 'xxx yyy zzz' trong há» thá»ng ERP. Há» thá»ng ERP há» trá»£ quáº£n lÃ½ cÃ¡c lÄ©nh vá»±c nhÆ° quáº£n lÃ½ kho, sáº£n pháº©m, ÄÆ¡n hÃ ng, tÃ i chÃ­nh, vÃ  bÃ¡o cÃ¡o. Báº¡n cÃ³ thá» há»i vá» cÃ¡c váº¥n Äá» liÃªn quan Äáº¿n cÃ¡c lÄ©nh vá»±c nÃ y. VÃ­ dá»¥: 'Liá»t kÃª cÃ¡c sáº£n pháº©m trong kho', 'TÃ¬m kiáº¿m thÃ´ng tin vá» má»t ÄÆ¡n hÃ ng cá»¥ thá»', hoáº·c 'Xem bÃ¡o cÃ¡o tÃ i chÃ­nh hÃ ng thÃ¡ng'.
+Không tìm thấy thông tin liên quan đến 'xxx yyy zzz' trong hệ thống ERP. Hệ thống ERP hỗ trợ quản lý các lĩnh vực như quản lý kho, sản phẩm, đơn hàng, tài chính, và báo cáo. Bạn có thể hỏi về các vấn đề liên quan đến các lĩnh vực này. Ví dụ: 'Liệt kê các sản phẩm trong kho', 'Tìm kiếm thông tin về một đơn hàng cụ thể', hoặc 'Xem báo cáo tài chính hàng tháng'.
 
 
 

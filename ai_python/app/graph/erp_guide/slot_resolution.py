@@ -209,6 +209,85 @@ def strip_noop_issues(issues: list[DomainIssue]) -> list[DomainIssue]:
     return out
 
 
+_CATALOG_MODULE_IDS = frozenset({"catalog"})
+
+_CATEGORY_LABEL_CANONICALS = frozenset(
+    {
+        "loại sản phẩm",
+        "danh mục",
+        "danh mục sản phẩm",
+        "nhóm hàng",
+        "nhóm sản phẩm",
+        "category",
+    }
+)
+
+_PRODUCT_COLLOQUIAL_CANONICALS = frozenset(
+    {
+        "sản phẩm",
+        "product",
+        "hàng hóa",
+    }
+)
+
+
+def _mentions_category_assignment(question: str) -> bool:
+    q = question.lower()
+    return "danh mục" in q or "danh muc" in q or "category" in q
+
+
+def is_catalog_write_intent(question: str) -> bool:
+    """User is creating/updating catalog master data (product, category, …)."""
+    q = question.lower()
+    if not re.search(r"\b(thêm|tạo|thêm mới|cho mình|giúp)\b", q):
+        return False
+    return bool(re.search(r"\b(sản phẩm|món|sku|hàng)\b", q))
+
+
+def catalog_module_matched(matched_modules: list[str] | None) -> bool:
+    for raw in matched_modules or []:
+        mid = _norm(str(raw)).strip("[]")
+        if mid in _CATALOG_MODULE_IDS:
+            return True
+    return False
+
+
+def strip_catalog_draft_misnomers(issues: list[DomainIssue], question: str) -> list[DomainIssue]:
+    """Do not block catalog drafts on valid category names or colloquial «món»."""
+    catalog_ctx = is_catalog_write_intent(question) or _mentions_category_assignment(question)
+    if not catalog_ctx:
+        return issues
+    q_lower = question.lower()
+    out: list[DomainIssue] = []
+    for i in issues:
+        if i.type != "term_mismatch":
+            out.append(i)
+            continue
+        ut = (i.user_text or "").strip().lower()
+        canon = (i.canonical_vi or "").strip().lower()
+        if _mentions_category_assignment(question) and ut and ut in q_lower:
+            if canon in _CATEGORY_LABEL_CANONICALS:
+                continue
+        if is_catalog_write_intent(question) and ut == "món" and canon in _PRODUCT_COLLOQUIAL_CANONICALS:
+            continue
+        out.append(i)
+    return out
+
+
+def should_proceed_after_repeated_clarify(
+    *,
+    question: str,
+    matched_modules: list[str] | None,
+    identical_human_turns: int,
+) -> bool:
+    """User resent the same catalog request after clarify — stop looping."""
+    if identical_human_turns < 2:
+        return False
+    if not catalog_module_matched(matched_modules):
+        return False
+    return is_catalog_write_intent(question) or _mentions_category_assignment(question)
+
+
 def has_blocking_issues(issues: list[DomainIssue]) -> bool:
     return any(i.severity == "block" and i.type == "term_mismatch" for i in issues)
 

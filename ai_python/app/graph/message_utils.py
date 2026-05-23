@@ -72,6 +72,26 @@ def count_human_turns(messages: list[BaseMessage] | None) -> int:
     return n
 
 
+def count_identical_human_messages(
+    messages: list[BaseMessage] | None,
+    question: str,
+) -> int:
+    """How many user turns match the current question text (case-insensitive)."""
+    target = strip_embedded_chat_transcript(question).strip().lower()
+    if not target:
+        return 0
+    n = 0
+    for m in messages or []:
+        if isinstance(m, HumanMessage):
+            c = getattr(m, "content", "")
+            if c is None:
+                continue
+            s = strip_embedded_chat_transcript(str(c)).strip().lower()
+            if s == target:
+                n += 1
+    return n
+
+
 def _human_turn_start_indices(messages: list[BaseMessage]) -> list[int]:
     """Indices of each non-empty HumanMessage in order."""
     out: list[int] = []

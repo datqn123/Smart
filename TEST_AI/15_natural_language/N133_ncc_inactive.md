@@ -9,7 +9,13 @@
 - **Trạng thái:** ❌ Fail
 
 ## Response từ AI
-_Không có phản hồi._
+**Trả lời:**
+
+Không tìm thấy nhà cung cấp nào đang không hoạt động. Có thể do tất cả nhà cung cấp đều đang hoạt động, hoặc thông tin chưa được cập nhật. Bạn có thể thử các câu hỏi sau:
+
+- Liệt kê tất cả nhà cung cấp đang hoạt động.
+- Tìm nhà cung cấp có tên bắt đầu bằng 'ABC'.
+- Kiểm tra trạng thái của một nhà cung cấp cụ thể.
 
 
 ## Kiểm tra

@@ -11,7 +11,7 @@
 ## Response từ AI
 **Trả lời:**
 
-Hiá»n khÃ´ng tÃ­nh ÄÆ°á»£c tá»ng giÃ¡ trá» nháº­p hÃ ng tá»« nhÃ  cung cáº¥p cÃ³ mÃ£ NCC0001 (káº¿t quáº£ NULL). ThÆ°á»ng do khÃ´ng cÃ³ dÃ²ng tá»n khá»p JOIN hoáº·c chÆ°a cÃ³ giÃ¡ vá»n `productpricehistory` cho ÄÆ¡n vá» cÆ¡ sá» (`productunits.is_base_unit = TRUE`).
+Hiện không tính được tổng giá trị nhập hàng từ nhà cung cấp có mã NCC0001 (kết quả NULL). Thường do không có dòng tồn khớp JOIN hoặc chưa có giá vốn `productpricehistory` cho đơn vị cơ sở (`productunits.is_base_unit = TRUE`).
 
 
 

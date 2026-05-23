@@ -11,17 +11,17 @@
 ## Response từ AI
 **Trả lời:**
 
-KhÃ´ng tÃ¬m tháº¥y dá»¯ liá»u cho ÄÆ¡n hÃ ng SO-2026-0001. CÃ³ thá» do:
+Không tìm thấy dữ liệu cho đơn hàng SO-2026-0001. Có thể do:
 
-- Sá» hiá»u ÄÆ¡n hÃ ng khÃ´ng chÃ­nh xÃ¡c
-- Dá»¯ liá»u chÆ°a ÄÆ°á»£c nháº­p vÃ o há» thá»ng
-- Thá»i gian ÄÆ¡n hÃ ng náº±m ngoÃ i pháº¡m vi truy váº¥n
+- Số hiệu đơn hàng không chính xác
+- Dữ liệu chưa được nhập vào hệ thống
+- Thời gian đơn hàng nằm ngoài phạm vi truy vấn
 
-Báº¡n cÃ³ thá» thá»­ cÃ¡c cÃ¢u há»i khÃ¡c:
+Bạn có thể thử các câu hỏi khác:
 
-- TÃ¬m cÃ¡c ÄÆ¡n hÃ ng cÃ³ tráº¡ng thÃ¡i 'Äang xá»­ lÃ½'
-- Kiá»m tra cÃ¡c ÄÆ¡n hÃ ng trong khoáº£ng thá»i gian cá»¥ thá»
-- TÃ¬m cÃ¡c ÄÆ¡n hÃ ng cÃ³ tá»ng sá» lÆ°á»£ng sáº£n pháº©m lá»n hÆ¡n 0
+- Tìm các đơn hàng có trạng thái 'Đang xử lý'
+- Kiểm tra các đơn hàng trong khoảng thời gian cụ thể
+- Tìm các đơn hàng có tổng số lượng sản phẩm lớn hơn 0
 
 
 

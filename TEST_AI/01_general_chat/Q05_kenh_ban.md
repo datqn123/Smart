@@ -11,7 +11,7 @@
 ## Response từ AI
 **Trả lời:**
 
-KÃªnh bÃ¡n Retail lÃ  bÃ¡n láº», Wholesale lÃ  bÃ¡n sá», vÃ  Return lÃ  tráº£ hÃ ng. Má»i kÃªnh cÃ³ quy trÃ¬nh vÃ  chÃ­nh sÃ¡ch riÃªng.
+Kênh bán Retail là bán lẻ, Wholesale là bán sỉ, và Return là trả hàng. Mỗi kênh có quy trình và chính sách riêng.
 
 
 

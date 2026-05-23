@@ -11,7 +11,7 @@
 ## Response từ AI
 **Trả lời:**
 
-Dá»±a trÃªn dá»¯ liá»u ÄÃ£ cho, khÃ¡ch hÃ ng cÃ³ tá»ng chi tiÃªu cao nháº¥t lÃ  **KhÃ¡ch láº»** vá»i tá»ng chi tiÃªu lÃ  **297.700**.
+Dựa trên dữ liệu đã cho, khách hàng có tổng chi tiêu cao nhất là **Khách lẻ** với tổng chi tiêu là **297.700**.
 
 
 

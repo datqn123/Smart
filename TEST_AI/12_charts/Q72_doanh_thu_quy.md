@@ -11,7 +11,7 @@
 ## Response từ AI
 **Trả lời:**
 
-Dá»¯ liá»u chá» cÃ³ duy nháº¥t má»t quá»¹ lÃ  'Tiá»n máº·t quá»¹ chÃ­nh' vá»i doanh thu 1047700.0. Äiá»u nÃ y cho tháº¥y toÃ n bá» doanh thu ÄÆ°á»£c ghi nháº­n vÃ o quá»¹ nÃ y trong khoáº£ng thá»i gian ÄÃ£ chá»n. Báº¡n cÃ³ thá» thá»­ Äiá»u chá»nh khoáº£ng thá»i gian hoáº·c thÃªm cÃ¡c quá»¹ khÃ¡c vÃ o bÃ¡o cÃ¡o Äá» cÃ³ cÃ¡i nhÃ¬n toÃ n diá»n hÆ¡n vá» phÃ¢n bá» doanh thu.
+Dữ liệu chỉ có duy nhất một quỹ là 'Tiền mặt quỹ chính' với doanh thu 1047700.0. Điều này cho thấy toàn bộ doanh thu được ghi nhận vào quỹ này trong khoảng thời gian đã chọn. Bạn có thể thử điều chỉnh khoảng thời gian hoặc thêm các quỹ khác vào báo cáo để có cái nhìn toàn diện hơn về phân bố doanh thu.
 
 **Chart spec:**
 
@@ -28,7 +28,7 @@ Dá»¯ liá»u chá» cÃ³ duy nháº¥t má»t quá»¹ lÃ  'Tiá»
   "title": "Biá»u Äá» doanh thu theo tá»«ng quá»¹",
   "data": [
     {
-      "quá»¹": "Tiá»n máº·t quá»¹ chÃ­nh",
+      "quỹ": "Tiền mặt quỹ chính",
       "doanh_thu": 1047700.0
     }
   ]

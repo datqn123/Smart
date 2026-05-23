@@ -9,7 +9,13 @@
 - **Trạng thái:** ❌ Fail
 
 ## Response từ AI
-_Không có phản hồi._
+**Trả lời:**
+
+Không tìm thấy voucher nào đang dùng được. Có thể do tất cả voucher đã hết hạn, đã bị hủy, hoặc chưa được kích hoạt. Bạn có thể thử các câu hỏi sau:
+
+- Liệt kê tất cả voucher đã hết hạn.
+- Tìm voucher có tên bắt đầu bằng 'Voucher'.
+- Kiểm tra trạng thái của một voucher cụ thể.
 
 
 ## Kiểm tra

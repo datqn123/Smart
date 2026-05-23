@@ -11,7 +11,7 @@
 ## Response từ AI
 **Trả lời:**
 
-KhÃ´ng tÃ¬m tháº¥y dá»¯ liá»u cho phiáº¿u xuáº¥t kho PX-2026-0001. Há» thá»ng khÃ´ng há» trá»£ truy váº¥n phiáº¿u xuáº¥t kho nÃ y. Báº¡n cÃ³ thá» thá»­ há»i vá» cÃ¡c phiáº¿u xuáº¥t kho khÃ¡c hoáº·c tÃ¬m kiáº¿m thÃ´ng tin vá» cÃ¡c phiáº¿u xuáº¥t cá»¥ thá».
+Không tìm thấy dữ liệu cho phiếu xuất kho PX-2026-0001. Hệ thống không hỗ trợ truy vấn phiếu xuất kho này. Bạn có thể thử hỏi về các phiếu xuất kho khác hoặc tìm kiếm thông tin về các phiếu xuất cụ thể.
 
 
 

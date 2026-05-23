@@ -9,7 +9,20 @@
 - **Trạng thái:** ❌ Fail
 
 ## Response từ AI
-_Không có phản hồi._
+**Trả lời:**
+
+Danh sách sản phẩm trong mục đồ uống gồm **3 sản phẩm**.
+
+Chi tiết:
+
+- Mã hàng: **UONG-COKE-24**, tên: **Coca 330ml thùng 24**
+- Mã hàng: **DEMO-NUOC-500**, tên: **Nước suối 500ml**
+- Mã hàng: **UONG-SUA-1L**, tên: **Sữa tươi tiệt trùng 1L**
+
+Bạn có thể hỏi thêm:
+
+- Thông tin chi tiết của từng sản phẩm.
+- Tình trạng tồn kho của từng sản phẩm.
 
 
 ## Kiểm tra

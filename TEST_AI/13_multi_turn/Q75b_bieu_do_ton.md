@@ -11,12 +11,12 @@
 ## Response từ AI
 **Trả lời:**
 
-KhÃ´ng táº¡o ÄÆ°á»£c biá»u Äá»: ÄÃ£ háº¿t sá» láº§n thá»­ SQL.
+Không tạo được biểu đồ: đã hết số lần thử SQL.
 
-Báº¡n cÃ³ thá» thá»­ cÃ¡c cÃ¢u há»i khÃ¡c nhÆ°:
-- Liá»t kÃª cÃ¡c sáº£n pháº©m vÃ  sá» lÆ°á»£ng tá»n kho
-- TÃ¬m kiáº¿m thÃ´ng tin vá» má»t sáº£n pháº©m cá»¥ thá»
-- Lá»c dá»¯ liá»u theo má»t tiÃªu chÃ­ nháº¥t Äá»nh
+Bạn có thể thử các câu hỏi khác như:
+- Liệt kê các sản phẩm và số lượng tồn kho
+- Tìm kiếm thông tin về một sản phẩm cụ thể
+- Lọc dữ liệu theo một tiêu chí nhất định
 
 
 

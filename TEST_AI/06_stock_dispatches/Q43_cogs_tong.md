@@ -11,7 +11,7 @@
 ## Response từ AI
 **Trả lời:**
 
-Xin lá»i, khÃ´ng hoÃ n táº¥t truy váº¥n (mÃ£ lá»i: max_sql_attempts, attempts=3). Báº¡n cÃ³ thá» thá»­ há»i vá» tá»ng sá» lÆ°á»£ng phiáº¿u xuáº¥t ÄÃ£ hoÃ n táº¥t hoáº·c tÃ¬m kiáº¿m thÃ´ng tin vá» cÃ¡c phiáº¿u xuáº¥t cá»¥ thá».
+Xin lỗi, không hoàn tất truy vấn (mã lỗi: max_sql_attempts, attempts=3). Bạn có thể thử hỏi về tổng số lượng phiếu xuất đã hoàn tất hoặc tìm kiếm thông tin về các phiếu xuất cụ thể.
 
 
 

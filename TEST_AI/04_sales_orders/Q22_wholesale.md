@@ -11,9 +11,9 @@
 ## Response từ AI
 **Trả lời:**
 
-Wholesale orders count hiá»n táº¡i lÃ  **3** (theo káº¿t quáº£ truy váº¥n SQL, bÃ¡m ÄÃºng sá» liá»u há» thá»ng).
+Wholesale orders count hiện tại là **3** (theo kết quả truy vấn SQL, bám đúng số liệu hệ thống).
 
-Náº¿u cáº§n chi tiáº¿t theo tá»«ng dÃ²ng (SKU, phiáº¿u, khÃ¡ch hÃ ngâ¦), hÃ£y há»i rÃµ tÃªn hoáº·c mÃ£ Äá» há» thá»ng tráº£ danh sÃ¡ch cá»¥ thá».
+Nếu cần chi tiết theo từng dòng (SKU, phiếu, khách hàng…), hãy hỏi rõ tên hoặc mã để hệ thống trả danh sách cụ thể.
 
 
 

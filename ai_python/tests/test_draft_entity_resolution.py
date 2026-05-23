@@ -3,11 +3,14 @@ from __future__ import annotations
 from typing import Any
 
 from app.graph.draft_entity_resolution import (
+    resolve_catalog_before_generate,
     resolve_inventory_before_generate,
+    search_categories,
     search_products,
 )
 from app.graph.draft_reference_messages import format_draft_schema_issues
-from app.llm.schemas import InventoryDraftSlotsOutput
+from app.graph.sql_executor import SqlExecutorError
+from app.llm.schemas import CatalogDraftSlotsOutput, InventoryDraftSlotsOutput
 
 
 class _FakeExecutor:
@@ -149,6 +152,90 @@ def test_search_products_escapes_quotes() -> None:
     search_products(ex, tenant_id=None, term="O'Brien")
     assert ex.last_sql is not None
     assert "O''Brien" in ex.last_sql
+
+
+def test_search_categories_sql_uses_category_code() -> None:
+    ex = _FakeExecutor(
+        [{"id": 2, "category_code": "CAT002", "name": "Đồ uống", "status": "Active"}],
+    )
+    rows, err = search_categories(ex, tenant_id=None, term="Đồ uống")
+    assert err is None
+    assert len(rows) == 1
+    assert rows[0]["category_code"] == "CAT002"
+    assert ex.last_sql is not None
+    assert "c.category_code" in ex.last_sql
+    assert "c.code" not in ex.last_sql
+    assert "deleted_at IS NULL" in ex.last_sql
+
+
+def test_search_categories_upstream_error_not_empty() -> None:
+    class _FailingExecutor:
+        last_sql: str | None = None
+
+        def execute(self, sql: str, **kwargs: Any) -> dict[str, Any]:
+            _ = kwargs
+            self.last_sql = sql
+            raise SqlExecutorError("bad SQL", category="policy")
+
+    ex = _FailingExecutor()
+    rows, err = search_categories(ex, tenant_id=None, term="Đồ uống")
+    assert rows == []
+    assert err == "upstream"
+
+
+def test_resolve_catalog_finds_do_uong_category() -> None:
+    ex = _FakeExecutor(
+        [{"id": 2, "category_code": "CAT002", "name": "Đồ uống", "status": "Active"}],
+    )
+
+    def execute(sql: str, **kwargs: Any) -> dict[str, Any]:
+        if "categories" in sql.lower():
+            return {
+                "rows": [
+                    {"id": 2, "category_code": "CAT002", "name": "Đồ uống", "status": "Active"},
+                ],
+                "meta": {},
+            }
+        return {"rows": [], "meta": {}}
+
+    ex.execute = execute  # type: ignore[method-assign]
+
+    slots = CatalogDraftSlotsOutput(
+        entity_type="product",
+        product_query="bánh tráng trộn",
+        category_query="Đồ uống",
+    )
+    patch = resolve_catalog_before_generate(
+        question="Thêm món bánh tráng trộn vào danh mục Đồ uống",
+        slots=slots,
+        executor=ex,
+        tenant_id=None,
+    )
+    assert patch is None
+
+
+def test_resolve_catalog_category_lookup_failure_message() -> None:
+    class _FailingExecutor:
+        def execute(self, sql: str, **kwargs: Any) -> dict[str, Any]:
+            _ = kwargs
+            if "categories" in sql.lower():
+                raise SqlExecutorError("upstream", category="policy")
+            return {"rows": [], "meta": {}}
+
+    slots = CatalogDraftSlotsOutput(
+        entity_type="product",
+        product_query="bánh tráng trộn",
+        category_query="Đồ uống",
+    )
+    patch = resolve_catalog_before_generate(
+        question="Thêm món bánh tráng trộn vào danh mục Đồ uống",
+        slots=slots,
+        executor=_FailingExecutor(),
+        tenant_id=None,
+    )
+    assert patch is not None
+    assert "lỗi hệ thống" in patch["final_answer"].lower()
+    assert "không tìm thấy danh mục" not in patch["final_answer"].lower()
 
 
 def test_format_draft_schema_issues() -> None:

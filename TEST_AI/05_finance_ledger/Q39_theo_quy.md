@@ -11,7 +11,7 @@
 ## Response từ AI
 **Trả lời:**
 
-Tá»ng sá» tiá»n máº·t quá»¹ chÃ­nh lÃ  1.110.000.
+Tổng số tiền mặt quỹ chính là 1.110.000.
 
 
 

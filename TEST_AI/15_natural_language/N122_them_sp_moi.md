@@ -9,7 +9,14 @@
 - **Trạng thái:** ❌ Fail
 
 ## Response từ AI
-_Không có phản hồi._
+**Trả lời:**
+
+Đã tạo bảng nháp **product** (3 dòng): 3 dòng sản phẩm.
+
+Bước tiếp theo:
+- Chỉnh sửa từng dòng trong bảng bên dưới nếu cần.
+- Bấm **Lưu nháp** rồi **Xác nhận ghi DB** khi đã đúng.
+- Bạn có thể hỏi thêm để bổ sung dòng hoặc tạo nháp loại danh mục khác.
 
 
 ## Kiểm tra

@@ -11,7 +11,7 @@
 ## Response từ AI
 **Trả lời:**
 
-ChÃ o báº¡n! TÃ´i cÃ³ thá» há» trá»£ báº¡n vá»i cÃ¡c váº¥n Äá» liÃªn quan Äáº¿n quáº£n lÃ½ kho, sáº£n pháº©m, ÄÆ¡n hÃ ng, bÃ¡n hÃ ng, vÃ  cÃ¡c bÃ¡o cÃ¡o tÃ i chÃ­nh trong há» thá»ng ERP. VÃ­ dá»¥, báº¡n cÃ³ thá» há»i vá» cÃ¡ch táº¡o phiáº¿u nháº­p kho, quáº£n lÃ½ tá»n kho, hoáº·c xem bÃ¡o cÃ¡o doanh thu. Báº¡n cáº§n há» trá»£ vá» Äiá»u gÃ¬?
+Chào bạn! Tôi có thể hỗ trợ bạn với các vấn đề liên quan đến quản lý kho, sản phẩm, đơn hàng, bán hàng, và các báo cáo tài chính trong hệ thống ERP. Ví dụ, bạn có thể hỏi về cách tạo phiếu nhập kho, quản lý tồn kho, hoặc xem báo cáo doanh thu. Bạn cần hỗ trợ về điều gì?
 
 
 

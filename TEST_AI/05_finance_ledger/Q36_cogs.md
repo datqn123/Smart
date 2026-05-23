@@ -11,7 +11,7 @@
 ## Response từ AI
 **Trả lời:**
 
-Xin lá»i, khÃ´ng hoÃ n táº¥t truy váº¥n (mÃ£ lá»i: max_sql_attempts, attempts=3). Báº¡n cÃ³ thá» thá»­ há»i vá» cÃ¡c thÃ´ng tin khÃ¡c liÃªn quan Äáº¿n phiáº¿u xuáº¥t kho hoáº·c danh sÃ¡ch bÃºt toÃ¡n COGS.
+Xin lỗi, không hoàn tất truy vấn (mã lỗi: max_sql_attempts, attempts=3). Bạn có thể thử hỏi về các thông tin khác liên quan đến phiếu xuất kho hoặc danh sách bút toán COGS.
 
 
 

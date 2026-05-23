@@ -11,15 +11,15 @@
 ## Response từ AI
 **Trả lời:**
 
-- Hiá»n khÃ´ng tÃ­nh ÄÆ°á»£c doanh thu thÃ¡ng 3 (káº¿t quáº£ NULL). ThÆ°á»ng do:
- - KhÃ´ng cÃ³ dÃ²ng tá»n khá»p JOIN vá»i `receipt_detail` vÃ  `productpricehistory`
- - ChÆ°a cÃ³ giÃ¡ vá»n trong `productpricehistory` cho ÄÆ¡n vá» cÆ¡ sá» (`productunits.is_base_unit = TRUE`)
-- VÃ­ dá»¥ cÃ¡c trÆ°á»ng há»£p cÃ³ thá» xáº£y ra:
- - Sáº£n pháº©m A (SKU: A123) cÃ³ receipt_code R001 nhÆ°ng chÆ°a cÃ³ giÃ¡ vá»n
- - Sáº£n pháº©m B (SKU: B456) cÃ³ receipt_code R002 nhÆ°ng khÃ´ng khá»p ÄÆ¡n vá» cÆ¡ sá»
-- Báº¡n cÃ³ thá» há»i:
- - "CÃ³ bao nhiÃªu sáº£n pháº©m chÆ°a cÃ³ giÃ¡ vá»n trong thÃ¡ng 3?"
- - "Danh sÃ¡ch cÃ¡c receipt_code khÃ´ng khá»p vá»i productpricehistory?"
+- Hiện không tính được doanh thu tháng 3 (kết quả NULL). Thường do:
+ - Không có dòng tồn khớp JOIN với `receipt_detail` và `productpricehistory`
+ - Chưa có giá vốn trong `productpricehistory` cho đơn vị cơ sở (`productunits.is_base_unit = TRUE`)
+- Ví dụ các trường hợp có thể xảy ra:
+ - Sản phẩm A (SKU: A123) có receipt_code R001 nhưng chưa có giá vốn
+ - Sản phẩm B (SKU: B456) có receipt_code R002 nhưng không khớp đơn vị cơ sở
+- Bạn có thể hỏi:
+ - "Có bao nhiêu sản phẩm chưa có giá vốn trong tháng 3?"
+ - "Danh sách các receipt_code không khớp với productpricehistory?"
 
 
 

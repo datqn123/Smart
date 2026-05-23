@@ -11,7 +11,7 @@
 ## Response từ AI
 **Trả lời:**
 
-Xin lá»i, khÃ´ng hoÃ n táº¥t truy váº¥n (mÃ£ lá»i: max_sql_attempts, attempts=3). Báº¡n cÃ³ thá» thá»­ cÃ¡c cÃ¢u há»i khÃ¡c nhÆ°: Liá»t kÃª cÃ¡c sáº£n pháº©m cÃ³ sá» lÆ°á»£ng tá»n kho cao nháº¥t? TÃ¬m sáº£n pháº©m cÃ³ giÃ¡ bÃ¡n lá»n hÆ¡n 1 triá»u Äá»ng? Danh sÃ¡ch khÃ¡ch hÃ ng ÄÃ£ Äáº·t hÃ ng trong thÃ¡ng nÃ y?
+Xin lỗi, không hoàn tất truy vấn (mã lỗi: max_sql_attempts, attempts=3). Bạn có thể thử các câu hỏi khác như: Liệt kê các sản phẩm có số lượng tồn kho cao nhất? Tìm sản phẩm có giá bán lớn hơn 1 triệu đồng? Danh sách khách hàng đã đặt hàng trong tháng này?
 
 
 

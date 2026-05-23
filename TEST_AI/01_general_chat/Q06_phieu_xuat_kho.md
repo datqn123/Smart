@@ -11,7 +11,7 @@
 ## Response từ AI
 **Trả lời:**
 
-Phiáº¿u xuáº¥t kho (StockDispatch) lÃ  má»t loáº¡i phiáº¿u xuáº¥t kho trong há» thá»ng ERP, ÄÆ°á»£c sá»­ dá»¥ng Äá» quáº£n lÃ½ viá»c xuáº¥t kho hÃ ng hÃ³a.
+Phiếu xuất kho (StockDispatch) là một loại phiếu xuất kho trong hệ thống ERP, được sử dụng để quản lý việc xuất kho hàng hóa.
 
 
 

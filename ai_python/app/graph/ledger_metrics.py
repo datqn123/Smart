@@ -76,7 +76,21 @@ METRICS: dict[LedgerMetricId, LedgerMetricDef] = {
 }
 
 _DIMENSION_KEYWORDS: dict[str, tuple[str, ...]] = {
-    "order_channel": ("kênh", "retail", "wholesale", "bán lẻ", "bán buôn", "pos", "channel"),
+    "order_channel": (
+        "kênh",
+        "kenh",
+        "nguồn",
+        "nguon",
+        "source",
+        "retail",
+        "wholesale",
+        "bán lẻ",
+        "ban le",
+        "bán buôn",
+        "ban buon",
+        "pos",
+        "channel",
+    ),
     "customer": ("khách", "customer", "theo khách"),
     "product": ("sku", "sản phẩm", "mặt hàng", "product"),
     "fund": ("quỹ", "fund", "cash fund"),

@@ -18,9 +18,15 @@ from app.graph.erp_guide.slot_resolution import (
     expand_elliptical_follow_up,
     filter_resolved_missing_slots,
     has_blocking_issues,
+    should_proceed_after_repeated_clarify,
+    strip_catalog_draft_misnomers,
     strip_noop_issues,
 )
-from app.graph.message_utils import format_dialog_tail_for_sql, latest_human_question
+from app.graph.message_utils import (
+    count_identical_human_messages,
+    format_dialog_tail_for_sql,
+    latest_human_question,
+)
 from app.graph.progress import emit_progress
 from app.graph.state import AgentState
 from app.llm.schemas import DomainGuardOutput, DomainIssue
@@ -79,6 +85,7 @@ def _apply_hard_rules(
     *,
     user_question: str,
     dialog_tail: str = "",
+    messages: list | None = None,
 ) -> DomainGuardOutput:
     issues = strip_noop_issues(list(out.issues) + [i for i in heuristic_blocks if i.user_text])
     seen = set()
@@ -90,11 +97,14 @@ def _apply_hard_rules(
         seen.add(key)
         deduped.append(i)
 
+    deduped = strip_catalog_draft_misnomers(deduped, user_question)
+
     missing = filter_resolved_missing_slots(
         user_question, list(out.missing_slots or []), dialog_tail=dialog_tail
     )
     blocking = has_blocking_issues(deduped)
     expanded_q = expand_elliptical_follow_up(user_question, dialog_tail)
+    repeat_turns = count_identical_human_messages(messages, user_question)
 
     action = out.action
     if not out.in_scope and any(i.type == "out_of_scope" for i in deduped):
@@ -103,6 +113,9 @@ def _apply_hard_rules(
         action = "clarify"
     elif missing:
         # Only optional slots left (e.g. order status) — proceed; SQL can count all retail orders
+        action = "proceed"
+    elif action == "clarify" and not blocking and not missing:
+        # Terminology-only clarify with no remaining blockers (e.g. stripped catalog names)
         action = "proceed"
     elif deduped and action == "proceed" and blocking:
         action = "clarify"
@@ -113,6 +126,21 @@ def _apply_hard_rules(
     ):
         # Follow-up inherits channel/time from prior turn — do not re-ask «loại đơn nào»
         action = "proceed"
+
+    if (
+        action == "clarify"
+        and out.in_scope
+        and should_proceed_after_repeated_clarify(
+            question=user_question,
+            matched_modules=out.matched_modules,
+            identical_human_turns=repeat_turns,
+        )
+        and not any(
+            i.severity == "block" and i.type not in ("term_mismatch",) for i in deduped
+        )
+    ):
+        action = "proceed"
+        blocking = False
 
     questions = list(out.clarification_questions)[:3]
     if action == "clarify":
@@ -179,11 +207,12 @@ def make_domain_guard_node(deps: GraphDeps):
 
         reg = deps.llm_registry
         if reg is None:
-            if heuristic_issues:
+            hi = strip_catalog_draft_misnomers(heuristic_issues, question)
+            if hi and has_blocking_issues(hi):
                 return _pack_clarify(
                     state,
                     question,
-                    heuristic_issues,
+                    hi,
                     snippets,
                     index=index,
                 )
@@ -214,11 +243,12 @@ def make_domain_guard_node(deps: GraphDeps):
             )
         except Exception:
             logger.warning("domain_guard structured_predict failed", exc_info=True)
-            if heuristic_issues:
+            hi = strip_catalog_draft_misnomers(heuristic_issues, question)
+            if hi and has_blocking_issues(hi):
                 return _pack_clarify(
                     state,
                     question,
-                    heuristic_issues,
+                    hi,
                     snippets,
                     index=index,
                 )
@@ -230,7 +260,11 @@ def make_domain_guard_node(deps: GraphDeps):
             }
 
         final = _apply_hard_rules(
-            out, heuristic_issues, user_question=question, dialog_tail=dialog_tail
+            out,
+            heuristic_issues,
+            user_question=question,
+            dialog_tail=dialog_tail,
+            messages=state.get("messages"),
         )
         emit_agent_trace(
             logger,

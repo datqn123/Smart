@@ -11,14 +11,14 @@
 ## Response từ AI
 **Trả lời:**
 
-Danh sÃ¡ch voucher Äang cÃ²n hiá»u lá»±c (active):
+Danh sách voucher đang còn hiệu lực (active):
 
 - Giáº£m 10% (CODE: DISCOUNT10, ID: 1)
-- KhÃ¡ch VIP 5% (CODE: VIP5, ID: 4)
+- Khách VIP 5% (CODE: VIP5, ID: 4)
 - Cuá»i tuáº§n giáº£m 15% (CODE: WEEKEND15, ID: 3)
 - Giáº£m 20.000Ä ÄÆ¡n tá»i thiá»u (CODE: SAVE20K, ID: 2)
 
-LÆ°u Ã½: Hai voucher "ÄÃ£ háº¿t háº¡n" (CODE: EXPIRED1, ID: 5) vÃ  "ChÆ°a Äáº¿n hiá»u lá»±c" (CODE: FUTURE1, ID: 6) máº·c dÃ¹ cÃ³ tráº¡ng thÃ¡i active nhÆ°ng khÃ´ng ÄÃ¡p á»©ng Äiá»u kiá»n vá» thá»i gian.
+Lưu ý: Hai voucher "Đã hết hạn" (CODE: EXPIRED1, ID: 5) và "Chưa đến hiệu lực" (CODE: FUTURE1, ID: 6) mặc dù có trạng thái active nhưng không đáp ứng điều kiện về thời gian.
 
 
 

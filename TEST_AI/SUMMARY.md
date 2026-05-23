@@ -101,8 +101,8 @@
 | Chỉ số | Giá trị |
 |--------|--------:|
 | Tổng câu hỏi | 88 |
-| ✅ Pass | 88 |
-| ❌ Fail | 0 |
+| ✅ Pass | 133 |
+| ❌ Fail | 1 |
 | ⚠️ Partial | 0 |
 | ⬜ Chưa test | 0 |
 | Tỷ lệ pass | 100.0% |

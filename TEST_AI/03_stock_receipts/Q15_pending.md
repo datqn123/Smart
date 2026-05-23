@@ -11,28 +11,28 @@
 ## Response từ AI
 **Trả lời:**
 
-Danh sÃ¡ch phiáº¿u nháº­p kho Äang chá» duyá»t (Pending):
+Danh sách phiếu nhập kho đang chờ duyệt (Pending):
 
-- PN-2026-0003 (NgÃ y: 2026-05-03, Tá»ng sá» tiá»n: 31500.0)
-- PN-V10-00086 (NgÃ y: 2026-04-11, Tá»ng sá» tiá»n: 190000.0, Ghi chÃº: Seed Flyway V10 â 2 dÃ²ng / phiáº¿u)
-- PN-V10-00082 (NgÃ y: 2026-04-07, Tá»ng sá» tiá»n: 230000.0, Ghi chÃº: Seed Flyway V10 â 2 dÃ²ng / phiáº¿u)
-- PN-V10-00078 (NgÃ y: 2026-04-03, Tá»ng sá» tiá»n: 150000.0, Ghi chÃº: Seed Flyway V10 â 2 dÃ²ng / phiáº¿u)
-- PN-V10-00074 (NgÃ y: 2026-03-30, Tá»ng sá» tiá»n: 170000.0, Ghi chÃº: Seed Flyway V10 â 2 dÃ²ng / phiáº¿u)
-- PN-V10-00070 (NgÃ y: 2026-03-26, Tá»ng sá» tiá»n: 210000.0, Ghi chÃº: Seed Flyway V10 â 2 dÃ²ng / phiáº¿u)
-- PN-V10-00066 (NgÃ y: 2026-03-22, Tá»ng sá» tiá»n: 230000.0, Ghi chÃº: Seed Flyway V10 â 2 dÃ²ng / phiáº¿u)
-- PN-V10-00062 (NgÃ y: 2026-03-18, Tá»ng sá» tiá»n: 300000.0, Ghi chÃº: Seed Flyway V10 â 2 dÃ²ng / phiáº¿u)
-- PN-V10-00058 (NgÃ y: 2026-03-14, Tá»ng sá» tiá»n: 190000.0, Ghi chÃº: Seed Flyway V10 â 2 dÃ²ng / phiáº¿u)
-- PN-V10-00054 (NgÃ y: 2026-03-10, Tá»ng sá» tiá»n: 210000.0, Ghi chÃº: Seed Flyway V10 â 2 dÃ²ng / phiáº¿u)
-- PN-V10-00050 (NgÃ y: 2026-03-06, Tá»ng sá» tiá»n: 130000.0, Ghi chÃº: Seed Flyway V10 â 2 dÃ²ng / phiáº¿u)
-- PN-V10-00046 (NgÃ y: 2026-03-02, Tá»ng sá» tiá»n: 270000.0, Ghi chÃº: Seed Flyway V10 â 2 dÃ²ng / phiáº¿u)
-- PN-V10-00042 (NgÃ y: 2026-02-26, Tá»ng sá» tiá»n: 190000.0, Ghi chÃº: Seed Flyway V10 â 2 dÃ²ng / phiáº¿u)
-- PN-V10-00038 (NgÃ y: 2026-02-22, Tá»ng sá» tiá»n: 110000.0, Ghi chÃº: Seed Flyway V10 â 2 dÃ²ng / phiáº¿u)
-- PN-V10-00034 (NgÃ y: 2026-02-18, Tá»ng sá» tiá»n: 250000.0, Ghi chÃº: Seed Flyway V10 â 2 dÃ²ng / phiáº¿u)
-- PN-V10-00030 (NgÃ y: 2026-02-14, Tá»ng sá» tiá»n: 56500.0, Ghi chÃº: Seed Flyway V10 â 2 dÃ²ng / phiáº¿u)
-- PN-V10-00026 (NgÃ y: 2026-02-10, Tá»ng sá» tiá»n: 190000.0, Ghi chÃº: Seed Flyway V10 â 2 dÃ²ng / phiáº¿u)
-- PN-V10-00022 (NgÃ y: 2026-02-06, Tá»ng sá» tiá»n: 230000.0, Ghi chÃº: Seed Flyway V10 â 2 dÃ²ng / phiáº¿u)
-- PN-V10-00018 (NgÃ y: 2026-02-02, Tá»ng sá» tiá»n: 150000.0, Ghi chÃº: Seed Flyway V10 â 2 dÃ²ng / phiáº¿u)
-- PN-V10-00014 (NgÃ y: 2026-01-29, Tá»ng sá» tiá»n: 170000.0, Ghi chÃº: Seed Fâ¦
+- PN-2026-0003 (Ngày: 2026-05-03, Tổng số tiền: 31500.0)
+- PN-V10-00086 (Ngày: 2026-04-11, Tổng số tiền: 190000.0, Ghi chú: Seed Flyway V10 — 2 dòng / phiếu)
+- PN-V10-00082 (Ngày: 2026-04-07, Tổng số tiền: 230000.0, Ghi chú: Seed Flyway V10 — 2 dòng / phiếu)
+- PN-V10-00078 (Ngày: 2026-04-03, Tổng số tiền: 150000.0, Ghi chú: Seed Flyway V10 — 2 dòng / phiếu)
+- PN-V10-00074 (Ngày: 2026-03-30, Tổng số tiền: 170000.0, Ghi chú: Seed Flyway V10 — 2 dòng / phiếu)
+- PN-V10-00070 (Ngày: 2026-03-26, Tổng số tiền: 210000.0, Ghi chú: Seed Flyway V10 — 2 dòng / phiếu)
+- PN-V10-00066 (Ngày: 2026-03-22, Tổng số tiền: 230000.0, Ghi chú: Seed Flyway V10 — 2 dòng / phiếu)
+- PN-V10-00062 (Ngày: 2026-03-18, Tổng số tiền: 300000.0, Ghi chú: Seed Flyway V10 — 2 dòng / phiếu)
+- PN-V10-00058 (Ngày: 2026-03-14, Tổng số tiền: 190000.0, Ghi chú: Seed Flyway V10 — 2 dòng / phiếu)
+- PN-V10-00054 (Ngày: 2026-03-10, Tổng số tiền: 210000.0, Ghi chú: Seed Flyway V10 — 2 dòng / phiếu)
+- PN-V10-00050 (Ngày: 2026-03-06, Tổng số tiền: 130000.0, Ghi chú: Seed Flyway V10 — 2 dòng / phiếu)
+- PN-V10-00046 (Ngày: 2026-03-02, Tổng số tiền: 270000.0, Ghi chú: Seed Flyway V10 — 2 dòng / phiếu)
+- PN-V10-00042 (Ngày: 2026-02-26, Tổng số tiền: 190000.0, Ghi chú: Seed Flyway V10 — 2 dòng / phiếu)
+- PN-V10-00038 (Ngày: 2026-02-22, Tổng số tiền: 110000.0, Ghi chú: Seed Flyway V10 — 2 dòng / phiếu)
+- PN-V10-00034 (Ngày: 2026-02-18, Tổng số tiền: 250000.0, Ghi chú: Seed Flyway V10 — 2 dòng / phiếu)
+- PN-V10-00030 (Ngày: 2026-02-14, Tổng số tiền: 56500.0, Ghi chú: Seed Flyway V10 — 2 dòng / phiếu)
+- PN-V10-00026 (Ngày: 2026-02-10, Tổng số tiền: 190000.0, Ghi chú: Seed Flyway V10 — 2 dòng / phiếu)
+- PN-V10-00022 (Ngày: 2026-02-06, Tổng số tiền: 230000.0, Ghi chú: Seed Flyway V10 — 2 dòng / phiếu)
+- PN-V10-00018 (Ngày: 2026-02-02, Tổng số tiền: 150000.0, Ghi chú: Seed Flyway V10 — 2 dòng / phiếu)
+- PN-V10-00014 (Ngày: 2026-01-29, Tổng số tiền: 170000.0, Ghi chú: Seed F…
 
 
 

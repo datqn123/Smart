@@ -11,12 +11,12 @@
 ## Response từ AI
 **Trả lời:**
 
-Quy trÃ¬nh nháº­p kho bao gá»m cÃ¡c bÆ°á»c sau:
-1. Táº¡o phiáº¿u nháº­p kho: NgÆ°á»i dÃ¹ng nháº­p thÃ´ng tin vá» sáº£n pháº©m, sá» lÆ°á»£ng, nhÃ  cung cáº¥p, vÃ  ngÃ y nháº­p.
-2. Kiá»m tra thÃ´ng tin: Há» thá»ng kiá»m tra tÃ­nh há»£p lá» cá»§a cÃ¡c thÃ´ng tin nháº­p vÃ o.
-3. Duyá»t phiáº¿u nháº­p kho: NgÆ°á»i cÃ³ tháº©m quyá»n duyá»t phiáº¿u nháº­p kho Äá» hoÃ n táº¥t quÃ¡ trÃ¬nh nháº­p.
+Quy trình nhập kho bao gồm các bước sau:
+1. Tạo phiếu nhập kho: Người dùng nhập thông tin về sản phẩm, số lượng, nhà cung cấp, và ngày nhập.
+2. Kiểm tra thông tin: Hệ thống kiểm tra tính hợp lệ của các thông tin nhập vào.
+3. Duyệt phiếu nhập kho: Người có thẩm quyền duyệt phiếu nhập kho để hoàn tất quá trình nhập.
 4. Cáº­p nháº­t tá»n kho: Sau khi duyá»t, há» thá»ng tá»± Äá»ng cáº­p nháº­t sá» lÆ°á»£ng tá»n kho cá»§a sáº£n pháº©m.
-5. LÆ°u trá»¯ phiáº¿u nháº­p kho: Phiáº¿u nháº­p kho ÄÆ°á»£c lÆ°u trá»¯ Äá» tham kháº£o sau nÃ y.
+5. Lưu trữ phiếu nhập kho: Phiếu nhập kho được lưu trữ để tham khảo sau này.
 
 
 

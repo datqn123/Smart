@@ -11,7 +11,7 @@
 ## Response từ AI
 **Trả lời:**
 
-Biá»u Äá» trÃ²n thá» hiá»n phÃ¢n bá» ÄÆ¡n hÃ ng theo kÃªnh bÃ¡n. KÃªnh Wholesale chiáº¿m 87,0%, Retail chiáº¿m 13,0%. Äiá»u nÃ y cho tháº¥y pháº§n lá»n ÄÆ¡n hÃ ng Äáº¿n tá»« kÃªnh bÃ¡n sá». Báº¡n cÃ³ thá» thá»­ tÄng cÆ°á»ng chiáº¿n lÆ°á»£c bÃ¡n láº» Äá» cáº£i thiá»n doanh sá» tá»« kÃªnh nÃ y.
+Biểu đồ tròn thể hiện phân bổ đơn hàng theo kênh bán. Kênh Wholesale chiếm 87,0%, Retail chiếm 13,0%. Điều này cho thấy phần lớn đơn hàng đến từ kênh bán sỉ. Bạn có thể thử tăng cường chiến lược bán lẻ để cải thiện doanh số từ kênh này.
 
 **Chart spec:**
 
@@ -22,7 +22,7 @@ Biá»u Äá» trÃ²n thá» hiá»n phÃ¢n bá» ÄÆ¡n hÃ n
   "series": [
     {
       "dataKey": "total_orders",
-      "name": "GiÃ¡ trá»"
+      "name": "Giá trị"
     }
   ],
   "title": "",

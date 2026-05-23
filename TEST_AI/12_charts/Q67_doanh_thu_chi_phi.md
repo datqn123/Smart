@@ -11,7 +11,7 @@
 ## Response từ AI
 **Trả lời:**
 
-Biá»u Äá» thá» hiá»n sá»± thay Äá»i cá»§a doanh thu vÃ  chi phÃ­ qua cÃ¡c thÃ¡ng trong nÄm 2026. Dá»±a trÃªn dá»¯ liá»u nÃ y, báº¡n cÃ³ thá» nháº­n tháº¥y xu hÆ°á»ng tÄng trÆ°á»ng cá»§a doanh nghiá»p vÃ  ÄÆ°a ra cÃ¡c quyáº¿t Äá»nh kinh doanh phÃ¹ há»£p. VÃ­ dá»¥, náº¿u doanh thu tÄng máº¡nh vÃ o quÃ½ III, báº¡n cÃ³ thá» xem xÃ©t tÄng cÆ°á»ng quáº£ng cÃ¡o hoáº·c má» rá»ng sáº£n xuáº¥t. NgÆ°á»£c láº¡i, náº¿u chi phÃ­ tÄng cao vÃ o quÃ½ IV, báº¡n cáº§n tÃ¬m cÃ¡ch tá»i Æ°u hÃ³a chi phÃ­ Äá» Äáº£m báº£o lá»£i nhuáº­n.
+Biểu đồ thể hiện sự thay đổi của doanh thu và chi phí qua các tháng trong năm 2026. Dựa trên dữ liệu này, bạn có thể nhận thấy xu hướng tăng trưởng của doanh nghiệp và đưa ra các quyết định kinh doanh phù hợp. Ví dụ, nếu doanh thu tăng mạnh vào quý III, bạn có thể xem xét tăng cường quảng cáo hoặc mở rộng sản xuất. Ngược lại, nếu chi phí tăng cao vào quý IV, bạn cần tìm cách tối ưu hóa chi phí để đảm bảo lợi nhuận.
 
 **Chart spec:**
 
@@ -22,10 +22,10 @@ Biá»u Äá» thá» hiá»n sá»± thay Äá»i cá»§a doanh 
   "series": [
     {
       "dataKey": "revenue",
-      "name": "Biá»u Äá» doanh thu vÃ  chi phÃ­ theo tá»«ng thÃ¡ng"
+      "name": "Biểu đồ doanh thu và chi phí theo từng tháng"
     }
   ],
-  "title": "Biá»u Äá» doanh thu vÃ  chi phÃ­ theo tá»«ng thÃ¡ng",
+  "title": "Biểu đồ doanh thu và chi phí theo từng tháng",
   "data": [
     {
       "month": "2026-04",

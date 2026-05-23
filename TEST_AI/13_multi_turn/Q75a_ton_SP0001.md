@@ -11,12 +11,12 @@
 ## Response từ AI
 **Trả lời:**
 
-- CÃ³ thá» do SP0001 khÃ´ng cÃ³ dá»¯ liá»u tá»n kho, hoáº·c do lá»i nháº­p liá»u.
-- Báº¡n cÃ³ thá» thá»­ há»i:
+- Có thể do SP0001 không có dữ liệu tồn kho, hoặc do lỗi nhập liệu.
+- Bạn có thể thử hỏi:
 
-- "CÃ³ bao nhiÃªu sáº£n pháº©m khÃ´ng cÃ³ dá»¯ liá»u tá»n kho?"
- - "Danh sÃ¡ch cÃ¡c sáº£n pháº©m cÃ³ tá»n kho?"
- - "Tá»n kho cá»§a sáº£n pháº©m khÃ¡c?"
+- "Có bao nhiêu sản phẩm không có dữ liệu tồn kho?"
+ - "Danh sách các sản phẩm có tồn kho?"
+ - "Tồn kho của sản phẩm khác?"
 
 
 

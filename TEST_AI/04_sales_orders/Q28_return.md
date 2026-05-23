@@ -11,15 +11,15 @@
 ## Response từ AI
 **Trả lời:**
 
-Tá»ng sá» ÄÆ¡n tráº£ hÃ ng (Return) vÃ  tá»ng tiá»n tráº£?
+Tổng số đơn trả hàng (Return) và tổng tiền trả?
 
-Theo káº¿t quáº£ truy váº¥n (1 dÃ²ng):
+Theo kết quả truy vấn (1 dòng):
 
 Chi tiáº¿t:
 
 - return orders count: **0**
 
-Tá»ng sá» ÄÆ¡n tráº£ hÃ ng lÃ  0, cÃ³ nghÄ©a lÃ  khÃ´ng cÃ³ ÄÆ¡n tráº£ hÃ ng nÃ o ÄÆ°á»£c thá»±c hiá»n trong há» thá»ng. Tá»ng tiá»n tráº£ cÅ©ng sáº½ lÃ  0 vÃ¬ khÃ´ng cÃ³ ÄÆ¡n tráº£ hÃ ng nÃ o ÄÆ°á»£c táº¡o ra.
+Tổng số đơn trả hàng là 0, có nghĩa là không có đơn trả hàng nào được thực hiện trong hệ thống. Tổng tiền trả cũng sẽ là 0 vì không có đơn trả hàng nào được tạo ra.
 
 
 

@@ -4,12 +4,20 @@
 - **Câu hỏi:** Tổng thu chi theo từng quỹ tiền mặt là bao nhiêu?
 - **Nhóm:** natural_language
 - **Intent dự kiến:** `system_data_query`
-- **Ngày test:** 
-- **Thời gian phản hồi:** 
-- **Trạng thái:** ⬜ Chưa test / ✅ Pass / ❌ Fail / ⚠️ Partial
+- **Ngày test:** 17/05/2026 21:19:13
+- **Thời gian phản hồi:** 3476ms
+- **Trạng thái:** ✅ Pass
 
 ## Response từ AI
-_(Chưa có)_
+**Trả lời:**
+
+**Tiền mặt quỹ chính** — tổng giá trị **1.110.000**.
+
+Chi tiết:
+
+- fund name: **Tiền mặt quỹ chính**
+- Tổng giá trị: **1.110.000**
+
 
 ## Kiểm tra
 - [ ] Intent đúng với dự kiến

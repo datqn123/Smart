@@ -11,13 +11,13 @@
 ## Response từ AI
 **Trả lời:**
 
-Top 5 sáº£n pháº©m bÃ¡n cháº¡y nháº¥t theo sá» lÆ°á»£ng:
+Top 5 sản phẩm bán chạy nhất theo số lượng:
 
-- NÆ°á»c rá»­a chÃ©n 1.5L (SKU: HPH-RC-1L5) vá»i tá»ng sá» lÆ°á»£ng bÃ¡n ra lÃ  720
-- HÃ ng seed demo #10 (SKU: BULK-SEED-010) vá»i tá»ng sá» lÆ°á»£ng bÃ¡n ra lÃ  8
-- HÃ ng seed demo #13 (SKU: BULK-SEED-013) vá»i tá»ng sá» lÆ°á»£ng bÃ¡n ra lÃ  7
-- HÃ ng seed demo #15 (SKU: BULK-SEED-015) vá»i tá»ng sá» lÆ°á»£ng bÃ¡n ra lÃ  6
-- HÃ ng seed demo #14 (SKU: BULK-SEED-014) vá»i tá»ng sá» lÆ°á»£ng bÃ¡n ra lÃ  5
+- Nước rửa chén 1.5L (SKU: HPH-RC-1L5) với tổng số lượng bán ra là 720
+- Hàng seed demo #10 (SKU: BULK-SEED-010) với tổng số lượng bán ra là 8
+- Hàng seed demo #13 (SKU: BULK-SEED-013) với tổng số lượng bán ra là 7
+- Hàng seed demo #15 (SKU: BULK-SEED-015) với tổng số lượng bán ra là 6
+- Hàng seed demo #14 (SKU: BULK-SEED-014) với tổng số lượng bán ra là 5
 
 
 

@@ -9,7 +9,9 @@
 - **Trạng thái:** ❌ Fail
 
 ## Response từ AI
-_Không có phản hồi._
+**Trả lời:**
+
+Trong Mini ERP, «thùng nước ngọt» nên dùng «sản phẩm». Trong Mini ERP, «NCC0002» nên dùng «nhà cung cấp». Cần làm rõ thêm — xem chi tiết và câu đề xuất trong khung bên dưới.
 
 
 ## Kiểm tra

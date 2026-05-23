@@ -11,7 +11,7 @@
 ## Response từ AI
 **Trả lời:**
 
-Trong Mini ERP, Â«tá»n khoÂ» nÃªn dÃ¹ng Â«phiáº¿u xuáº¥t khoÂ». Trong Mini ERP, Â«sáº£n pháº©m khÃ´ng tá»n táº¡iÂ» nÃªn dÃ¹ng Â«SKUÂ». Cáº§n lÃ m rÃµ thÃªm â xem chi tiáº¿t vÃ  cÃ¢u Äá» xuáº¥t trong khung bÃªn dÆ°á»i.
+Trong Mini ERP, «tồn kho» nên dùng «phiếu xuất kho». Trong Mini ERP, «sản phẩm không tồn tại» nên dùng «SKU». Cần làm rõ thêm — xem chi tiết và câu đề xuất trong khung bên dưới.
 
 
 

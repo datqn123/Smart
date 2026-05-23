@@ -11,10 +11,10 @@
 ## Response từ AI
 **Trả lời:**
 
-Danh sÃ¡ch Äá»£t kiá»m kÃª kho Äang á» tráº¡ng thÃ¡i In Progress:
+Danh sách đợt kiểm kê kho đang ở trạng thái In Progress:
 
-- Kiá»m kÃª Äang thá»±c hiá»n â toÃ n kho chÃ­nh (ID: 3, MÃ£: DEMO-KK-V13-03, NgÃ y: 2026-03-10, Lá»c theo vá» trÃ­: WH01, Ghi chÃº: Äang Äáº¿m láº¡i ká» B.)
-- Kiá»m kÃª bÃ¡nh káº¹o & snack (ID: 4, MÃ£: DEMO-KK-V13-04, NgÃ y: 2026-03-12, Lá»c theo danh má»¥c: CAT005)
+- Kiểm kê đang thực hiện — toàn kho chính (ID: 3, Mã: DEMO-KK-V13-03, Ngày: 2026-03-10, Lọc theo vị trí: WH01, Ghi chú: Đang đếm lại kệ B.)
+- Kiểm kê bánh kẹo & snack (ID: 4, Mã: DEMO-KK-V13-04, Ngày: 2026-03-12, Lọc theo danh mục: CAT005)
 
 
 

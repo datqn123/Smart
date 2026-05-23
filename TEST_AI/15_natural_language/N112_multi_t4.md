@@ -4,12 +4,15 @@
 - **Câu hỏi:** Còn tháng 4 thì sao?
 - **Nhóm:** natural_language
 - **Intent dự kiến:** `system_data_query`
-- **Ngày test:** 
-- **Thời gian phản hồi:** 
-- **Trạng thái:** ⬜ Chưa test / ✅ Pass / ❌ Fail / ⚠️ Partial
+- **Ngày test:** 17/05/2026 21:20:02
+- **Thời gian phản hồi:** 8082ms
+- **Trạng thái:** ✅ Pass
 
 ## Response từ AI
-_(Chưa có)_
+**Trả lời:**
+
+Hiện chưa tính được tổng doanh thu. Thường do chưa có dòng dữ liệu khớp điều kiện hoặc chưa có giá vốn cho đơn vị tính cơ sở của sản phẩm.
+
 
 ## Kiểm tra
 - [ ] Intent đúng với dự kiến

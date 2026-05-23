@@ -6,7 +6,7 @@ from typing import Any, Literal, TypedDict
 
 from app.graph.state import AgentState
 
-FeedbackSource = Literal["intent_review", "policy", "exec", "result"]
+FeedbackSource = Literal["intent_review", "policy", "exec", "result", "sql_fix"]
 
 
 class ValidationFeedback(TypedDict, total=False):
@@ -14,12 +14,21 @@ class ValidationFeedback(TypedDict, total=False):
     policy: list[str]
     exec: list[str]
     result: list[str]
+    sql_fix: list[str]
     attempts: int
     extras: dict[str, Any] | None
 
 
 def empty_feedback() -> ValidationFeedback:
-    return {"intent_review": [], "policy": [], "exec": [], "result": [], "attempts": 0, "extras": None}
+    return {
+        "intent_review": [],
+        "policy": [],
+        "exec": [],
+        "result": [],
+        "sql_fix": [],
+        "attempts": 0,
+        "extras": None,
+    }
 
 
 def append_feedback(state: AgentState, source: FeedbackSource, detail: str) -> ValidationFeedback:
@@ -32,6 +41,7 @@ def append_feedback(state: AgentState, source: FeedbackSource, detail: str) -> V
         "policy": list(prev.get("policy", [])),
         "exec": list(prev.get("exec", [])),
         "result": list(prev.get("result", [])),
+        "sql_fix": list(prev.get("sql_fix", [])),
         "attempts": int(prev.get("attempts", 0)),
         "extras": prev.get("extras"),
     }
@@ -49,7 +59,7 @@ def render_for_prompt(
     if not fb:
         return ""
     parts: list[str] = []
-    for k in ("intent_review", "policy", "exec", "result"):
+    for k in ("sql_fix", "intent_review", "policy", "exec", "result"):
         items = fb.get(k) or []
         if not items:
             continue
@@ -68,6 +78,28 @@ def render_for_prompt(
     return "\n".join(parts)
 
 
+def render_for_retry_prompt(fb: ValidationFeedback | None) -> str:
+    """Compact feedback for gen_sql retries: latest sql_fix + one line per other bucket."""
+    if not fb:
+        return ""
+    parts: list[str] = []
+    fixes = fb.get("sql_fix") or []
+    if fixes:
+        parts.append("[sql_fix — mandatory]\n" + fixes[-1])
+    for k in ("intent_review", "policy", "exec", "result"):
+        items = fb.get(k) or []
+        if not items:
+            continue
+        parts.append(f"[{k}] {items[-1]}")
+    if fb.get("attempts"):
+        parts.append(f"attempts={fb['attempts']}")
+    return "\n\n".join(parts)
+
+
+def has_sql_fix_feedback(fb: ValidationFeedback | None) -> bool:
+    return bool(fb and (fb.get("sql_fix") or []))
+
+
 def bump_attempts(state: AgentState) -> ValidationFeedback:
     prev = state.get("validation_feedback")
     if not isinstance(prev, dict):
@@ -78,6 +110,7 @@ def bump_attempts(state: AgentState) -> ValidationFeedback:
             "policy": list(prev.get("policy", [])),
             "exec": list(prev.get("exec", [])),
             "result": list(prev.get("result", [])),
+            "sql_fix": list(prev.get("sql_fix", [])),
             "attempts": int(prev.get("attempts", 0)),
             "extras": prev.get("extras"),
         }

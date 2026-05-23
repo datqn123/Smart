@@ -17,7 +17,13 @@ from app.graph.feedback import (
     append_feedback,
     bump_attempts,
     empty_feedback,
+    has_sql_fix_feedback,
     render_for_prompt,
+    render_for_retry_prompt,
+)
+from app.graph.sql_review_hints import (
+    compose_sql_review_fix_message,
+    infer_retry_extra_tables,
 )
 from app.graph.progress import emit_progress
 from app.graph.retry_policy import (
@@ -44,7 +50,11 @@ from app.graph.sql_allowlist import (
     validation_allowlist_from_state,
 )
 from app.graph.interaction_mode import should_route_query_table
-from app.graph.sql_prompts import build_gen_sql_user_prompt, format_schema_block
+from app.graph.sql_prompts import (
+    build_gen_sql_user_prompt,
+    build_retry_rewrite_block,
+    format_schema_block,
+)
 from app.graph.sql_similarity import max_pool_similarity
 from app.graph.sql_query_domain import (
     detect_sql_query_domain,
@@ -267,9 +277,15 @@ def make_gen_sql_node(deps: GraphDeps):
         prev_fb = state.get("validation_feedback")
         if not isinstance(prev_fb, dict):
             fb_render = render_for_prompt(empty_feedback())
+        elif nxt > 1:
+            fb_render = render_for_retry_prompt(prev_fb)
         else:
             fb_render = render_for_prompt(prev_fb, max_items_per_bucket=8)
-        mode: str = "explore" if nxt == 1 else ("exploit" if deps.settings.sql_exploit_on_retry else "explore")
+        force_exploit = nxt > 1 and (
+            deps.settings.sql_exploit_on_retry
+            or has_sql_fix_feedback(prev_fb if isinstance(prev_fb, dict) else None)
+        )
+        mode: str = "explore" if nxt == 1 else ("exploit" if force_exploit else "explore")
         reg = deps.llm_registry
         ver = state.get("schema_version")
         user_q = _last_user_message(state)
@@ -316,6 +332,18 @@ def make_gen_sql_node(deps: GraphDeps):
             if isinstance(brief, dict) and brief.get("data_request"):
                 idea_req = dict(brief["data_request"])
         extra_tables = infer_tables_from_chart_context(user_q, idea_req if isinstance(idea_req, dict) else None)
+        if nxt > 1 and isinstance(prev_fb, dict):
+            last_fix = (prev_fb.get("sql_fix") or [])[-1] if prev_fb.get("sql_fix") else ""
+            retry_issues = list(prev_fb.get("intent_review") or [])[-3:]
+            extra_tables = [
+                *extra_tables,
+                *infer_retry_extra_tables(
+                    user_q=user_q,
+                    sql=seed_sql or "",
+                    issues=retry_issues,
+                    suggested_tables=None,
+                ),
+            ]
         if extra_tables or state.get("intent") == "system_data_chart":
             artifact = merge_tables_into_artifact(deps.settings, artifact, extra_tables)
         artifact_dump = artifact.model_dump(mode="json")
@@ -408,12 +436,28 @@ def make_gen_sql_node(deps: GraphDeps):
             extra = "Query domain hints:\n" + "\n".join(f"- {h}" for h in domain_hint_lines) + "\n\n"
             domain_block = (domain_block or "") + extra
         query_table_mode = should_route_query_table(state)
+        pool = list(state.get("sql_local_pool") or [])
+        dup_warn = False
+        if nxt > 1 and seed_sql and pool:
+            mx = max_pool_similarity(
+                seed_sql,
+                pool,
+                token_weight=float(deps.settings.sql_similarity_token_weight),
+            )
+            dup_warn = mx >= float(deps.settings.sql_similarity_threshold)
+        retry_rewrite = build_retry_rewrite_block(
+            attempt=nxt,
+            prior_sql=seed_sql if nxt > 1 else None,
+            feedback_render=fb_render,
+            duplicate_warning=dup_warn,
+        )
         prompt = build_gen_sql_user_prompt(
             mode=mode,  # type: ignore[arg-type]
             schema_block=schema_block,
             feedback_render=fb_render,
             user_q=user_q,
             seed_sql=seed_sql if mode == "exploit" else None,
+            retry_rewrite_block=retry_rewrite or None,
             sql_limit_max=int(deps.settings.sql_limit_max),
             dialog_tail=dialog_tail or None,
             planner_data_request_json=planner_json,
@@ -458,7 +502,6 @@ def make_gen_sql_node(deps: GraphDeps):
         sql = client.invoke_text(prompt, system=_gen_sql_system)
         sql_stripped = normalize_llm_sql_output(sql)
         fb_for_append = bumped
-        pool = list(state.get("sql_local_pool") or [])
         if deps.settings.sql_hybrid_similarity_enabled and pool and sql_stripped:
             mx = max_pool_similarity(
                 sql_stripped,
@@ -561,9 +604,14 @@ def make_sql_review_node(deps: GraphDeps):
                     )
             except Exception:
                 pass
+        intent_line = ""
+        if state.get("intent"):
+            intent_line = f"Pipeline intent: {state.get('intent')}\n\n"
         review_body = (
             f"{allow_block}"
+            f"{intent_line}"
             "Review this SELECT-only SQL for safety and relevance to the user question. "
+            "When rejecting, fill retry_hint with concrete tables, columns, filters, and GROUP BY. "
             "Use the JSON contract only in your reply.\n\n"
             f"User question:\n{user_q[:1200]}\n\n"
             f"```sql\n{sql}\n```"
@@ -593,12 +641,16 @@ def make_sql_review_node(deps: GraphDeps):
         issues_txt = "\n".join(f"- {i}" for i in issues_raw) if issues_raw else "(no issues)"
         if issues_raw and ok and any(_benign_sql_review_issue(i) for i in issues_raw):
             issues_txt += "\n(bỏ qua cảnh báo nhẹ: LIMIT + aggregate — hợp lệ với executor read-only)"
+        hint_preview = (out.retry_hint or "").strip()
+        trace_detail = f"ok={ok}\n{issues_txt}"
+        if hint_preview:
+            trace_detail += f"\nretry_hint: {hint_preview[:500]}"
         emit_agent_trace(
             logger,
             deps.settings,
             agent="sql_review",
             phase="Đánh giá SQL (LLM)",
-            detail=f"ok={ok}\n{issues_txt}",
+            detail=trace_detail,
         )
         upd: dict = {"sql_review_ok": ok}
         if not ok:
@@ -609,11 +661,33 @@ def make_sql_review_node(deps: GraphDeps):
                 synthetic["validation_feedback"] = empty_feedback()
             else:
                 synthetic["validation_feedback"] = cur_fb
-            for issue in issues:
-                src: FeedbackSource = (
-                    "policy" if _POLICY_ISSUE_HINT.search(issue) else "intent_review"
-                )
-                synthetic["validation_feedback"] = append_feedback(synthetic, src, issue)
+            allow_names: list[str] | None = None
+            if isinstance(snap, dict):
+                try:
+                    art_rev = SchemaArtifact.model_validate(snap)
+                    eff = state.get("sql_allowlist_tables")
+                    if isinstance(eff, list) and eff:
+                        allow_names = [str(x) for x in eff if str(x).strip()]
+                    else:
+                        allow_names = art_rev.allowlist_table_names()
+                except Exception:
+                    allow_names = None
+            fix_msg = compose_sql_review_fix_message(
+                user_q=user_q,
+                sql=sql,
+                review=out,
+                severe_issues=issues,
+                allowlist=allow_names,
+                intent=str(state.get("intent") or ""),
+            )
+            synthetic["validation_feedback"] = append_feedback(synthetic, "sql_fix", fix_msg)
+            summary = "; ".join(issues[:4])
+            if hint_preview and hint_preview not in summary:
+                summary = f"{summary}; hint: {hint_preview[:200]}"
+            src: FeedbackSource = (
+                "policy" if any(_POLICY_ISSUE_HINT.search(i) for i in issues) else "intent_review"
+            )
+            synthetic["validation_feedback"] = append_feedback(synthetic, src, summary)
             upd["validation_feedback"] = synthetic["validation_feedback"]
         return upd
 
@@ -712,6 +786,8 @@ def make_validate_sql_node(deps: GraphDeps):
                         "Do not invent columns; productunits uses id not unit_id."
                     )
             synthetic["validation_feedback"] = append_feedback(synthetic, "policy", msg)
+            policy_fix = f"Policy fix: {msg}\nRewrite the SELECT to satisfy policy and allowlist."
+            synthetic["validation_feedback"] = append_feedback(synthetic, "sql_fix", policy_fix)
         if notes or not ok:
             upd["validation_feedback"] = synthetic["validation_feedback"]
         return {**emit_progress(state, "validate_sql"), **upd}

@@ -125,6 +125,7 @@ def build_gen_sql_user_prompt(
     month_calendar: MonthCalendarSpec | None = None,
     domain_context_block: str | None = None,
     query_table_mode: bool = False,
+    retry_rewrite_block: str | None = None,
 ) -> str:
     domain_block = (domain_context_block or "").strip()
     if domain_block:
@@ -202,9 +203,13 @@ def build_gen_sql_user_prompt(
             "- `stockreceipts` / `stockdispatches`: include codes, dates, amounts, status — not only counts.\n"
             "- Use schema snake_case names (sku_code, not SKU_CODE).\n\n"
         )
+    retry_block = (retry_rewrite_block or "").strip()
+    if retry_block:
+        retry_block = f"{retry_block}\n\n"
     if mode == "explore":
         return (
             f"{persona}\n\n"
+            f"{retry_block}"
             f"{domain_block}"
             f"{dialog_block}"
             f"{chart_ctx_block}"
@@ -228,6 +233,7 @@ def build_gen_sql_user_prompt(
     seed_block = seed[:8000] if seed else "(no previous SQL — treat as fresh generation)"
     return (
         f"{persona} Do not invent columns outside the schema block or the seed SQL.\n\n"
+        f"{retry_block}"
         f"{domain_block}"
         f"{dialog_block}"
         f"{chart_ctx_block}"
@@ -242,6 +248,35 @@ def build_gen_sql_user_prompt(
         f"User question: {user_q}\n\n"
         "Hard rules: Your entire reply must be that ONE SELECT only (PostgreSQL). "
         "No natural-language explanations. No prose instead of SQL.\n"
+        "Apply every [sql_fix] instruction; change FROM/JOIN/GROUP BY/WHERE vs the seed SQL.\n"
         "Respect the Agent_Idea brief for channel filters (Retail vs all channels) like explore mode.\n\n"
         f"Include a LIMIT clause (≤ {sql_limit_max})."
     )
+
+
+def build_retry_rewrite_block(
+    *,
+    attempt: int,
+    prior_sql: str | None,
+    feedback_render: str,
+    duplicate_warning: bool = False,
+) -> str:
+    """Mandatory rewrite section injected into gen_sql on retries."""
+    if attempt <= 1 or not feedback_render.strip():
+        return ""
+    parts = [
+        "## MANDATORY SQL REWRITE",
+        f"Attempt {attempt}: the previous SELECT was rejected. Follow all fix instructions below.",
+        feedback_render,
+    ]
+    seed = (prior_sql or "").strip()
+    if seed:
+        parts.append(
+            "Rejected SQL (starting reference only — you must change structure, not echo verbatim):\n"
+            f"```sql\n{seed[:6000]}\n```"
+        )
+    if duplicate_warning:
+        parts.append(
+            "Your last output matched a prior attempt. Use different tables, joins, or GROUP BY columns."
+        )
+    return "\n".join(parts)

@@ -4,12 +4,15 @@
 - **Câu hỏi:** Cho mình xem tổng doanh thu từ bảng không có trong hệ thống
 - **Nhóm:** natural_language
 - **Intent dự kiến:** `general_chat`
-- **Ngày test:** 
-- **Thời gian phản hồi:** 
-- **Trạng thái:** ⬜ Chưa test / ✅ Pass / ❌ Fail / ⚠️ Partial
+- **Ngày test:** 17/05/2026 21:10:13
+- **Thời gian phản hồi:** 19888ms
+- **Trạng thái:** ✅ Pass
 
 ## Response từ AI
-_(Chưa có)_
+**Trả lời:**
+
+Xin lỗi, yêu cầu của bạn không liên quan đến các chức năng của ERP. Nếu bạn cần hỗ trợ về quản lý kho, đơn hàng, sản phẩm, hoặc tài chính, vui lòng cung cấp thêm thông tin cụ thể. Ví dụ: 'Tính tổng doanh thu tháng này từ các đơn hàng bán lẻ' hoặc 'Liệt kê các phiếu nhập kho gần đây'.
+
 
 ## Kiểm tra
 - [ ] Intent đúng với dự kiến

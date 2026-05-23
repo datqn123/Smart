@@ -11,15 +11,15 @@
 ## Response từ AI
 **Trả lời:**
 
-Tá»ng giÃ¡ trá» tá»n kho hiá»n táº¡i lÃ  **30.554.000** (theo káº¿t quáº£ truy váº¥n SQL, bÃ¡m ÄÃºng sá» liá»u há» thá»ng).
+Tổng giá trị tồn kho hiện tại là **30.554.000** (theo kết quả truy vấn SQL, bám đúng số liệu hệ thống).
 
-Chá» sá» nÃ y pháº£n Ã¡nh tá»ng **sá» lÆ°á»£ng tá»n Ã giÃ¡ vá»n ÄÆ¡n vá» cÆ¡ sá»** (giÃ¡ láº¥y tá»« lá»ch sá»­ giÃ¡ theo ÄÆ¡n vá» `is_base_unit = TRUE`).
+Chỉ số này phản ánh tổng **số lượng tồn × giá vốn đơn vị cơ sở** (giá lấy từ lịch sử giá theo đơn vị `is_base_unit = TRUE`).
 
-Báº¡n cÃ³ thá» há»i tiáº¿p, vÃ­ dá»¥:
+Bạn có thể hỏi tiếp, ví dụ:
 
-- Tá»n kho SKU cá»¥ thá» á» nhá»¯ng vá» trÃ­ nÃ o?
-- Sáº£n pháº©m nÃ o cÃ³ giÃ¡ trá» tá»n cao nháº¥t?
-- CÃ³ bao nhiÃªu máº·t hÃ ng sáº¯p háº¿t hÃ ng?
+- Tồn kho SKU cụ thể ở những vị trí nào?
+- Sản phẩm nào có giá trị tồn cao nhất?
+- Có bao nhiêu mặt hàng sắp hết hàng?
 
 
 

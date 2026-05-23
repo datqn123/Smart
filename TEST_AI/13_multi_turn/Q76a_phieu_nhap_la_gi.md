@@ -11,7 +11,7 @@
 ## Response từ AI
 **Trả lời:**
 
-Phiáº¿u nháº­p kho lÃ  má»t loáº¡i phiáº¿u trong há» thá»ng ERP ÄÆ°á»£c sá»­ dá»¥ng Äá» ghi láº¡i thÃ´ng tin vá» viá»c nháº­p hÃ ng hÃ³a vÃ o kho. NÃ³ bao gá»m cÃ¡c thÃ´ng tin nhÆ° ngÃ y nháº­p, sá» lÆ°á»£ng hÃ ng hÃ³a, giÃ¡ trá» hÃ ng hÃ³a, vÃ  thÃ´ng tin vá» nhÃ  cung cáº¥p. Phiáº¿u nháº­p kho giÃºp theo dÃµi vÃ  quáº£n lÃ½ hÃ ng tá»n kho má»t cÃ¡ch hiá»u quáº£.
+Phiếu nhập kho là một loại phiếu trong hệ thống ERP được sử dụng để ghi lại thông tin về việc nhập hàng hóa vào kho. Nó bao gồm các thông tin như ngày nhập, số lượng hàng hóa, giá trị hàng hóa, và thông tin về nhà cung cấp. Phiếu nhập kho giúp theo dõi và quản lý hàng tồn kho một cách hiệu quả.
 
 
 

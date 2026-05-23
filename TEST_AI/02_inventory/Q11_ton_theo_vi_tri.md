@@ -11,9 +11,9 @@
 ## Response từ AI
 **Trả lời:**
 
-KhÃ´ng tÃ¬m tháº¥y dá»¯ liá»u tá»n kho cho SKU SP0001. CÃ³ thá» do: (1) SKU nÃ y chÆ°a ÄÆ°á»£c nháº­p kho, (2) ÄÃ£ háº¿t tá»n, hoáº·c (3) cÃ³ lá»i nháº­p liá»u. Báº¡n cÃ³ thá» thá»­:
+Không tìm thấy dữ liệu tồn kho cho SKU SP0001. Có thể do: (1) SKU này chưa được nhập kho, (2) đã hết tồn, hoặc (3) có lỗi nhập liệu. Bạn có thể thử:
 
-- Kiá»m tra láº¡i SKU cÃ³ chÃ­nh xÃ¡c khÃ´ng, - TÃ¬m sáº£n pháº©m gáº§n giá»ng vá»i SP0001, - Kiá»m tra xem sáº£n pháº©m nÃ y cÃ³ tá»n á» cÃ¡c kho khÃ¡c khÃ´ng.
+- Kiểm tra lại SKU có chính xác không, - Tìm sản phẩm gần giống với SP0001, - Kiểm tra xem sản phẩm này có tồn ở các kho khác không.
 
 
 

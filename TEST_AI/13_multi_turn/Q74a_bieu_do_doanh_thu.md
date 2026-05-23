@@ -11,7 +11,7 @@
 ## Response từ AI
 **Trả lời:**
 
-Dá»±a trÃªn dá»¯ liá»u hiá»n cÃ³, biá»u Äá» sáº½ chá» bao gá»m má»t ÄÆ°á»ng náº±m ngang trÃªn trá»¥c y táº¡i má»©c 0 cho cáº£ 4 thÃ¡ng Äáº§u nÄm 2025. Äiá»u nÃ y cho tháº¥y khÃ´ng cÃ³ doanh thu nÃ o ÄÆ°á»£c ghi nháº­n trong khoáº£ng thá»i gian nÃ y. Báº¡n cÃ³ thá» thá»­ há»i vá» cÃ¡c thÃ¡ng khÃ¡c hoáº·c cÃ¡c nÄm khÃ¡c Äá» cÃ³ thÃ´ng tin chi tiáº¿t hÆ¡n.
+Dựa trên dữ liệu hiện có, biểu đồ sẽ chỉ bao gồm một đường nằm ngang trên trục y tại mức 0 cho cả 4 tháng đầu năm 2025. Điều này cho thấy không có doanh thu nào được ghi nhận trong khoảng thời gian này. Bạn có thể thử hỏi về các tháng khác hoặc các năm khác để có thông tin chi tiết hơn.
 
 **Chart spec:**
 
@@ -22,10 +22,10 @@ Dá»±a trÃªn dá»¯ liá»u hiá»n cÃ³, biá»u Äá» sáº½
   "series": [
     {
       "dataKey": "metric_value",
-      "name": "Biá»u Äá» doanh thu theo thÃ¡ng"
+      "name": "Biểu đồ doanh thu theo tháng"
     }
   ],
-  "title": "Biá»u Äá» doanh thu theo thÃ¡ng",
+  "title": "Biểu đồ doanh thu theo tháng",
   "data": [
     {
       "month": "2025-01-01",

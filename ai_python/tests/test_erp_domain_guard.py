@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from langchain_core.messages import AIMessage, HumanMessage
+
 from app.graph.erp_guide.load_index import load_domain_index
 from app.graph.erp_guide.retrieve import detect_heuristic_misnomers, retrieve_guide_snippets
+from app.graph.erp_guide.slot_resolution import strip_catalog_draft_misnomers
 from app.graph.nodes.domain_guard import _apply_hard_rules
 from app.llm.schemas import DomainGuardOutput, DomainIssue
 
@@ -144,3 +147,71 @@ def test_apply_hard_rules_blocks_on_severity() -> None:
     )
     final = _apply_hard_rules(out, [block], user_question="phiếu xuất khẩu")
     assert final.action == "clarify"
+
+
+def test_strip_catalog_category_name_misnomer() -> None:
+    issues = [
+        DomainIssue(
+            type="term_mismatch",
+            user_text="đồ uống",
+            canonical_vi="loại sản phẩm",
+            severity="block",
+        )
+    ]
+    q = "Thêm món bánh tráng trộn vào danh mục Đồ uống"
+    assert strip_catalog_draft_misnomers(issues, q) == []
+
+
+def test_catalog_write_proceed_after_strip_misnomer() -> None:
+    out = DomainGuardOutput(
+        action="clarify",
+        in_scope=True,
+        matched_modules=["catalog"],
+        coverage="full",
+        issues=[
+            DomainIssue(
+                type="term_mismatch",
+                user_text="đồ uống",
+                canonical_vi="loại sản phẩm",
+                severity="block",
+            )
+        ],
+        normalized_question="Thêm món bánh tráng trộn vào danh mục Đồ uống",
+    )
+    final = _apply_hard_rules(
+        out,
+        [],
+        user_question="Thêm món bánh tráng trộn vào danh mục Đồ uống",
+    )
+    assert final.action == "proceed"
+
+
+def test_repeated_catalog_question_proceeds() -> None:
+    q = "Thêm món bánh tráng trộn vào danh mục Đồ uống"
+    messages = [
+        HumanMessage(content=q),
+        AIMessage(content="Cần làm rõ thêm"),
+        HumanMessage(content=q),
+    ]
+    out = DomainGuardOutput(
+        action="clarify",
+        in_scope=True,
+        matched_modules=["[catalog]"],
+        coverage="full",
+        issues=[
+            DomainIssue(
+                type="term_mismatch",
+                user_text="món",
+                canonical_vi="sản phẩm",
+                severity="block",
+            )
+        ],
+        normalized_question=q,
+    )
+    final = _apply_hard_rules(
+        out,
+        [],
+        user_question=q,
+        messages=messages,
+    )
+    assert final.action == "proceed"

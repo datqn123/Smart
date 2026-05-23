@@ -9,7 +9,9 @@
 - **Trạng thái:** ❌ Fail
 
 ## Response từ AI
-_Không có phản hồi._
+**Trả lời:**
+
+Hiện chưa tính được tổng giá trị. Thường do chưa có dòng dữ liệu khớp điều kiện hoặc chưa có giá vốn cho đơn vị tính cơ sở của sản phẩm.
 
 
 ## Kiểm tra

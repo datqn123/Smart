@@ -11,7 +11,7 @@
 ## Response từ AI
 **Trả lời:**
 
-Danh má»¥c Äá» uá»ng chiáº¿m tá»· lá» lá»n nháº¥t vá»i tá»ng sá» lÆ°á»£ng 350, tiáº¿p theo lÃ  Thá»±c pháº©m khÃ´ vá»i 126 vÃ  Äá» Än liá»n vá»i 18. Báº¡n cÃ³ thá» thá»­ phÃ¢n tÃ­ch nguyÃªn nhÃ¢n táº¡i sao Äá» uá»ng láº¡i chiáº¿m tá»· lá» cao nháº¥t, hoáº·c tÃ¬m hiá»u cÃ¡c sáº£n pháº©m cá»¥ thá» trong tá»«ng danh má»¥c Äá» cÃ³ cÃ¡i nhÃ¬n chi tiáº¿t hÆ¡n.
+Danh mục Đồ uống chiếm tỷ lệ lớn nhất với tổng số lượng 350, tiếp theo là Thực phẩm khô với 126 và Đồ ăn liền với 18. Bạn có thể thử phân tích nguyên nhân tại sao Đồ uống lại chiếm tỷ lệ cao nhất, hoặc tìm hiểu các sản phẩm cụ thể trong từng danh mục để có cái nhìn chi tiết hơn.
 
 **Chart spec:**
 
@@ -32,11 +32,11 @@ Danh má»¥c Äá» uá»ng chiáº¿m tá»· lá» lá»n nháº¥t
       "total_quantity": 18
     },
     {
-      "category_name": "BÃ¡nh káº¹o",
+      "category_name": "Bánh kẹo",
       "total_quantity": 7
     },
     {
-      "category_name": "HÃ³a pháº©m",
+      "category_name": "Hóa phẩm",
       "total_quantity": 22
     },
     {
@@ -48,7 +48,7 @@ Danh má»¥c Äá» uá»ng chiáº¿m tá»· lá» lá»n nháº¥t
       "total_quantity": 3
     },
     {
-      "category_name": "Thá»±c pháº©m khÃ´",
+      "category_name": "Thực phẩm khô",
       "total_quantity": 126
     }
   ]

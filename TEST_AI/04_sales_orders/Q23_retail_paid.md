@@ -11,7 +11,7 @@
 ## Response từ AI
 **Trả lời:**
 
-Hiá»n khÃ´ng tÃ­nh ÄÆ°á»£c tá»ng doanh thu tá»« ÄÆ¡n bÃ¡n láº» ÄÃ£ thanh toÃ¡n (trong thÃ¡ng nÃ y). ThÆ°á»ng do khÃ´ng cÃ³ dÃ²ng tá»n khá»p JOIN hoáº·c chÆ°a cÃ³ giÃ¡ vá»n `productpricehistory` cho ÄÆ¡n vá» cÆ¡ sá» (`productunits.is_base_unit = TRUE`).
+Hiện không tính được tổng doanh thu từ đơn bán lẻ đã thanh toán (trong tháng này). Thường do không có dòng tồn khớp JOIN hoặc chưa có giá vốn `productpricehistory` cho đơn vị cơ sở (`productunits.is_base_unit = TRUE`).
 
 
 

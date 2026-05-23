@@ -11,7 +11,7 @@
 ## Response từ AI
 **Trả lời:**
 
-Äá» uá»ng chiáº¿m 60,3%, Thá»±c pháº©m khÃ´ chiáº¿m 21,6%, HÃ³a pháº©m chiáº¿m 3,8%, Äá» Än liá»n chiáº¿m 3,1%, BÃ¡nh káº¹o chiáº¿m 1,2%, vÃ  Gia vá» chiáº¿m 0,5% tá»ng sá» lÆ°á»£ng tá»n kho. Báº¡n cÃ³ thá» thá»­ phÃ¢n tÃ­ch xu hÆ°á»ng tá»n kho qua cÃ¡c thÃ¡ng hoáº·c so sÃ¡nh vá»i doanh sá» bÃ¡n hÃ ng Äá» tá»i Æ°u hÃ³a quáº£n lÃ½ hÃ ng tá»n kho.
+Đồ uống chiếm 60,3%, Thực phẩm khô chiếm 21,6%, Hóa phẩm chiếm 3,8%, Đồ ăn liền chiếm 3,1%, Bánh kẹo chiếm 1,2%, và Gia vị chiếm 0,5% tổng số lượng tồn kho. Bạn có thể thử phân tích xu hướng tồn kho qua các tháng hoặc so sánh với doanh số bán hàng để tối ưu hóa quản lý hàng tồn kho.
 
 **Chart spec:**
 
@@ -32,11 +32,11 @@
       "total_quantity": 350
     },
     {
-      "category_name": "Thá»±c pháº©m khÃ´",
+      "category_name": "Thực phẩm khô",
       "total_quantity": 126
     },
     {
-      "category_name": "HÃ³a pháº©m",
+      "category_name": "Hóa phẩm",
       "total_quantity": 22
     },
     {
@@ -44,7 +44,7 @@
       "total_quantity": 18
     },
     {
-      "category_name": "BÃ¡nh káº¹o",
+      "category_name": "Bánh kẹo",
       "total_quantity": 7
     },
     {

@@ -11,7 +11,7 @@
 ## Response từ AI
 **Trả lời:**
 
-Doanh thu thÃ¡ng 4 nÄm 2026 lÃ  750.000 Äá»ng vÃ  thÃ¡ng 5 nÄm 2026 lÃ  297.700 Äá»ng. ÄÃ¢y lÃ  nhá»¯ng thÃ´ng tin quan trá»ng Äá» ÄÃ¡nh giÃ¡ hiá»u suáº¥t kinh doanh hÃ ng thÃ¡ng. Báº¡n cÃ³ thá» thá»­ phÃ¢n tÃ­ch xu hÆ°á»ng doanh thu vÃ  chi phÃ­ Äá» cÃ³ cÃ¡i nhÃ¬n toÃ n diá»n hÆ¡n vá» tÃ¬nh hÃ¬nh tÃ i chÃ­nh cá»§a doanh nghiá»p.
+Doanh thu tháng 4 năm 2026 là 750.000 đồng và tháng 5 năm 2026 là 297.700 đồng. Đây là những thông tin quan trọng để đánh giá hiệu suất kinh doanh hàng tháng. Bạn có thể thử phân tích xu hướng doanh thu và chi phí để có cái nhìn toàn diện hơn về tình hình tài chính của doanh nghiệp.
 
 **Chart spec:**
 
@@ -22,10 +22,10 @@ Doanh thu thÃ¡ng 4 nÄm 2026 lÃ  750.000 Äá»ng vÃ  thÃ¡ng 5 nÄ
   "series": [
     {
       "dataKey": "revenue",
-      "name": "Doanh thu theo thÃ¡ng trong nÄm nay"
+      "name": "Doanh thu theo tháng trong năm nay"
     }
   ],
-  "title": "Doanh thu theo thÃ¡ng trong nÄm nay",
+  "title": "Doanh thu theo tháng trong năm nay",
   "data": [
     {
       "month": "2026-04",

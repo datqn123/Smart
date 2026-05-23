@@ -11,16 +11,16 @@
 ## Response từ AI
 **Trả lời:**
 
-Tá»ng giÃ¡ trá» nháº­p hÃ ng tá»« má»i nhÃ  cung cáº¥p trong 90 ngÃ y qua:
+Tổng giá trị nhập hàng từ mỗi nhà cung cấp trong 90 ngày qua:
 
-- NCC seed V10 A: 2.412.000 (chiáº¿m 74% tá»ng nháº­p hÃ ng)
-- NCC seed V10 C: 760.000 (chiáº¿m 23% tá»ng nháº­p hÃ ng)
-- NCC seed V10 B: 750.000 (chiáº¿m 3% tá»ng nháº­p hÃ ng)
+- NCC seed V10 A: 2.412.000 (chiếm 74% tổng nhập hàng)
+- NCC seed V10 C: 760.000 (chiếm 23% tổng nhập hàng)
+- NCC seed V10 B: 750.000 (chiếm 3% tổng nhập hàng)
 
-PhÃ¢n tÃ­ch:
-1. NhÃ  cung cáº¥p V10 A lÃ  nguá»n cung lá»n nháº¥t, chiáº¿m hÆ¡n 70% tá»ng giÃ¡ trá» nháº­p hÃ ng
-2. Hai nhÃ  cung cáº¥p cÃ²n láº¡i cÃ³ giÃ¡ trá» nháº­p hÃ ng tÆ°Æ¡ng ÄÆ°Æ¡ng nhau
-3. CÃ³ thá» xem xÃ©t ÄÃ m phÃ¡n giÃ¡ vá»i nhÃ  cung cáº¥p V10 A do khá»i lÆ°á»£ng lá»n
+Phân tích:
+1. Nhà cung cấp V10 A là nguồn cung lớn nhất, chiếm hơn 70% tổng giá trị nhập hàng
+2. Hai nhà cung cấp còn lại có giá trị nhập hàng tương đương nhau
+3. Có thể xem xét đàm phán giá với nhà cung cấp V10 A do khối lượng lớn
 
 
 

@@ -11,7 +11,7 @@
 ## Response từ AI
 **Trả lời:**
 
-KhÃ¡ch hÃ ng cÃ³ sá» ÄÆ¡n hÃ ng nhiá»u nháº¥t lÃ  Cao VÄn Uy vá»i tá»ng cá»ng 60 ÄÆ¡n hÃ ng. Äiá»u nÃ y cho tháº¥y khÃ¡ch hÃ ng nÃ y cÃ³ má»©c Äá» tÆ°Æ¡ng tÃ¡c cao vá»i há» thá»ng ERP cá»§a doanh nghiá»p.
+Khách hàng có số đơn hàng nhiều nhất là Cao Văn Uy với tổng cộng 60 đơn hàng. Điều này cho thấy khách hàng này có mức độ tương tác cao với hệ thống ERP của doanh nghiệp.
 
 
 

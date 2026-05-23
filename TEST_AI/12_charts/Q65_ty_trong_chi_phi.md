@@ -11,12 +11,12 @@
 ## Response từ AI
 **Trả lời:**
 
-KhÃ´ng táº¡o ÄÆ°á»£c biá»u Äá»: ÄÃ£ háº¿t sá» láº§n thá»­ SQL.
+Không tạo được biểu đồ: đã hết số lần thử SQL.
 
-Báº¡n cÃ³ thá» thá»­ cÃ¡c cÃ¢u há»i khÃ¡c nhÆ°:
-- TÃ­nh tá»ng chi phÃ­ theo tá»«ng loáº¡i
-- Láº¥y dá»¯ liá»u chi tiáº¿t vá» cÃ¡c loáº¡i chi phÃ­
-- TÃ¬m kiáº¿m thÃ´ng tin vá» má»t loáº¡i chi phÃ­ cá»¥ thá»
+Bạn có thể thử các câu hỏi khác như:
+- Tính tổng chi phí theo từng loại
+- Lấy dữ liệu chi tiết về các loại chi phí
+- Tìm kiếm thông tin về một loại chi phí cụ thể
 
 
 

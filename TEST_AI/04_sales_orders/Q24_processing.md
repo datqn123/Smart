@@ -11,17 +11,17 @@
 ## Response từ AI
 **Trả lời:**
 
-Hiá»n khÃ´ng tÃ¬m tháº¥y ÄÆ¡n hÃ ng nÃ o Äang á» tráº¡ng thÃ¡i Processing. CÃ³ thá» do:
+Hiện không tìm thấy đơn hàng nào đang ở trạng thái Processing. Có thể do:
 
-- Thá»i gian lá»c quÃ¡ ngáº¯n (chá» trong thÃ¡ng nÃ y)
-- KhÃ´ng cÃ³ ÄÆ¡n hÃ ng bÃ¡n láº» Äang xá»­ lÃ½
-- Tá»« khÃ³a 'Processing' khÃ´ng khá»p chÃ­nh xÃ¡c vá»i tráº¡ng thÃ¡i trong há» thá»ng
+- Thời gian lọc quá ngắn (chỉ trong tháng này)
+- Không có đơn hàng bán lẻ đang xử lý
+- Từ khóa 'Processing' không khớp chính xác với trạng thái trong hệ thống
 
-Báº¡n cÃ³ thá» thá»­ cÃ¡c cÃ¢u há»i sau:
+Bạn có thể thử các câu hỏi sau:
 
-- Danh sÃ¡ch ÄÆ¡n hÃ ng Äang á» tráº¡ng thÃ¡i 'Preparing'?
-- Danh sÃ¡ch ÄÆ¡n hÃ ng Äang á» tráº¡ng thÃ¡i 'Shipped'?
-- Danh sÃ¡ch ÄÆ¡n hÃ ng Äang á» tráº¡ng thÃ¡i 'Completed'?
+- Danh sách đơn hàng đang ở trạng thái 'Preparing'?
+- Danh sách đơn hàng đang ở trạng thái 'Shipped'?
+- Danh sách đơn hàng đang ở trạng thái 'Completed'?
 
 
 

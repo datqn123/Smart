@@ -9,7 +9,31 @@
 - **Trạng thái:** ❌ Fail
 
 ## Response từ AI
-_Không có phản hồi._
+**Trả lời:**
+
+Dữ liệu chỉ có 1 quý trong năm 2026 với doanh thu là 1.103.700.000 đồng. Để vẽ biểu đồ doanh thu theo từng quý, bạn cần có dữ liệu của các quý khác trong năm. Bạn có thể thử hỏi về doanh thu của các quý khác trong năm 2026 hoặc các năm tiếp theo.
+
+**Chart spec:**
+
+```json
+{
+  "chartType": "pie",
+  "xKey": "quarter",
+  "series": [
+    {
+      "dataKey": "total_revenue",
+      "name": "Biểu đồ doanh thu theo quý"
+    }
+  ],
+  "title": "Biểu đồ doanh thu theo quý",
+  "data": [
+    {
+      "quarter": 2,
+      "total_revenue": 1103700.0
+    }
+  ]
+}
+```
 
 
 ## Kiểm tra

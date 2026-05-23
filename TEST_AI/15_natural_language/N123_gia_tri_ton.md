@@ -9,7 +9,17 @@
 - **Trạng thái:** ❌ Fail
 
 ## Response từ AI
-_Không có phản hồi._
+**Trả lời:**
+
+Tổng giá trị tồn kho là **30.474.000**đ.
+
+Con số này là tổng số lượng tồn nhân với giá vốn đơn vị hiện tại.
+
+Bạn có thể hỏi thêm, ví dụ:
+
+- Tồn của một mặt hàng cụ thể ở đâu?
+- Mặt hàng nào đang có giá trị tồn cao nhất?
+- Có bao nhiêu mặt hàng sắp hết hàng?
 
 
 ## Kiểm tra

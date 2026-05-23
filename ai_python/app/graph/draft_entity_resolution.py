@@ -130,24 +130,26 @@ def search_categories(
     tenant_id: str | None,
     term: str,
     limit: int = 6,
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Return (rows, error). error is set when DB lookup failed (not empty result)."""
     needle = _escape_ilike(term)
     if not executor or not needle:
-        return []
+        return [], None
     pattern = f"%{needle}%"
     sql = f"""
-SELECT c.id, c.code, c.name, c.status
+SELECT c.id, c.category_code, c.name, c.status
 FROM categories c
-WHERE (c.name ILIKE '{pattern}' OR c.code ILIKE '{pattern}')
+WHERE (c.name ILIKE '{pattern}' OR c.category_code ILIKE '{pattern}')
   AND c.status = 'Active'
+  AND c.deleted_at IS NULL
 ORDER BY c.name ASC
 LIMIT {int(limit)}
 """.strip()
     try:
-        return _rows_from_result(executor.execute(sql, tenant_id=tenant_id))
+        return _rows_from_result(executor.execute(sql, tenant_id=tenant_id)), None
     except (SqlExecutorError, ValueError, TypeError) as exc:
         logger.warning("category search failed: %s", exc)
-        return []
+        return [], "upstream"
 
 
 def _product_stock_qty(product: dict[str, Any]) -> int:
@@ -673,7 +675,24 @@ def resolve_catalog_before_generate(
             )
         cat_term = _category_term_from_slots(slots)
         if cat_term:
-            cats = search_categories(executor, tenant_id=tenant_id, term=cat_term)
+            cats, cat_err = search_categories(executor, tenant_id=tenant_id, term=cat_term)
+            if cat_err:
+                return pack_clarify_state(
+                    question=question,
+                    intro=(
+                        "Không tra cứu được danh mục trong DB (lỗi hệ thống). "
+                        "Vui lòng thử lại sau hoặc dùng **mã danh mục** (vd. CAT002)."
+                    ),
+                    issues=[
+                        DomainIssue(
+                            type="unknown_entity",
+                            user_text=cat_term,
+                            canonical_vi="Lỗi tra cứu danh mục",
+                            severity="block",
+                        )
+                    ],
+                    questions=["Thử lại với mã danh mục chính xác (categoryCode)."],
+                )
             if cat_term and not cats:
                 return pack_clarify_state(
                     question=question,
@@ -693,7 +712,7 @@ def resolve_catalog_before_generate(
                 )
             if len(cats) > 1:
                 lines = [
-                    f"{i}. **{c.get('code')}** — {c.get('name')}"
+                    f"{i}. **{c.get('category_code')}** — {c.get('name')}"
                     for i, c in enumerate(cats[:6], start=1)
                 ]
                 return pack_clarify_state(

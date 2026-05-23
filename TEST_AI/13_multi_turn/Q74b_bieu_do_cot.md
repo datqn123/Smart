@@ -11,15 +11,15 @@
 ## Response từ AI
 **Trả lời:**
 
-DÆ°á»i ÄÃ¢y lÃ  biá»u Äá» cá»t thá» hiá»n doanh thu qua cÃ¡c thÃ¡ng:
+Dưới đây là biểu đồ cột thể hiện doanh thu qua các tháng:
 
-- ThÃ¡ng 2: 0
-- ThÃ¡ng 3: 0
-- ThÃ¡ng 4: 397700
+- Tháng 2: 0
+- Tháng 3: 0
+- Tháng 4: 397700
 
-Biá»u Äá» nÃ y cho tháº¥y doanh thu cá»§a thÃ¡ng 4 lÃ  397700, trong khi thÃ¡ng 2 vÃ  thÃ¡ng 3 khÃ´ng cÃ³ doanh thu.
+Biểu đồ này cho thấy doanh thu của tháng 4 là 397700, trong khi tháng 2 và tháng 3 không có doanh thu.
 
-Báº¡n cÃ³ thá» thá»­ táº¡o biá»u Äá» cá»t báº±ng cÃ¡ch sá»­ dá»¥ng cÃ¡c cÃ´ng cá»¥ nhÆ° Excel hoáº·c Google Sheets. Chá» cáº§n nháº­p dá»¯ liá»u vÃ o báº£ng vÃ  chá»n loáº¡i biá»u Äá» cá»t Äá» hiá»n thá».
+Bạn có thể thử tạo biểu đồ cột bằng cách sử dụng các công cụ như Excel hoặc Google Sheets. Chỉ cần nhập dữ liệu vào bảng và chọn loại biểu đồ cột để hiển thị.
 
 **Chart spec:**
 
@@ -30,7 +30,7 @@ Báº¡n cÃ³ thá» thá»­ táº¡o biá»u Äá» cá»t báº±n
   "series": [
     {
       "dataKey": "doanh_thu",
-      "name": "GiÃ¡ trá»"
+      "name": "Giá trị"
     }
   ],
   "title": "",

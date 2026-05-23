@@ -11,13 +11,13 @@
 ## Response từ AI
 **Trả lời:**
 
-Danh sÃ¡ch sáº£n pháº©m thuá»c danh má»¥c "Äá» uá»ng" gá»m 3 sáº£n pháº©m sau:
+Danh sách sản phẩm thuộc danh mục "Đồ uống" gồm 3 sản phẩm sau:
 
 - NÆ°á»c suá»i 500ml (SKU: DEMO-NUOC-500)
-- Coca 330ml thÃ¹ng 24 (SKU: UONG-COKE-24)
-- Sá»¯a tÆ°Æ¡i tiá»t trÃ¹ng 1L (SKU: UONG-SUA-1L)
+- Coca 330ml thùng 24 (SKU: UONG-COKE-24)
+- Sữa tươi tiệt trùng 1L (SKU: UONG-SUA-1L)
 
-Táº¥t cáº£ cÃ¡c sáº£n pháº©m Äá»u Äang hoáº¡t Äá»ng (tráº¡ng thÃ¡i: Active).
+Tất cả các sản phẩm đều đang hoạt động (trạng thái: Active).
 
 
 
