@@ -37,7 +37,7 @@ LLM_BASE_URL=https://your-openai-compatible-host/v1
 LLM_API_KEY=your-llm-api-key
 LLM_MODEL=gemma-4-31B-it
 # Optional: smaller/cheaper model for Vietnamese chat + raw SQL text; stronger model for JSON steps.
-# LLM_MODEL=SaoLa4-small
+# LLM_MODEL=Qwen3.6-27B
 # LLM_STRUCTURED_MODEL=Qwen3.6-27B
 # LLM_STRUCTURED_TEMPERATURE=0.1
 LLM_TEMPERATURE=0.2
@@ -46,7 +46,7 @@ LLM_SEND_TOP_K=0
 
 APP_ENV=dev
 SQL_EXECUTOR_MODE=http_spring
-SPRING_SQL_URL=http://127.0.0.1:8080/api/v1/ai/db/sql/query-readonly-raw
+SPRING_SQL_URL=http://localhost:8080/api/v1/ai/db/sql/query-readonly-raw
 SPRING_SQL_BEARER_TOKEN=
 SQL_EXECUTOR_TIMEOUT_SECONDS=10
 SQL_EXECUTOR_ROW_LIMIT=100

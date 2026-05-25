@@ -273,7 +273,9 @@ def make_agent_review_node(deps: GraphDeps):
         )
         draft = state.get("chart_spec_draft")
         if not isinstance(draft, dict):
-            draft = {}
+            # Bỏ qua agent_chart: lấy chart_idea làm gốc để review tự sinh spec hoàn chỉnh
+            brief = state.get("chart_brief") or {}
+            draft = brief.get("chart_idea") or state.get("idea_chart_idea") or {}
         user_q = latest_human_question(state.get("messages"))
         if reg is None:
             keys = list(rows[0].keys()) if rows else ["_stub", "sql_ok"]

@@ -1,8 +1,8 @@
-"""Summarize SQL subgraph output for main graph."""
-
 from __future__ import annotations
 
 import logging
+from collections.abc import Generator
+
 
 from langchain_core.messages import AIMessage
 
@@ -289,6 +289,7 @@ def _build_sql_empty_message(
 def make_summarize_answer_node(deps: GraphDeps):
     def summarize_answer(state: AgentState) -> dict:
         logger.info("node=summarize_answer action=start")
+        progress_dict = emit_progress(state, "summarize_answer")
         err = state.get("error_payload")
         if err:
             parts = [f"mã lỗi: {err.get('error')}"]
@@ -315,7 +316,7 @@ def make_summarize_answer_node(deps: GraphDeps):
                 detail=str(err),
             )
             return {
-                **emit_progress(state, "summarize_answer"),
+                **progress_dict,
                 "final_answer": msg,
                 "messages": [AIMessage(content=msg)],
             }
@@ -345,11 +346,20 @@ def make_summarize_answer_node(deps: GraphDeps):
                 fallback_template_id="sql_empty_vi",
             )
             return {
-                **emit_progress(state, "summarize_answer"),
+                **progress_dict,
                 "final_answer": empty_msg,
                 "messages": [AIMessage(content=empty_msg)],
             }
         table_sse = state.get("query_table_sse")
+        
+        # Lấy stream writer từ LangGraph để stream trực tiếp ra custom events
+        writer = None
+        try:
+            from langgraph.config import get_stream_writer
+            writer = get_stream_writer()
+        except Exception:
+            writer = None
+
         if isinstance(table_sse, dict) and table_sse:
             row_count = table_sse.get("rowCount", 0)
             truncated = bool(table_sse.get("truncated"))
@@ -384,12 +394,17 @@ def make_summarize_answer_node(deps: GraphDeps):
                     "Bảng chi tiết đã hiển thị riêng bên dưới UI — "
                     "chỉ viết 1–2 câu tiếng Việt giới thiệu ngắn (không liệt kê từng dòng, không bullet dài)."
                 )
-                intro = reg.get("summarize").invoke_text(
+                accumulated_ans = ""
+                stream = reg.get("summarize").stream_text(
                     prompt,
                     system=_SUMMARIZE_SYSTEM
                     + "\n\nKhi có bảng UI: tối đa 2 câu, không markdown list dài.",
                 )
-                intro = format_display_for_chat_ui(intro)
+                for chunk in stream:
+                    accumulated_ans += chunk
+                    if writer is not None:
+                        writer({"final_answer": accumulated_ans})
+                intro = format_display_for_chat_ui(accumulated_ans)
             intro = finalize_answer(
                 intro,
                 deps=deps,
@@ -397,6 +412,7 @@ def make_summarize_answer_node(deps: GraphDeps):
                 scenario="sql_summary",
                 user_question=user_q,
                 has_query_result=True,
+                skip_quality=True,
             )
             emit_agent_trace(
                 logger,
@@ -405,7 +421,7 @@ def make_summarize_answer_node(deps: GraphDeps):
                 phase="Tóm tắt ngắn (có bảng UI)",
                 detail=intro[:800],
             )
-            return {**emit_progress(state, "summarize_answer"), "final_answer": intro, "messages": [AIMessage(content=intro)]}
+            return {**progress_dict, "final_answer": intro, "messages": [AIMessage(content=intro)]}
         reg = deps.llm_registry
         if reg is None:
             qr_stub = localize_query_result_for_display(qr, deps.settings.ai_display_timezone)
@@ -418,7 +434,7 @@ def make_summarize_answer_node(deps: GraphDeps):
                 detail=stub_ans if len(stub_ans) <= 1500 else stub_ans[:1500] + "…",
             )
             return {
-                **emit_progress(state, "summarize_answer"),
+                **progress_dict,
                 "final_answer": stub_ans,
                 "messages": [AIMessage(content=stub_ans)],
             }
@@ -450,7 +466,7 @@ def make_summarize_answer_node(deps: GraphDeps):
                 detail=deterministic_ans[:800],
             )
             return {
-                **emit_progress(state, "summarize_answer"),
+                **progress_dict,
                 "final_answer": deterministic_ans,
                 "messages": [AIMessage(content=deterministic_ans)],
             }
@@ -485,11 +501,17 @@ def make_summarize_answer_node(deps: GraphDeps):
             if deps.settings.ai_display_timezone
             else ""
         )
-        ans = reg.get("summarize").invoke_text(
+        accumulated_ans = ""
+        stream = reg.get("summarize").stream_text(
             prompt,
             system=_SUMMARIZE_SYSTEM + tz_note,
         )
-        ans = format_display_for_chat_ui(ans)
+        for chunk in stream:
+            accumulated_ans += chunk
+            if writer is not None:
+                writer({"final_answer": accumulated_ans})
+
+        ans = format_display_for_chat_ui(accumulated_ans)
         ans = finalize_answer(
             ans,
             deps=deps,
@@ -498,6 +520,7 @@ def make_summarize_answer_node(deps: GraphDeps):
             user_question=user_q,
             has_query_result=True,
             query_result=qr if isinstance(qr, dict) else None,
+            skip_quality=True,
         )
         preview = ans if len(ans) <= 1200 else ans[:1200] + "…"
         emit_agent_trace(
@@ -507,6 +530,7 @@ def make_summarize_answer_node(deps: GraphDeps):
             phase="Tóm tắt kết quả SQL (LLM)",
             detail=f"văn_bản_phản_hồi:\n{preview}",
         )
-        return {**emit_progress(state, "summarize_answer"), "final_answer": ans, "messages": [AIMessage(content=ans)]}
+        return {**progress_dict, "final_answer": ans, "messages": [AIMessage(content=ans)]}
 
     return summarize_answer
+

@@ -41,9 +41,9 @@ SCENARIO_PROFILES: dict[str, ScenarioProfile] = {
     "domain_reject": ScenarioProfile(min_chars=150, require_guidance=True),
     "domain_clarify": ScenarioProfile(skip_quality=True),
     "chart_success": ScenarioProfile(min_chars=40),
-    "chart_review": ScenarioProfile(min_chars=120, require_guidance=True),
+    "chart_review": ScenarioProfile(min_chars=120, require_guidance=True, enrich_allowed=False),
     "chart_fail": ScenarioProfile(min_chars=120, require_guidance=True),
-    "draft_confirm": ScenarioProfile(min_chars=60, require_guidance=True),
+    "draft_confirm": ScenarioProfile(min_chars=60, require_guidance=True, enrich_allowed=False),
     "sql_clarify": ScenarioProfile(skip_quality=True),
     "draft_clarify": ScenarioProfile(skip_quality=True),
 }

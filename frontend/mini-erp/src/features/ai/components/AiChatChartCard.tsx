@@ -182,15 +182,19 @@ function ChartTooltipContent({
   )
 }
 
-function chartAxisProps(xKey: string) {
+function chartAxisProps(xKey: string, dataLength: number) {
+  const shouldRotate = dataLength > 8
   return {
     dataKey: xKey,
     axisLine: false,
     tickLine: false,
-    tick: AXIS_TICK,
-    dy: 8,
-    interval: 0 as const,
-    height: 36,
+    tick: shouldRotate
+      ? { ...AXIS_TICK, angle: -30, textAnchor: "end" as const }
+      : AXIS_TICK,
+    dy: shouldRotate ? 4 : 8,
+    dx: shouldRotate ? -4 : 0,
+    interval: (dataLength > 15 ? "preserveStartEnd" : 0) as any,
+    height: shouldRotate ? 64 : 36,
   }
 }
 
@@ -250,7 +254,7 @@ function ChartCanvas({
                 </linearGradient>
               </defs>
               {grid}
-              <XAxis {...chartAxisProps(xKey)} />
+              <XAxis {...chartAxisProps(xKey, data.length)} />
               <YAxis {...chartYAxisProps()} />
               {tooltip}
               <Line
@@ -322,7 +326,7 @@ function ChartCanvas({
                 </linearGradient>
               </defs>
               {grid}
-              <XAxis {...chartAxisProps(xKey)} />
+              <XAxis {...chartAxisProps(xKey, data.length)} />
               <YAxis {...chartYAxisProps()} />
               {tooltip}
               <Bar dataKey={yKey} name={metricLabel} radius={[6, 6, 0, 0]} maxBarSize={48}>
@@ -356,15 +360,54 @@ export function AiChatChartCard({ spec }: { spec: Record<string, unknown> }) {
       ? seriesArr[0].name.trim()
       : yKey ?? "Giá trị"
 
+  const [activeChartType, setActiveChartType] = useState<"line" | "pie" | "bar">(chartType)
+  const [showAll, setShowAll] = useState(false)
+
   const data = useMemo(() => {
     if (!xKey || !yKey || rawData.length === 0) return []
     return normalizeRows(rawData, xKey, yKey)
   }, [rawData, xKey, yKey])
 
+  const isTimeBased = useMemo(() => {
+    if (data.length === 0 || !xKey) return false
+    return data.slice(0, 5).some((row) => {
+      const v = String(row.__rawX || row[xKey] || "").trim()
+      return (
+        /^\d{4}-\d{2}-\d{2}/.test(v) ||
+        /^\d{1,2}\/\d{1,2}\/\d{4}/.test(v) ||
+        (!Number.isNaN(Date.parse(v)) && /\d{4}/.test(v))
+      )
+    })
+  }, [data, xKey])
+
+  // Group top 10 items + others to ensure readability when data.length > 10
+  const processedData = useMemo(() => {
+    if (data.length === 0 || !yKey || !xKey) return []
+    if (isTimeBased || showAll || data.length <= 10) return data
+
+    // Sort descending by value
+    const sorted = [...data].sort((a, b) => Number(b[yKey]) - Number(a[yKey]))
+    const top10 = sorted.slice(0, 10)
+    const others = sorted.slice(10)
+    const othersSum = others.reduce((sum, row) => sum + (Number(row[yKey]) || 0), 0)
+
+    if (othersSum > 0) {
+      return [
+        ...top10,
+        {
+          [xKey]: "Khác",
+          __rawX: "Khác",
+          [yKey]: othersSum,
+        },
+      ]
+    }
+    return top10
+  }, [data, yKey, xKey, isTimeBased, showAll])
+
   const pieData = useMemo((): PieRow[] => {
-    if (!xKey || !yKey || data.length === 0) return []
-    const total = data.reduce((sum, row) => sum + (Number(row[yKey]) || 0), 0)
-    return data.map((row, i) => {
+    if (!xKey || !yKey || processedData.length === 0) return []
+    const total = processedData.reduce((sum, row) => sum + (Number(row[yKey]) || 0), 0)
+    return processedData.map((row, i) => {
       const value = Number(row[yKey]) || 0
       return {
         ...row,
@@ -373,7 +416,7 @@ export function AiChatChartCard({ spec }: { spec: Record<string, unknown> }) {
         __pct: total > 0 ? (value / total) * 100 : 0,
       }
     })
-  }, [data, xKey, yKey])
+  }, [processedData, xKey, yKey])
 
   if (!xKey || !yKey) {
     return (
@@ -393,10 +436,11 @@ export function AiChatChartCard({ spec }: { spec: Record<string, unknown> }) {
 
 
   const chartTitle = title || "Biểu đồ dữ liệu"
+
   const canvasProps: ChartRenderProps = {
     gradientId,
-    chartType,
-    data,
+    chartType: activeChartType,
+    data: processedData,
     pieData,
     xKey,
     yKey,
@@ -407,44 +451,101 @@ export function AiChatChartCard({ spec }: { spec: Record<string, unknown> }) {
   return (
     <>
       <div className="w-full min-w-0 overflow-hidden rounded-2xl border border-slate-200/90 bg-gradient-to-b from-slate-50/80 to-white shadow-sm ring-1 ring-slate-900/[0.04]">
-        <div className="flex items-start gap-2 border-b border-slate-100 bg-white/60 px-3 py-2.5">
-          <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-            {chartType === "pie" ? (
-              <PieChartIcon className="h-4 w-4" aria-hidden />
-            ) : (
-              <BarChart3 className="h-4 w-4" aria-hidden />
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-white/60 px-3 py-2">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+              {activeChartType === "pie" ? (
+                <PieChartIcon className="h-4 w-4" aria-hidden />
+              ) : (
+                <BarChart3 className="h-4 w-4" aria-hidden />
+              )}
+            </div>
+            <div className="min-w-0">
+              <h4 className="text-sm font-semibold leading-snug tracking-tight text-slate-800 line-clamp-1">
+                {chartTitle}
+              </h4>
+              <p className="text-[10px] text-slate-500">
+                {data.length} {activeChartType === "pie" ? "nhóm" : isTimeBased ? "mốc thời gian" : "mặt hàng"}
+                {!isTimeBased && data.length > 10 && !showAll && " (đang hiển thị Top 10)"}
+              </p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            {/* Grouping Toggle */}
+            {!isTimeBased && data.length > 10 && (
+              <button
+                type="button"
+                onClick={() => setShowAll(prev => !prev)}
+                className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-950 shadow-sm transition-all"
+              >
+                {showAll ? "Thu gọn (Top 10)" : "Hiển thị tất cả"}
+              </button>
             )}
+
+            {/* Interactive Chart Selector */}
+            <div className="flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5 shadow-sm">
+              <button
+                type="button"
+                onClick={() => setActiveChartType("bar")}
+                className={`rounded px-2 py-1 text-xs font-semibold transition-all ${
+                  activeChartType === "bar"
+                    ? "bg-white text-blue-600 shadow-sm"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                Cột
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveChartType("line")}
+                className={`rounded px-2 py-1 text-xs font-semibold transition-all ${
+                  activeChartType === "line"
+                    ? "bg-white text-blue-600 shadow-sm"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                Đường
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveChartType("pie")}
+                className={`rounded px-2 py-1 text-xs font-semibold transition-all ${
+                  activeChartType === "pie"
+                    ? "bg-white text-blue-600 shadow-sm"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                Tròn
+              </button>
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0 bg-white h-7 text-xs font-semibold"
+              onClick={() => setDialogOpen(true)}
+            >
+              <Maximize2 className="h-3.5 w-3.5 mr-1" />
+              Phóng to
+            </Button>
           </div>
-          <div className="min-w-0 flex-1">
-            <h4 className="text-sm font-semibold leading-snug tracking-tight text-slate-800 line-clamp-2">
-              {chartTitle}
-            </h4>
-            <p className="mt-0.5 text-[11px] text-slate-500">
-              {data.length} {chartType === "pie" ? "nhóm" : "mốc thời gian"}
-            </p>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="shrink-0 bg-white"
-            onClick={() => setDialogOpen(true)}
-          >
-            <Maximize2 className="h-4 w-4" />
-            Phóng to
-          </Button>
         </div>
+        
         <ChartCanvas
           {...canvasProps}
           areaClassName="h-[min(300px,38vh)] w-full min-w-[240px] px-1 pb-2 pt-3 md:h-[min(340px,42vh)]"
         />
       </div>
+
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="flex max-h-[min(92dvh,720px)] w-full max-w-[min(96vw,900px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(96vw,900px)]">
           <DialogHeader className="border-b border-slate-100 px-5 py-4 text-left">
             <DialogTitle className="text-base">{chartTitle}</DialogTitle>
             <p className="text-xs text-slate-500">
-              {data.length} {chartType === "pie" ? "nhóm" : "mốc thời gian"}
+              {data.length} {activeChartType === "pie" ? "nhóm" : isTimeBased ? "mốc thời gian" : "mặt hàng"}
+              {!isTimeBased && data.length > 10 && !showAll && " (đang hiển thị Top 10)"}
             </p>
           </DialogHeader>
           <ChartCanvas

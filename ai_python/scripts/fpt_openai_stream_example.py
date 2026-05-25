@@ -1,6 +1,6 @@
 """Minimal FPT OpenAI-compatible streaming example (same stack as mini-erp / LangGraph).
 
-Uses ``LLM_MODEL`` (default ``gemma-4-31B-it``), not SaoLa4-small.
+Uses ``LLM_MODEL`` (default ``gemma-4-31B-it``), not Qwen3.6-27B.
 Set ``LLM_API_KEY`` (and optionally ``LLM_BASE_URL``) — e.g. from ``ai_python/.env``.
 
 Run from repo root or ``ai_python``:

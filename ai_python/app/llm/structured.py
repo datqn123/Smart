@@ -49,7 +49,22 @@ def structured_invoke(
     contract = (json_output_contract or "").strip()
     schema_instruction = contract if contract else f"Schema: {schema.model_json_schema()}"
     instruction = f"{hint} {schema_instruction}"
-    tail: list[BaseMessage] = list(messages) + [HumanMessage(content=instruction)]
+
+    # --- FIX: Merge instruction into last HumanMessage to avoid consecutive Human messages ---
+    tail: list[BaseMessage] = list(messages)
+    if tail and isinstance(tail[-1], HumanMessage):
+        last_msg = tail[-1]
+        new_content = f"{last_msg.content}\n\n{instruction}"
+        tail[-1] = HumanMessage(
+            content=new_content,
+            additional_kwargs=last_msg.additional_kwargs,
+            response_metadata=last_msg.response_metadata,
+            id=last_msg.id,
+        )
+    else:
+        tail.append(HumanMessage(content=instruction))
+    # --- END FIX ---
+
     last_err: Exception | None = None
     for _ in range(max_retries):
         try:
@@ -59,11 +74,29 @@ def structured_invoke(
             return schema.model_validate(data)
         except (json.JSONDecodeError, ValidationError, TypeError) as e:
             last_err = e
-            tail = list(messages) + [
-                SystemMessage(
+            # Retry: SystemMessage for error hint, then re-merge instruction into last Human
+            retry_tail: list[BaseMessage] = list(messages)
+            err_prefix = f"Parse error: {e}. "
+            if retry_tail and isinstance(retry_tail[-1], HumanMessage):
+                last_msg = retry_tail[-1]
+                retry_content = f"{last_msg.content}\n\n{err_prefix}{instruction}"
+                retry_tail[-1] = HumanMessage(
+                    content=retry_content,
+                    additional_kwargs=last_msg.additional_kwargs,
+                    response_metadata=last_msg.response_metadata,
+                    id=last_msg.id,
+                )
+                retry_tail.insert(-1, SystemMessage(
                     content="Your previous reply was not valid JSON for the schema. "
                     "Output ONLY valid JSON."
-                ),
-                HumanMessage(content=f"Parse error: {e}. {instruction}"),
-            ]
+                ))
+            else:
+                retry_tail.extend([
+                    SystemMessage(
+                        content="Your previous reply was not valid JSON for the schema. "
+                        "Output ONLY valid JSON."
+                    ),
+                    HumanMessage(content=f"{err_prefix}{instruction}"),
+                ])
+            tail = retry_tail
     raise ValueError(f"structured_invoke failed after {max_retries} retries") from last_err

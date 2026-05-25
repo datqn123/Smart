@@ -23,11 +23,13 @@ from app.graph.draft_reference_messages import (
     format_reference_validation_failure,
 )
 from app.graph.draft_slots_llm import predict_inventory_draft_slots
+from app.graph.pg_schema_context import build_schema_artifact_for_table_names
 from app.graph.progress import emit_progress
 from app.graph.spring_inventory_draft_client import (
     post_inventory_draft,
     validate_inventory_draft_references,
 )
+from app.graph.sql_prompts import format_schema_block
 from app.graph.state import AgentState
 from app.llm.schemas import InventoryDraftGenerateOutput
 from app.prompts.load import (
@@ -38,6 +40,17 @@ from app.prompts.load import (
 logger = logging.getLogger(__name__)
 
 _DRAFT_CONTRACT = load_inventory_draft_json_contract() or ""
+
+# Tables relevant to inventory draft — introspected from Postgres at runtime.
+_INVENTORY_SCHEMA_TABLES = [
+    "products",
+    "suppliers",
+    "inventory",
+    "stockreceipts",
+    "stockreceiptdetails",
+    "productunits",
+    "categories",
+]
 
 
 def make_classify_inventory_doc_node(deps: GraphDeps):
@@ -64,6 +77,19 @@ def make_classify_inventory_doc_node(deps: GraphDeps):
     return classify_inventory_doc
 
 
+def _build_schema_context_for_draft(deps: GraphDeps) -> str:
+    """Introspect Postgres schema for inventory-related tables and format for LLM."""
+    try:
+        artifact, err = build_schema_artifact_for_table_names(
+            deps.settings, _INVENTORY_SCHEMA_TABLES
+        )
+        if artifact is not None:
+            return format_schema_block(artifact, selected_tables=None, enriched=True)
+    except Exception as exc:
+        logger.warning("inventory draft schema introspect failed: %s", exc)
+    return ""
+
+
 def make_generate_inventory_draft_node(deps: GraphDeps):
     def generate_inventory_draft(state: AgentState) -> dict:
         logger.info("node=generate_inventory_draft action=start")
@@ -76,10 +102,20 @@ def make_generate_inventory_draft_node(deps: GraphDeps):
         reg = deps.llm_registry
         if reg is not None:
             try:
-                client = reg.get("chat")
+                client = reg.get("inventory_draft")
             except KeyError:
-                client = reg.get("default")
+                try:
+                    client = reg.get("intent")
+                except KeyError:
+                    client = reg.get("default")
             draft_system = load_inventory_draft_system_prompt(doc_type)
+            # Inject real DB schema context so LLM sees actual table/column names
+            schema_ctx = _build_schema_context_for_draft(deps)
+            if schema_ctx:
+                draft_system += (
+                    "\n\n## Database Schema Reference (read-only — dùng để đối chiếu tên cột/bảng thực tế)\n\n"
+                    + schema_ctx
+                )
             slots_blob = state.get("inventory_draft_slots")
             user_block = (
                 f"doc_type={doc_type}\nline_count_hint={line_hint}\n"
@@ -199,35 +235,9 @@ def make_persist_inventory_draft_node(deps: GraphDeps):
             }
         line_columns = payload.get("lineColumns") or default_line_columns(doc_type)
         bearer = state.get("spring_bearer_token")
-        try:
-            db_issues = validate_inventory_draft_references(
-                deps.settings,
-                bearer_token=bearer,
-                entity_type=doc_type,
-                header=header,
-                line_columns=line_columns if isinstance(line_columns, list) else default_line_columns(doc_type),
-                lines=lines,
-            )
-        except Exception as exc:
-            logger.warning("inventory draft DB validate failed", exc_info=True)
-            msg = f"Không kiểm tra được dữ liệu tham chiếu: {exc}"
-            return {
-                **emit_progress(state, "persist_inventory_draft"),
-                "final_answer": msg,
-                "messages": [AIMessage(content=msg)],
-                "error_payload": {"code": "INVENTORY_DRAFT_VALIDATE", "message": msg},
-            }
-        if db_issues:
-            msg = format_reference_validation_failure(
-                draft_kind=doc_label,
-                issues=db_issues,
-            )
-            return {
-                **emit_progress(state, "persist_inventory_draft"),
-                "final_answer": msg,
-                "messages": [AIMessage(content=msg)],
-                "error_payload": {"code": "INVENTORY_DRAFT_REFERENCE", "message": msg},
-            }
+        # NOTE: Bỏ qua validate_inventory_draft_references (cuộc gọi HTTP /validate)
+        # vì node resolve_inventory_draft đã trực tiếp truy vấn SQL để xác thực
+        # SKU và Nhà cung cấp trước khi vào đây. Tiết kiệm ~2-4s trễ mạng.
         conversation_id = state.get("thread_id")
         try:
             saved = post_inventory_draft(

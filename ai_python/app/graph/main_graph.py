@@ -78,7 +78,7 @@ def build_main_graph(deps: GraphDeps):
         "sql_branch",
         route_after_sql_branch,
         {
-            "agent_chart": "agent_chart",
+            "agent_review": "agent_review",
             "chart_fail_message": "chart_fail_message",
             "emit_query_table": "emit_query_table",
             "summarize_answer": "summarize_answer",
@@ -86,7 +86,6 @@ def build_main_graph(deps: GraphDeps):
         },
     )
     g.add_edge("emit_query_table", "summarize_answer")
-    g.add_edge("agent_chart", "agent_review")
     g.add_edge("agent_review", END)
     g.add_edge("chart_fail_message", END)
     g.add_edge("summarize_answer", END)

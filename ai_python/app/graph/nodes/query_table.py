@@ -60,13 +60,13 @@ def route_after_sql_branch(state: AgentState) -> str:
         return "stop_clarify"
     if state.get("intent") == "system_data_chart":
         if state.get("chart_data_ok") or state.get("chart_degraded"):
-            return "agent_chart"
+            return "agent_review"
         err = state.get("error_payload")
         if isinstance(err, dict) and err.get("error") == "max_sql_attempts":
             return "chart_fail_message"
         if state.get("chart_data_ok") is False:
             return "chart_fail_message"
-        return "agent_chart"
+        return "agent_review"
     if should_route_query_table(state):
         return "emit_query_table"
     return "summarize_answer"

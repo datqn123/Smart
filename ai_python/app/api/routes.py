@@ -210,6 +210,7 @@ def _iter_chat_sse_events(
     progress_sent = ""
     final_error: dict[str, Any] | None = None
     had_stream_payload = False
+    had_custom_payload = False
     set_correlation_id(correlation_id)
     try:
         for chunk in runtime.stream(
@@ -274,7 +275,23 @@ def _iter_chat_sse_events(
                 yield _sse_ui_event("data_table", table_payload)
                 data_table_sent = True
                 had_stream_payload = True
-            if "final_answer" in update and update["final_answer"]:
+            if isinstance(chunk, tuple) and len(chunk) == 2:
+                mode, payload = chunk
+                if mode == "custom" and isinstance(payload, dict) and "final_answer" in payload:
+                    had_custom_payload = True
+                    current = str(payload["final_answer"])
+                    if current.startswith(prev_answer) and len(current) > len(prev_answer):
+                        delta = current[len(prev_answer) :]
+                        if delta:
+                            yield _sse_ui_event("delta", delta)
+                            had_stream_payload = True
+                        prev_answer = current
+                    elif current != prev_answer:
+                        yield _sse_ui_event("delta", current)
+                        had_stream_payload = True
+                        prev_answer = current
+                    continue
+            if "final_answer" in update and update["final_answer"] and not had_custom_payload:
                 current = str(update["final_answer"])
                 if current.startswith(prev_answer) and len(current) > len(prev_answer):
                     delta = current[len(prev_answer) :]
