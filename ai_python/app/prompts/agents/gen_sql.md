@@ -7,6 +7,7 @@ Reply with **ONLY one PostgreSQL SELECT** (read-only).
 - No natural-language before or after the SQL (any language).
 - Do not apologize or explain missing data in prose — only SQL.
 - No markdown fences.
+- For aggregate expressions, always define explicit business aliases (e.g. `AS total_revenue`, `AS total_received_amount`, `AS receipt_count`). Never leave raw names like `coalesce`, `sum`, `count`, `?column?`.
 
 ## Tables
 

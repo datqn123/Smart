@@ -9,13 +9,18 @@ from langchain_core.messages import AIMessage
 from app.graph.agent_trace import emit_agent_trace
 from app.graph.answer_fallbacks import SQL_EMPTY_VI
 from app.graph.answer_quality import finalize_answer
+from app.graph.business_scope import (
+    is_followup_detail_reconciled,
+    is_raw_sql_alias,
+    scalar_label_from_scope,
+    scope_effective_question,
+)
 from app.graph.datetime_display import localize_query_result_for_display
 from app.graph.deps import GraphDeps
 from app.graph.display_format import format_display_for_chat_ui
 from app.graph.message_utils import (
     effective_user_question,
     format_dialog_tail_for_sql,
-    latest_human_question,
 )
 from app.graph.progress import emit_progress
 from app.graph.state import AgentState
@@ -54,9 +59,15 @@ _COL_DISPLAY_VI: dict[str, str] = {
 }
 
 
-def _scalar_row_label(column_key: str, user_q: str) -> str:
+def _scalar_row_label(column_key: str, user_q: str, business_scope: dict | None = None) -> str:
     qlow = (user_q or "").lower()
     key_norm = column_key.lower().strip().replace(" ", "_")
+    scoped = scalar_label_from_scope(business_scope)
+    if scoped:
+        if is_raw_sql_alias(key_norm):
+            return scoped
+        if any(k in qlow for k in ("thu vào", "thu vao", "tổng thu", "tong thu", "thu tiền", "thu tien")):
+            return scoped
 
     if "giá trị vốn" in qlow or ("giá trị" in qlow and "vốn" in qlow):
         if "phiếu nhập" in qlow or "nhập kho" in qlow:
@@ -66,8 +77,12 @@ def _scalar_row_label(column_key: str, user_q: str) -> str:
         return "tổng giá trị tồn kho"
     if "doanh thu" in qlow:
         return "tổng doanh thu"
+    if "thu vào" in qlow or "thu vao" in qlow or "tổng thu" in qlow or "tong thu" in qlow:
+        return scoped or "tổng tiền thu"
     if "công nợ" in qlow:
         return "tổng công nợ"
+    if is_raw_sql_alias(key_norm):
+        return scoped or "kết quả tổng hợp"
 
     mapped = _COLUMN_LABELS_VI.get(key_norm)
     if mapped:
@@ -207,7 +222,7 @@ def _try_single_row_highlight_summary(qr: dict | None, user_q: str) -> str | Non
     return "\n".join(lines)
 
 
-def _try_single_scalar_summary(qr: dict | None, user_q: str) -> str | None:
+def _try_single_scalar_summary(qr: dict | None, user_q: str, business_scope: dict | None = None) -> str | None:
     """One row, one column (SUM/COUNT aggregate) — answer without LLM hallucination."""
     if not isinstance(qr, dict):
         return None
@@ -218,7 +233,7 @@ def _try_single_scalar_summary(qr: dict | None, user_q: str) -> str | None:
     if not isinstance(row, dict) or len(row) != 1:
         return None
     (key, val), = row.items()
-    label = _scalar_row_label(str(key), user_q)
+    label = _scalar_row_label(str(key), user_q, business_scope=business_scope)
     if val is None:
         return (
             f"Hiện chưa tính được {label}. "
@@ -290,14 +305,16 @@ def make_summarize_answer_node(deps: GraphDeps):
     def summarize_answer(state: AgentState) -> dict:
         logger.info("node=summarize_answer action=start")
         progress_dict = emit_progress(state, "summarize_answer")
+        business_scope = state.get("business_scope") if isinstance(state.get("business_scope"), dict) else None
         err = state.get("error_payload")
         if err:
             parts = [f"mã lỗi: {err.get('error')}"]
             if err.get("attempts") is not None:
                 parts.append(f"attempts={err['attempts']}")
             msg = f"Xin lỗi, chưa tra cứu được dữ liệu ({', '.join(parts)})."
-            user_q = effective_user_question(
-                state.get("messages"), state.get("normalized_user_question")
+            user_q = scope_effective_question(
+                effective_user_question(state.get("messages"), state.get("normalized_user_question")),
+                business_scope,
             )
             msg = finalize_answer(
                 msg,
@@ -332,8 +349,9 @@ def make_summarize_answer_node(deps: GraphDeps):
                 phase="Kết quả truy vấn rỗng",
                 detail="Không có rows — trả lời cố định cho user.",
             )
-            user_q = effective_user_question(
-                state.get("messages"), state.get("normalized_user_question")
+            user_q = scope_effective_question(
+                effective_user_question(state.get("messages"), state.get("normalized_user_question")),
+                business_scope,
             )
             empty_msg = _build_sql_empty_message(deps, state, user_q)
             empty_msg = finalize_answer(
@@ -368,8 +386,9 @@ def make_summarize_answer_node(deps: GraphDeps):
                 if truncated
                 else ""
             )
-            user_q = effective_user_question(
-                state.get("messages"), state.get("normalized_user_question")
+            user_q = scope_effective_question(
+                effective_user_question(state.get("messages"), state.get("normalized_user_question")),
+                business_scope,
             )
             reg = deps.llm_registry
             if reg is None:
@@ -438,13 +457,17 @@ def make_summarize_answer_node(deps: GraphDeps):
                 "final_answer": stub_ans,
                 "messages": [AIMessage(content=stub_ans)],
             }
-        user_q = effective_user_question(
-            state.get("messages"), state.get("normalized_user_question")
+        user_q = scope_effective_question(
+            effective_user_question(state.get("messages"), state.get("normalized_user_question")),
+            business_scope,
         )
         qr_dict = qr if isinstance(qr, dict) else None
-        deterministic_ans = _try_single_scalar_summary(qr_dict, user_q)
+        deterministic_ans = _try_single_scalar_summary(qr_dict, user_q, business_scope=business_scope)
         if not deterministic_ans:
-            deterministic_ans = _try_single_row_highlight_summary(qr_dict, user_q)
+            # Detail follow-ups after scalar totals must pass reconcile check first; avoid
+            # shortcutting to a single-row highlight before SQL context is corrected.
+            if is_followup_detail_reconciled(business_scope):
+                deterministic_ans = _try_single_row_highlight_summary(qr_dict, user_q)
         if deterministic_ans:
             deterministic_ans = format_display_for_chat_ui(deterministic_ans)
             deterministic_ans = finalize_answer(

@@ -79,6 +79,9 @@ class AgentState(TypedDict, total=False):
     normalized_user_question: str | None
     domain_context: dict[str, Any] | None
     domain_clarify_sse: dict[str, Any] | None
+    business_scope: dict[str, Any] | None
+    last_business_scope: dict[str, Any] | None
+    last_data_answer: dict[str, Any] | None
     # Context compaction (conversation memory)
     conversation_summary: str | None
     context_compact_generation: int | None

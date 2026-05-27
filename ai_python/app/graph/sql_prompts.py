@@ -124,6 +124,8 @@ def build_gen_sql_user_prompt(
     allowed_tables_line: str | None = None,
     month_calendar: MonthCalendarSpec | None = None,
     domain_context_block: str | None = None,
+    business_scope_block: str | None = None,
+    data_context_block: str | None = None,
     query_table_mode: bool = False,
     retry_rewrite_block: str | None = None,
 ) -> str:
@@ -167,6 +169,12 @@ def build_gen_sql_user_prompt(
     al = (allowed_tables_line or "").strip()
     if al:
         allow_block = f"{al}\n\n"
+    scope_block = (business_scope_block or "").strip()
+    if scope_block:
+        scope_block = f"{scope_block}\n\n"
+    data_block = (data_context_block or "").strip()
+    if data_block:
+        data_block = f"{data_block}\n\n"
     if ledger_first:
         persona = (
             "You are a careful SQL author for a read-only ERP analytics database. "
@@ -217,6 +225,8 @@ def build_gen_sql_user_prompt(
             f"{calendar_block}"
             f"{plan_block}"
             f"{allow_block}"
+            f"{scope_block}"
+            f"{data_block}"
             f"{query_table_block}"
             f"Schema (allowlist tables):\n{schema_block}\n\n"
             f"Prior feedback (only buckets with content):\n{feedback_render}\n\n"
@@ -241,6 +251,8 @@ def build_gen_sql_user_prompt(
         f"{calendar_block}"
         f"{plan_block}"
         f"{allow_block}"
+        f"{scope_block}"
+        f"{data_block}"
         f"{query_table_block}"
         f"Schema (allowlist tables):\n{schema_block}\n\n"
         f"Seed SQL (starting point):\n{seed_block}\n\n"

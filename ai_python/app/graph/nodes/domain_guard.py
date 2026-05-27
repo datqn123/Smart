@@ -9,6 +9,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from app.graph.agent_trace import emit_agent_trace
 from app.graph.answer_quality import finalize_answer
+from app.graph.business_scope import build_followup_detail_clarify_advice
 from app.graph.deps import GraphDeps
 from app.graph.erp_guide.load_index import format_index_for_prompt, load_domain_index
 from app.graph.erp_guide.retrieve import detect_heuristic_misnomers, retrieve_guide_snippets
@@ -188,6 +189,43 @@ def make_domain_guard_node(deps: GraphDeps):
             }
 
         question = latest_human_question(state.get("messages"))
+        previous_scope = state.get("last_business_scope") if isinstance(state.get("last_business_scope"), dict) else None
+        previous_data_answer = state.get("last_data_answer") if isinstance(state.get("last_data_answer"), dict) else None
+        followup_clarify = build_followup_detail_clarify_advice(
+            user_question=question,
+            intent="system_data_query",
+            previous_scope=previous_scope,
+            previous_data_answer=previous_data_answer,
+        )
+        if isinstance(followup_clarify, dict):
+            issues = [
+                DomainIssue(
+                    type="missing_slot",
+                    user_text="chiều liệt kê",
+                    canonical_vi="theo phiếu / theo khách / theo mặt hàng",
+                    severity="warn",
+                )
+            ]
+            suggested = str(followup_clarify.get("suggested_rewrite") or "").strip()
+            questions = [str(q) for q in (followup_clarify.get("questions") or []) if str(q).strip()]
+            emit_agent_trace(
+                logger,
+                deps.settings,
+                agent="domain_guard",
+                phase="Clarify follow-up dữ liệu",
+                detail=f"question={question}\nsuggested={suggested}",
+            )
+            return _pack_clarify(
+                state,
+                question,
+                issues,
+                [],
+                questions=questions,
+                matched_modules=["sql_pipeline"],
+                llm_normalized=suggested or question,
+                missing_slots=["chiều liệt kê"],
+                index=None,
+            )
         dialog_tail = _dialog_context_for_guard(state, deps.settings)
         data_dir = deps.settings.erp_guide_data_dir
         index = load_domain_index(data_dir)

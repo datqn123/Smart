@@ -62,6 +62,17 @@ from app.graph.sql_query_domain import (
     should_use_ledger_first_prompts,
     sql_hints_for_domain,
 )
+from app.graph.business_scope import (
+    build_last_data_answer_context,
+    check_sql_against_scope,
+    ledger_metric_id_from_scope,
+    merge_scope_reconcile_meta,
+    reconcile_detail_rows_with_previous_total,
+    render_business_scope_sql_block,
+    render_last_data_answer_sql_block,
+    resolve_business_scope,
+    scope_effective_question,
+)
 from app.graph.sql_table_selection import (
     ensure_context_tables_for_question,
     ensure_domain_tables_for_question,
@@ -396,6 +407,15 @@ def make_gen_sql_node(deps: GraphDeps):
         reg = deps.llm_registry
         ver = state.get("schema_version")
         user_q = _last_user_message(state)
+        previous_scope = state.get("last_business_scope") if isinstance(state.get("last_business_scope"), dict) else None
+        previous_data_answer = state.get("last_data_answer") if isinstance(state.get("last_data_answer"), dict) else None
+        scope = resolve_business_scope(
+            user_q,
+            intent=str(state.get("intent") or "") or None,
+            previous_scope=previous_scope,
+            previous_data_answer=previous_data_answer,
+        )
+        user_q_effective = scope_effective_question(user_q, scope)
         pre_err = state.get("error_payload")
         if isinstance(pre_err, dict) and pre_err.get("error") in (
             "schema_load_failed",
@@ -440,14 +460,14 @@ def make_gen_sql_node(deps: GraphDeps):
             brief = state.get("chart_brief")
             if isinstance(brief, dict) and brief.get("data_request"):
                 idea_req = dict(brief["data_request"])
-        extra_tables = infer_tables_from_chart_context(user_q, idea_req if isinstance(idea_req, dict) else None)
+        extra_tables = infer_tables_from_chart_context(user_q_effective, idea_req if isinstance(idea_req, dict) else None)
         if nxt > 1 and isinstance(prev_fb, dict):
             last_fix = (prev_fb.get("sql_fix") or [])[-1] if prev_fb.get("sql_fix") else ""
             retry_issues = list(prev_fb.get("intent_review") or [])[-3:]
             extra_tables = [
                 *extra_tables,
                 *infer_retry_extra_tables(
-                    user_q=user_q,
+                    user_q=user_q_effective,
                     sql=seed_sql or "",
                     issues=retry_issues,
                     suggested_tables=None,
@@ -465,7 +485,7 @@ def make_gen_sql_node(deps: GraphDeps):
         elif deps.settings.sql_table_selection_enabled and not deps.settings.sql_schema_explorer_enabled:
             selected_tables = select_tables_for_question(
                 deps=deps,
-                user_q=user_q,
+                user_q=user_q_effective,
                 artifact=artifact,
                 max_tables=int(deps.settings.sql_max_selected_tables),
                 use_llm=bool(deps.settings.sql_table_pick_use_llm),
@@ -474,19 +494,19 @@ def make_gen_sql_node(deps: GraphDeps):
         if selected_tables is not None:
             known_tbl = {t.name for t in artifact.tables}
             selected_tables = ensure_domain_tables_for_question(
-                user_q,
+                user_q_effective,
                 selected_tables,
                 max_tables=int(deps.settings.sql_max_selected_tables),
                 known_tables=known_tbl,
             )
             selected_tables = ensure_context_tables_for_question(
-                user_q,
+                user_q_effective,
                 selected_tables,
                 max_tables=int(deps.settings.sql_max_selected_tables),
                 known_tables=known_tbl,
             )
             selected_tables = ensure_price_tables_for_question(
-                user_q,
+                user_q_effective,
                 selected_tables,
                 max_tables=int(deps.settings.sql_max_selected_tables),
                 known_tables=known_tbl,
@@ -503,7 +523,7 @@ def make_gen_sql_node(deps: GraphDeps):
                 fk_hops=int(deps.settings.sql_allowlist_fk_hops),
                 max_tables=cap,
             )
-        query_domain = detect_sql_query_domain(user_q)
+        query_domain = detect_sql_query_domain(user_q_effective)
         domain_hint_lines = sql_hints_for_domain(query_domain)
         enriched = (
             bool(deps.settings.sql_enriched_schema_prompt)
@@ -534,7 +554,7 @@ def make_gen_sql_node(deps: GraphDeps):
                 planner_json = None
         chart_ctx = (state.get("chart_thread_context") or "").strip() or None
         month_cal = resolve_month_calendar(
-            user_q,
+            user_q_effective,
             idea_req if isinstance(idea_req, dict) else None,
         )
         allow_line = allowlist_tables_prompt_line(sql_allowlist_tables, artifact)
@@ -544,6 +564,8 @@ def make_gen_sql_node(deps: GraphDeps):
         if domain_hint_lines:
             extra = "Query domain hints:\n" + "\n".join(f"- {h}" for h in domain_hint_lines) + "\n\n"
             domain_block = (domain_block or "") + extra
+        scope_block = render_business_scope_sql_block(scope)
+        data_context_block = render_last_data_answer_sql_block(previous_data_answer, scope)
         query_table_mode = should_route_query_table(state)
         pool = list(state.get("sql_local_pool") or [])
         dup_warn = False
@@ -564,7 +586,7 @@ def make_gen_sql_node(deps: GraphDeps):
             mode=mode,  # type: ignore[arg-type]
             schema_block=schema_block,
             feedback_render=fb_render,
-            user_q=user_q,
+            user_q=user_q_effective,
             seed_sql=seed_sql if mode == "exploit" else None,
             retry_rewrite_block=retry_rewrite or None,
             sql_limit_max=int(deps.settings.sql_limit_max),
@@ -577,6 +599,8 @@ def make_gen_sql_node(deps: GraphDeps):
             allowed_tables_line=allow_line,
             month_calendar=month_cal,
             domain_context_block=domain_block,
+            business_scope_block=scope_block or None,
+            data_context_block=data_context_block or None,
             query_table_mode=query_table_mode,
         )
         if reg is None:
@@ -596,6 +620,8 @@ def make_gen_sql_node(deps: GraphDeps):
                 "validation_feedback": bumped,
                 "sql_gen_mode": mode,
                 "runtime_schema_artifact": artifact_dump,
+                "business_scope": scope,
+                "last_business_scope": scope,
             }
             if selected_tables is not None:
                 out_none["selected_tables"] = selected_tables
@@ -640,10 +666,11 @@ def make_gen_sql_node(deps: GraphDeps):
             detail=(
                 f"lần_thử={nxt} schema_version={ver or '(none)'} mode={mode}\n"
                 f"ngữ_cảnh_feedback:\n{fb_note}\n"
-                f"câu_hỏi:\n{user_q[:800]}{'…' if len(user_q) > 800 else ''}\n"
+                f"câu_hỏi:\n{user_q_effective[:800]}{'…' if len(user_q_effective) > 800 else ''}\n"
                 f"SQL:\n{safe_log_sql(sql_stripped, settings=deps.settings)}"
             ),
         )
+        scope_metric_id = ledger_metric_id_from_scope(scope)
         out: dict = {
             **emit_progress(state, "gen_sql"),
             "sql_attempt_count": nxt,
@@ -654,7 +681,15 @@ def make_gen_sql_node(deps: GraphDeps):
             "sql_local_pool": pool,
             "sql_attempt_history": hist[-32:],
             "runtime_schema_artifact": artifact_dump,
+            "business_scope": scope,
+            "last_business_scope": scope,
         }
+        if (
+            state.get("intent") == "system_data_query"
+            and scope_metric_id
+            and not state.get("ledger_metric_id")
+        ):
+            out["ledger_metric_id"] = scope_metric_id
         if selected_tables is not None:
             out["selected_tables"] = selected_tables
         if sql_allowlist_tables is not None:
@@ -700,7 +735,10 @@ def make_sql_review_node(deps: GraphDeps):
                 ),
             }
         client = reg.get("sql_review")
-        user_q = _last_user_message(state)
+        user_q = scope_effective_question(
+            _last_user_message(state),
+            state.get("business_scope") if isinstance(state.get("business_scope"), dict) else None,
+        )
         skip_review, skip_reason = _should_skip_sql_review_llm(
             deps=deps,
             state=state,
@@ -856,6 +894,14 @@ def make_validate_sql_node(deps: GraphDeps):
         if ok and not pol_ok:
             ok = False
             detail = pol_detail
+        if state.get("intent") == "system_data_query":
+            scope_ok, scope_detail = check_sql_against_scope(
+                sanitized if sanitized and ok else (raw or ""),
+                state.get("business_scope") if isinstance(state.get("business_scope"), dict) else None,
+            )
+            if ok and not scope_ok:
+                ok = False
+                detail = scope_detail
         notes_joined = "; ".join(notes) if notes else "(none)"
         final_sql = (sanitized if sanitized and ok else (raw or "")) or ""
         emit_agent_trace(
@@ -967,6 +1013,9 @@ def make_validate_result_node(deps: GraphDeps):
     def validate_result(state: AgentState) -> dict:
         logger.info("node=validate_result action=start")
         qr = state.get("query_result")
+        scope = state.get("business_scope") if isinstance(state.get("business_scope"), dict) else None
+        user_q_raw = _last_user_message(state)
+        user_q_effective = scope_effective_question(user_q_raw, scope)
         if qr is None:
             return {
                 **emit_progress(state, "validate_result"),
@@ -978,8 +1027,47 @@ def make_validate_result_node(deps: GraphDeps):
                 ),
             }
         rows = qr.get("rows") if isinstance(qr, dict) else None
+        previous_data_answer = state.get("last_data_answer") if isinstance(state.get("last_data_answer"), dict) else None
+        reconcile_ok, reconcile_detail, reconcile_meta = reconcile_detail_rows_with_previous_total(
+            scope=scope,
+            previous_data_answer=previous_data_answer,
+            query_result=qr if isinstance(qr, dict) else None,
+        )
+        merged_scope = merge_scope_reconcile_meta(scope, reconcile_meta)
+        if not reconcile_ok:
+            detail = (
+                f"{reconcile_detail} Keep previous scope filters consistent, and rewrite detail rows so "
+                "their sum matches the prior scalar total."
+            )
+            return {
+                **emit_progress(state, "validate_result"),
+                "result_ok": False,
+                "business_scope": merged_scope,
+                "validation_feedback": _append_sql_repair_feedback(
+                    state,
+                    source="result",
+                    detail=detail,
+                ),
+            }
         if isinstance(qr, dict) and rows == []:
-            return {**emit_progress(state, "validate_result"), "result_ok": True, "result_empty": True}
+            ctx = build_last_data_answer_context(
+                intent=str(state.get("intent") or "") or None,
+                user_question=user_q_raw,
+                effective_question=user_q_effective,
+                business_scope=merged_scope,
+                query_result=qr,
+                generated_sql=str(state.get("generated_sql") or ""),
+                reconcile_meta=reconcile_meta,
+            )
+            out: dict[str, Any] = {
+                **emit_progress(state, "validate_result"),
+                "result_ok": True,
+                "result_empty": True,
+                "business_scope": merged_scope,
+            }
+            if isinstance(ctx, dict):
+                out["last_data_answer"] = ctx
+            return out
         if rows is not None and len(rows) > MAX_RESULT_ROWS:
             return {
                 **emit_progress(state, "validate_result"),
@@ -990,7 +1078,24 @@ def make_validate_result_node(deps: GraphDeps):
                     detail="too many rows",
                 ),
             }
-        return {**emit_progress(state, "validate_result"), "result_ok": True, "result_empty": False}
+        ctx = build_last_data_answer_context(
+            intent=str(state.get("intent") or "") or None,
+            user_question=user_q_raw,
+            effective_question=user_q_effective,
+            business_scope=merged_scope,
+            query_result=qr if isinstance(qr, dict) else None,
+            generated_sql=str(state.get("generated_sql") or ""),
+            reconcile_meta=reconcile_meta,
+        )
+        out = {
+            **emit_progress(state, "validate_result"),
+            "result_ok": True,
+            "result_empty": False,
+            "business_scope": merged_scope,
+        }
+        if isinstance(ctx, dict):
+            out["last_data_answer"] = ctx
+        return out
 
     return validate_result
 
@@ -1079,7 +1184,10 @@ def route_after_validate_sql(state: AgentState) -> str:
 def _effective_ledger_first_prompts(state: AgentState, settings: Any) -> bool:
     if not settings.sql_ledger_first_prompts:
         return False
-    user_q = latest_human_question(state.get("messages")) or ""
+    user_q = scope_effective_question(
+        latest_human_question(state.get("messages")) or "",
+        state.get("business_scope") if isinstance(state.get("business_scope"), dict) else None,
+    )
     if not should_use_ledger_first_prompts(detect_sql_query_domain(user_q)):
         return False
     if state.get("intent") != "system_data_chart":
@@ -1114,8 +1222,11 @@ def route_after_validate_result(state: AgentState) -> str:
     chart_next = route_after_sql_subgraph_for_chart(state)
     if chart_next == "chart_readiness":
         return "chart_readiness"
-    if state.get("result_ok"):
+    result_ok = state.get("result_ok")
+    if result_ok is True:
         return "done"
+    if result_ok is False:
+        return _route_sql_retry(state, "result")
     # Belt-and-suspenders: if executor returned rows but result_ok was not set (stale merge), still finish.
     qr = state.get("query_result")
     if isinstance(qr, dict):

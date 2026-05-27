@@ -78,6 +78,12 @@ _COLUMN_LABELS_VI: dict[str, str] = {
     "year": "Năm",
     "day": "Ngày",
     "count": "Số lượng",
+    "coalesce": "Giá trị tổng hợp",
+    "sum": "Tổng giá trị",
+    "avg": "Trung bình",
+    "min": "Thấp nhất",
+    "max": "Cao nhất",
+    "?column?": "Giá trị",
     "row_count": "Số dòng",
     "inv_id": "Mã tồn kho",
 }

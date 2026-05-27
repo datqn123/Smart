@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from langchain_core.messages import AIMessage, HumanMessage
 
+from app.config.graph_settings import GraphSettings
+from app.graph.deps import GraphDeps
 from app.graph.erp_guide.load_index import load_domain_index
 from app.graph.erp_guide.retrieve import detect_heuristic_misnomers, retrieve_guide_snippets
 from app.graph.erp_guide.slot_resolution import strip_catalog_draft_misnomers
-from app.graph.nodes.domain_guard import _apply_hard_rules
+from app.graph.nodes.domain_guard import _apply_hard_rules, make_domain_guard_node
+from app.graph.sql_executor import StubSqlExecutor
 from app.llm.schemas import DomainGuardOutput, DomainIssue
 
 
@@ -215,3 +218,71 @@ def test_repeated_catalog_question_proceeds() -> None:
         messages=messages,
     )
     assert final.action == "proceed"
+
+
+def test_domain_guard_clarifies_ambiguous_followup_detail_with_previous_scalar_context() -> None:
+    node = make_domain_guard_node(
+        GraphDeps(
+            llm_registry=None,
+            sql_executor=StubSqlExecutor(),
+            settings=GraphSettings(erp_domain_guard_enabled=True),
+        )
+    )
+    state = {
+        "messages": [HumanMessage(content="liệt kê điz")],
+        "last_business_scope": {
+            "metric": "cash_in",
+            "time_scope": {"kind": "current_year"},
+            "status_scope": {"mode": "completed_only"},
+        },
+        "last_data_answer": {
+            "intent": "system_data_query",
+            "effective_question": "Tổng tiền thu vào trong năm nay",
+            "result_shape": "scalar",
+            "scalar_total": {"value": 1103700, "column": "total_received_amount"},
+            "business_scope": {
+                "metric": "cash_in",
+                "time_scope": {"kind": "current_year"},
+                "status_scope": {"mode": "completed_only"},
+            },
+        },
+    }
+    out = node(state)
+    assert out.get("domain_guard_action") == "clarify"
+    sse = out.get("domain_clarify_sse") or {}
+    assert isinstance(sse, dict)
+    qs = list(sse.get("questions") or [])
+    assert any("theo phiếu" in str(q).lower() for q in qs)
+    suggested = str(sse.get("suggestedRewrite") or "")
+    assert "liệt kê theo phiếu thu" in suggested.lower()
+
+
+def test_domain_guard_does_not_clarify_when_followup_already_has_dimension() -> None:
+    node = make_domain_guard_node(
+        GraphDeps(
+            llm_registry=None,
+            sql_executor=StubSqlExecutor(),
+            settings=GraphSettings(erp_domain_guard_enabled=True),
+        )
+    )
+    state = {
+        "messages": [HumanMessage(content="liệt kê theo khách hàng đi")],
+        "last_business_scope": {
+            "metric": "cash_in",
+            "time_scope": {"kind": "current_year"},
+            "status_scope": {"mode": "completed_only"},
+        },
+        "last_data_answer": {
+            "intent": "system_data_query",
+            "effective_question": "Tổng tiền thu vào trong năm nay",
+            "result_shape": "scalar",
+            "scalar_total": {"value": 1103700, "column": "total_received_amount"},
+            "business_scope": {
+                "metric": "cash_in",
+                "time_scope": {"kind": "current_year"},
+                "status_scope": {"mode": "completed_only"},
+            },
+        },
+    }
+    out = node(state)
+    assert out.get("domain_guard_action") == "proceed"
