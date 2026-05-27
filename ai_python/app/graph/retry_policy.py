@@ -47,6 +47,17 @@ def _feedback_bucket(state: AgentState, key: str) -> list[str]:
     return list(items) if isinstance(items, list) else []
 
 
+def _failure_signatures(state: AgentState) -> list[str]:
+    fb = state.get("validation_feedback")
+    if not isinstance(fb, dict):
+        return []
+    extras = fb.get("extras")
+    if not isinstance(extras, dict):
+        return []
+    items = extras.get("failure_signatures")
+    return [str(x) for x in items] if isinstance(items, list) else []
+
+
 def _chart_shape_retry_count(state: AgentState) -> int:
     return sum(1 for x in _feedback_bucket(state, "result") if "chart readiness" in x.lower())
 
@@ -69,6 +80,16 @@ def sql_attempt_duplicate(state: AgentState) -> bool:
     if len(hist) < 2:
         return False
     return sql_fingerprint(hist[-1]) == sql_fingerprint(hist[-2])
+
+
+def sql_attempt_duplicate_same_failure(state: AgentState) -> bool:
+    """True when both SQL fingerprint and latest failure signature repeat."""
+    if not sql_attempt_duplicate(state):
+        return False
+    sig = _failure_signatures(state)
+    if len(sig) < 2:
+        return False
+    return str(sig[-1]).strip() == str(sig[-2]).strip()
 
 
 def chart_thin_data_sql_ok(state: AgentState) -> bool:
@@ -103,7 +124,14 @@ def chart_degrade_state_patch(state: AgentState, *, reason: str) -> dict:
 
 
 def _global_attempts_left(state: AgentState) -> bool:
-    return int(state.get("sql_attempt_count") or 0) < MAX_SQL_ATTEMPTS
+    cfg = state.get("sql_repair_max_attempts")
+    try:
+        cap = int(cfg) if cfg is not None else MAX_SQL_ATTEMPTS
+    except (TypeError, ValueError):
+        cap = MAX_SQL_ATTEMPTS
+    if cap <= 0:
+        cap = MAX_SQL_ATTEMPTS
+    return int(state.get("sql_attempt_count") or 0) < cap
 
 
 def _budget_left(state: AgentState, kind: FailureKind) -> bool:
@@ -133,6 +161,9 @@ def decide_sql_retry(state: AgentState, *, kind: FailureKind) -> RetryDecision:
 
     if not _global_attempts_left(state):
         return _maybe_degrade(state, "max sql attempts", kind)
+
+    if sql_attempt_duplicate_same_failure(state):
+        return _maybe_degrade(state, "duplicate SQL + duplicate failure signature", kind)
 
     if kind == "chart_shape" and sql_attempt_duplicate(state):
         return _maybe_degrade(state, "duplicate SQL retry blocked", kind)

@@ -2,14 +2,111 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
+from dataclasses import dataclass
 import logging
 import re
+from threading import RLock
+from time import monotonic
 from typing import Any
 
 from app.config.graph_settings import GraphSettings
 from app.graph.dbmeta import ColumnMeta, SchemaArtifact, TableMeta
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class _SchemaSnapshot:
+    rows: list[tuple[str, str]]
+    desc_map: dict[str, str]
+    reg_names: set[str]
+    fk_edges: list[tuple[str, str, str, str]]
+    cols: dict[str, list[ColumnMeta]]
+    pks: dict[str, list[str]]
+    fks: dict[str, list[dict[str, Any]]]
+    col_desc_map: dict[tuple[str, str], str]
+
+
+@dataclass
+class _CacheEntry:
+    snapshot: _SchemaSnapshot
+    expires_at: float
+
+
+@dataclass
+class _FingerprintState:
+    value: str | None
+    checked_at: float
+
+
+class SchemaArtifactCache:
+    """Process-local LRU+TTL cache keyed by schema namespace + db fingerprint."""
+
+    def __init__(self) -> None:
+        self._lock = RLock()
+        self._items: OrderedDict[str, _CacheEntry] = OrderedDict()
+        self._fingerprints: dict[str, _FingerprintState] = {}
+
+    def get(self, key: str) -> _SchemaSnapshot | None:
+        now = monotonic()
+        with self._lock:
+            entry = self._items.get(key)
+            if entry is None:
+                return None
+            if entry.expires_at <= now:
+                self._items.pop(key, None)
+                return None
+            self._items.move_to_end(key)
+            return entry.snapshot
+
+    def set(self, key: str, snapshot: _SchemaSnapshot, *, ttl_seconds: int, max_items: int) -> None:
+        now = monotonic()
+        with self._lock:
+            self._items[key] = _CacheEntry(
+                snapshot=snapshot,
+                expires_at=now + max(1, int(ttl_seconds)),
+            )
+            self._items.move_to_end(key)
+            while len(self._items) > max(1, int(max_items)):
+                self._items.popitem(last=False)
+
+    def refresh_fingerprint(
+        self,
+        namespace: str,
+        *,
+        check_interval_seconds: int,
+        fetch: Any,
+    ) -> tuple[str | None, bool, str | None]:
+        now = monotonic()
+        with self._lock:
+            prev = self._fingerprints.get(namespace)
+            if prev is not None and (now - prev.checked_at) < max(1, int(check_interval_seconds)):
+                return prev.value, False, None
+        try:
+            value = fetch()
+        except Exception as exc:  # noqa: BLE001
+            msg = str(exc)
+            with self._lock:
+                prev = self._fingerprints.get(namespace)
+                if prev is not None:
+                    self._fingerprints[namespace] = _FingerprintState(value=prev.value, checked_at=now)
+                    return prev.value, False, msg
+            return None, False, msg
+        changed = False
+        with self._lock:
+            prev = self._fingerprints.get(namespace)
+            prev_val = prev.value if prev is not None else None
+            self._fingerprints[namespace] = _FingerprintState(value=value, checked_at=now)
+            changed = prev_val is not None and value is not None and value != prev_val
+            if changed:
+                stale = [k for k in self._items.keys() if k.startswith(namespace + "|")]
+                for k in stale:
+                    self._items.pop(k, None)
+        return value, changed, None
+
+
+_SCHEMA_CACHE = SchemaArtifactCache()
 
 
 def _metadata_dsn(settings: GraphSettings) -> str | None:
@@ -235,6 +332,157 @@ def _introspect_fks_for_tables(
     return fks
 
 
+def _cache_namespace(settings: GraphSettings, dsn: str) -> str:
+    schema = (settings.pg_metadata_schema or "public").strip().lower()
+    desc_table = (settings.pg_ai_description_table or "ai_table_description").strip().lower()
+    col_desc_table = (settings.pg_ai_column_description_table or "ai_column_description").strip().lower()
+    return f"{schema}.{desc_table}.{col_desc_table}|{abs(hash(dsn))}"
+
+
+def _fetch_registry_updated_at_fingerprint(
+    cur: Any,
+    *,
+    schema: str,
+    table_name: str,
+) -> str:
+    if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", schema) or not re.match(
+        r"^[A-Za-z_][A-Za-z0-9_]*$",
+        table_name,
+    ):
+        raise ValueError("invalid schema or table identifier for fingerprint query")
+    cur.execute(
+        """
+        SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = %s
+              AND table_name = %s
+              AND column_name = 'updated_at'
+        )
+        """,
+        (schema, table_name),
+    )
+    exists = bool(cur.fetchone()[0])
+    if not exists:
+        return "no_updated_at"
+    cur.execute(
+        f"SELECT COALESCE(MAX(updated_at)::text, 'null') FROM {schema}.{table_name}"  # noqa: S608
+    )
+    row = cur.fetchone()
+    return str(row[0]) if row and row[0] is not None else "null"
+
+
+def _fetch_migration_fingerprint(cur: Any, *, schema: str) -> str:
+    if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", schema):
+        raise ValueError("invalid schema identifier for migration fingerprint")
+    cur.execute(
+        "SELECT to_regclass(%s)",
+        (f"{schema}.flyway_schema_history",),
+    )
+    reg = cur.fetchone()
+    if not reg or reg[0] is None:
+        return "no_flyway"
+    cur.execute(
+        f"""  -- noqa: S608
+        SELECT COALESCE(MAX(version::text), ''),
+               COALESCE(MAX(installed_rank)::text, '')
+        FROM {schema}.flyway_schema_history
+        WHERE success = TRUE
+        """
+    )
+    row = cur.fetchone()
+    if not row:
+        return "empty_flyway"
+    return f"{row[0] or ''}:{row[1] or ''}"
+
+
+def _build_db_fingerprint(
+    cur: Any,
+    *,
+    schema: str,
+    desc_table: str,
+    col_desc_table: str,
+) -> str:
+    desc_fp = _fetch_registry_updated_at_fingerprint(cur, schema=schema, table_name=desc_table)
+    col_fp = _fetch_registry_updated_at_fingerprint(cur, schema=schema, table_name=col_desc_table)
+    mig_fp = _fetch_migration_fingerprint(cur, schema=schema)
+    return f"desc={desc_fp}|col={col_fp}|flyway={mig_fp}"
+
+
+def _build_snapshot(cur: Any, *, schema: str, desc_table: str, col_desc_table: str) -> _SchemaSnapshot:
+    rows = _fetch_descriptions(cur, schema=schema, table=desc_table)
+    if not rows:
+        raise RuntimeError("ai_table_description has no rows")
+    reg_names = {r[0] for r in rows}
+    desc_map = {r[0]: r[1] for r in rows}
+    all_tables = sorted(reg_names)
+    fk_edges = _fetch_fk_edges(cur, schema, reg_names)
+    cols = _introspect_columns(cur, schema, all_tables)
+    pks = _introspect_pk(cur, schema, all_tables)
+    fks = _introspect_fks_for_tables(cur, schema, all_tables)
+    col_desc_map: dict[tuple[str, str], str] = {}
+    try:
+        col_desc_map = _fetch_column_descriptions(
+            cur,
+            schema=schema,
+            registry_table=col_desc_table,
+            tables=all_tables,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("ai_column_description registry unavailable: %s", exc)
+    return _SchemaSnapshot(
+        rows=rows,
+        desc_map=desc_map,
+        reg_names=reg_names,
+        fk_edges=fk_edges,
+        cols=cols,
+        pks=pks,
+        fks=fks,
+        col_desc_map=col_desc_map,
+    )
+
+
+def _artifact_from_snapshot(
+    snapshot: _SchemaSnapshot,
+    *,
+    user_q: str,
+    cap: int,
+    source_mode: str,
+) -> SchemaArtifact | None:
+    seeds = _rank_tables(user_q, snapshot.rows, max_tables=cap)
+    tables = _expand_with_fks(seeds, snapshot.fk_edges, cap=cap)
+    tmeta: list[TableMeta] = []
+    for tname in tables:
+        cols = snapshot.cols.get(tname)
+        if not cols:
+            logger.warning("table %r in registry but no columns in PG — skip", tname)
+            continue
+        merged_cols: list[ColumnMeta] = []
+        for cm in cols:
+            key = (tname.lower(), cm.name.lower())
+            reg_txt = snapshot.col_desc_map.get(key)
+            if reg_txt:
+                merged_cols.append(cm.model_copy(update={"description": reg_txt}))
+            else:
+                merged_cols.append(cm)
+        tmeta.append(
+            TableMeta(
+                name=tname,
+                columns=merged_cols,
+                pk=snapshot.pks.get(tname, []),
+                fks=snapshot.fks.get(tname, []),
+                description=snapshot.desc_map.get(tname),
+            )
+        )
+    if not tmeta:
+        return None
+    return SchemaArtifact(
+        schema_version="postgres_live",
+        tables=tmeta,
+        source_mode=source_mode,
+    )
+
+
 def build_schema_artifact_from_postgres(
     settings: GraphSettings,
     user_q: str,
@@ -259,65 +507,74 @@ def build_schema_artifact_from_postgres(
     timeout = int(settings.pg_metadata_connect_timeout_seconds)
     cap = int(settings.sql_max_selected_tables)
 
-    conn = None
-    try:
-        conn = psycopg2.connect(dsn, connect_timeout=timeout)
-        conn.set_session(readonly=True, autocommit=True)
-        with conn.cursor() as cur:
-            rows = _fetch_descriptions(cur, schema=schema, table=desc_table)
-            if not rows:
-                return None, "ai_table_description has no rows"
-            reg_names = {r[0] for r in rows}
-            desc_map = {r[0]: r[1] for r in rows}
-            seeds = _rank_tables(user_q, rows, max_tables=cap)
-            fk_edges = _fetch_fk_edges(cur, schema, reg_names)
-            tables = _expand_with_fks(seeds, fk_edges, cap=cap)
-            cols = _introspect_columns(cur, schema, tables)
-            col_desc_map: dict[tuple[str, str], str] = {}
+    cache_enabled = bool(settings.schema_cache_enabled)
+    cache_key: str | None = None
+    namespace = _cache_namespace(settings, dsn)
+    snapshot: _SchemaSnapshot | None = None
+
+    if cache_enabled:
+        def _fetch_fp() -> str:
+            conn_fp = psycopg2.connect(dsn, connect_timeout=timeout)
             try:
-                col_desc_map = _fetch_column_descriptions(
-                    cur, schema=schema, registry_table=col_desc_table, tables=tables
-                )
-            except Exception as exc:
-                logger.warning("ai_column_description registry unavailable: %s", exc)
-            pks = _introspect_pk(cur, schema, tables)
-            fks = _introspect_fks_for_tables(cur, schema, tables)
-            tmeta: list[TableMeta] = []
-            for tname in tables:
-                if tname not in cols:
-                    logger.warning("table %r in registry but no columns in PG — skip", tname)
-                    continue
-                merged_cols: list[ColumnMeta] = []
-                for cm in cols[tname]:
-                    key = (tname.lower(), cm.name.lower())
-                    reg_txt = col_desc_map.get(key)
-                    if reg_txt:
-                        merged_cols.append(cm.model_copy(update={"description": reg_txt}))
-                    else:
-                        merged_cols.append(cm)
-                tmeta.append(
-                    TableMeta(
-                        name=tname,
-                        columns=merged_cols,
-                        pk=pks.get(tname, []),
-                        fks=fks.get(tname, []),
-                        description=desc_map.get(tname),
+                conn_fp.set_session(readonly=True, autocommit=True)
+                with conn_fp.cursor() as cur_fp:
+                    return _build_db_fingerprint(
+                        cur_fp,
+                        schema=schema,
+                        desc_table=desc_table,
+                        col_desc_table=col_desc_table,
                     )
+            finally:
+                conn_fp.close()
+
+        fp, _changed, fp_err = _SCHEMA_CACHE.refresh_fingerprint(
+            namespace,
+            check_interval_seconds=int(settings.schema_fingerprint_check_interval_seconds),
+            fetch=_fetch_fp,
+        )
+        if fp_err:
+            logger.warning("schema fingerprint unavailable, fallback to TTL cache: %s", fp_err)
+        fp_token = fp or "no_fingerprint"
+        cache_key = f"{namespace}|{fp_token}"
+        snapshot = _SCHEMA_CACHE.get(cache_key)
+
+    if snapshot is None:
+        conn = None
+        try:
+            conn = psycopg2.connect(dsn, connect_timeout=timeout)
+            conn.set_session(readonly=True, autocommit=True)
+            with conn.cursor() as cur:
+                snapshot = _build_snapshot(
+                    cur,
+                    schema=schema,
+                    desc_table=desc_table,
+                    col_desc_table=col_desc_table,
                 )
-            if not tmeta:
-                return None, "no introspected tables after registry match"
-            art = SchemaArtifact(
-                schema_version="postgres_live",
-                tables=tmeta,
-                source_mode="postgres_ai_table_description",
+        except Exception as exc:
+            logger.warning("pg schema build failed: %s", exc, exc_info=True)
+            return None, str(exc)
+        finally:
+            if conn is not None:
+                conn.close()
+        if cache_enabled and cache_key is not None and snapshot is not None:
+            _SCHEMA_CACHE.set(
+                cache_key,
+                snapshot,
+                ttl_seconds=int(settings.schema_cache_ttl_seconds),
+                max_items=int(settings.schema_cache_max_items),
             )
-            return art, None
-    except Exception as exc:
-        logger.warning("pg schema build failed: %s", exc, exc_info=True)
-        return None, str(exc)
-    finally:
-        if conn is not None:
-            conn.close()
+
+    if snapshot is None:
+        return None, "schema snapshot unavailable"
+    art = _artifact_from_snapshot(
+        snapshot,
+        user_q=user_q,
+        cap=cap,
+        source_mode="postgres_ai_table_description",
+    )
+    if art is None:
+        return None, "no introspected tables after registry match"
+    return art, None
 
 
 def rank_tables_for_question(user_q: str, rows: list[tuple[str, str]], *, max_tables: int) -> list[str]:
@@ -337,17 +594,61 @@ def list_registry_tables(settings: GraphSettings) -> tuple[list[tuple[str, str]]
     schema = (settings.pg_metadata_schema or "public").strip()
     desc_table = (settings.pg_ai_description_table or "ai_table_description").strip()
     timeout = int(settings.pg_metadata_connect_timeout_seconds)
-    conn = None
-    try:
-        conn = psycopg2.connect(dsn, connect_timeout=timeout)
-        conn.set_session(readonly=True, autocommit=True)
-        with conn.cursor() as cur:
-            return _fetch_descriptions(cur, schema=schema, table=desc_table), None
-    except Exception as exc:
-        return [], str(exc)
-    finally:
-        if conn is not None:
-            conn.close()
+    cache_enabled = bool(settings.schema_cache_enabled)
+    namespace = _cache_namespace(settings, dsn)
+    cache_key: str | None = None
+    snapshot: _SchemaSnapshot | None = None
+    if cache_enabled:
+        def _fetch_fp() -> str:
+            conn_fp = psycopg2.connect(dsn, connect_timeout=timeout)
+            try:
+                conn_fp.set_session(readonly=True, autocommit=True)
+                with conn_fp.cursor() as cur_fp:
+                    return _build_db_fingerprint(
+                        cur_fp,
+                        schema=schema,
+                        desc_table=desc_table,
+                        col_desc_table=(settings.pg_ai_column_description_table or "ai_column_description").strip(),
+                    )
+            finally:
+                conn_fp.close()
+
+        fp, _changed, fp_err = _SCHEMA_CACHE.refresh_fingerprint(
+            namespace,
+            check_interval_seconds=int(settings.schema_fingerprint_check_interval_seconds),
+            fetch=_fetch_fp,
+        )
+        if fp_err:
+            logger.warning("schema fingerprint unavailable, fallback to TTL cache: %s", fp_err)
+        cache_key = f"{namespace}|{fp or 'no_fingerprint'}"
+        snapshot = _SCHEMA_CACHE.get(cache_key)
+    if snapshot is None:
+        conn = None
+        try:
+            conn = psycopg2.connect(dsn, connect_timeout=timeout)
+            conn.set_session(readonly=True, autocommit=True)
+            with conn.cursor() as cur:
+                snapshot = _build_snapshot(
+                    cur,
+                    schema=schema,
+                    desc_table=desc_table,
+                    col_desc_table=(settings.pg_ai_column_description_table or "ai_column_description").strip(),
+                )
+        except Exception as exc:
+            return [], str(exc)
+        finally:
+            if conn is not None:
+                conn.close()
+        if cache_enabled and cache_key is not None and snapshot is not None:
+            _SCHEMA_CACHE.set(
+                cache_key,
+                snapshot,
+                ttl_seconds=int(settings.schema_cache_ttl_seconds),
+                max_items=int(settings.schema_cache_max_items),
+            )
+    if snapshot is None:
+        return [], "schema snapshot unavailable"
+    return list(snapshot.rows), None
 
 
 def build_schema_artifact_for_table_names(
@@ -369,66 +670,100 @@ def build_schema_artifact_for_table_names(
     desc_table = (settings.pg_ai_description_table or "ai_table_description").strip()
     col_desc_table = (settings.pg_ai_column_description_table or "ai_column_description").strip()
     timeout = int(settings.pg_metadata_connect_timeout_seconds)
-    conn = None
-    try:
-        conn = psycopg2.connect(dsn, connect_timeout=timeout)
-        conn.set_session(readonly=True, autocommit=True)
-        with conn.cursor() as cur:
-            rows = _fetch_descriptions(cur, schema=schema, table=desc_table)
-            desc_map = {r[0]: r[1] for r in rows}
-            reg_lower = {r[0].lower(): r[0] for r in rows}
-            tables: list[str] = []
-            for n in names:
-                canon = reg_lower.get(n.lower())
-                if canon and canon not in tables:
-                    tables.append(canon)
-            if not tables:
-                return None, "requested tables not in ai_table_description registry"
-            cols = _introspect_columns(cur, schema, tables)
-            col_desc_map: dict[tuple[str, str], str] = {}
+    cache_enabled = bool(settings.schema_cache_enabled)
+    namespace = _cache_namespace(settings, dsn)
+    cache_key: str | None = None
+    snapshot: _SchemaSnapshot | None = None
+    if cache_enabled:
+        def _fetch_fp() -> str:
+            conn_fp = psycopg2.connect(dsn, connect_timeout=timeout)
             try:
-                col_desc_map = _fetch_column_descriptions(
-                    cur, schema=schema, registry_table=col_desc_table, tables=tables
-                )
-            except Exception as exc:
-                logger.warning("ai_column_description registry unavailable: %s", exc)
-            pks = _introspect_pk(cur, schema, tables)
-            fks = _introspect_fks_for_tables(cur, schema, tables)
-            tmeta: list[TableMeta] = []
-            for tname in tables:
-                if tname not in cols:
-                    logger.warning("table %r in registry but no columns in PG — skip", tname)
-                    continue
-                merged_cols: list[ColumnMeta] = []
-                for cm in cols[tname]:
-                    key = (tname.lower(), cm.name.lower())
-                    reg_txt = col_desc_map.get(key)
-                    if reg_txt:
-                        merged_cols.append(cm.model_copy(update={"description": reg_txt}))
-                    else:
-                        merged_cols.append(cm)
-                tmeta.append(
-                    TableMeta(
-                        name=tname,
-                        columns=merged_cols,
-                        pk=pks.get(tname, []),
-                        fks=fks.get(tname, []),
-                        description=desc_map.get(tname),
+                conn_fp.set_session(readonly=True, autocommit=True)
+                with conn_fp.cursor() as cur_fp:
+                    return _build_db_fingerprint(
+                        cur_fp,
+                        schema=schema,
+                        desc_table=desc_table,
+                        col_desc_table=col_desc_table,
                     )
+            finally:
+                conn_fp.close()
+
+        fp, _changed, fp_err = _SCHEMA_CACHE.refresh_fingerprint(
+            namespace,
+            check_interval_seconds=int(settings.schema_fingerprint_check_interval_seconds),
+            fetch=_fetch_fp,
+        )
+        if fp_err:
+            logger.warning("schema fingerprint unavailable, fallback to TTL cache: %s", fp_err)
+        cache_key = f"{namespace}|{fp or 'no_fingerprint'}"
+        snapshot = _SCHEMA_CACHE.get(cache_key)
+    if snapshot is None:
+        conn = None
+        try:
+            conn = psycopg2.connect(dsn, connect_timeout=timeout)
+            conn.set_session(readonly=True, autocommit=True)
+            with conn.cursor() as cur:
+                snapshot = _build_snapshot(
+                    cur,
+                    schema=schema,
+                    desc_table=desc_table,
+                    col_desc_table=col_desc_table,
                 )
-            if not tmeta:
-                return None, "no introspected tables"
-            return (
-                SchemaArtifact(
-                    schema_version="postgres_live",
-                    tables=tmeta,
-                    source_mode="postgres_schema_explorer",
-                ),
-                None,
+        except Exception as exc:
+            logger.warning("pg schema build for tables failed: %s", exc, exc_info=True)
+            return None, str(exc)
+        finally:
+            if conn is not None:
+                conn.close()
+        if cache_enabled and cache_key is not None and snapshot is not None:
+            _SCHEMA_CACHE.set(
+                cache_key,
+                snapshot,
+                ttl_seconds=int(settings.schema_cache_ttl_seconds),
+                max_items=int(settings.schema_cache_max_items),
             )
-    except Exception as exc:
-        logger.warning("pg schema build for tables failed: %s", exc, exc_info=True)
-        return None, str(exc)
-    finally:
-        if conn is not None:
-            conn.close()
+    if snapshot is None:
+        return None, "schema snapshot unavailable"
+
+    reg_lower = {r[0].lower(): r[0] for r in snapshot.rows}
+    tables: list[str] = []
+    for n in names:
+        canon = reg_lower.get(n.lower())
+        if canon and canon not in tables:
+            tables.append(canon)
+    if not tables:
+        return None, "requested tables not in ai_table_description registry"
+    tmeta: list[TableMeta] = []
+    for tname in tables:
+        cols = snapshot.cols.get(tname)
+        if not cols:
+            logger.warning("table %r in registry but no columns in PG — skip", tname)
+            continue
+        merged_cols: list[ColumnMeta] = []
+        for cm in cols:
+            key = (tname.lower(), cm.name.lower())
+            reg_txt = snapshot.col_desc_map.get(key)
+            if reg_txt:
+                merged_cols.append(cm.model_copy(update={"description": reg_txt}))
+            else:
+                merged_cols.append(cm)
+        tmeta.append(
+            TableMeta(
+                name=tname,
+                columns=merged_cols,
+                pk=snapshot.pks.get(tname, []),
+                fks=snapshot.fks.get(tname, []),
+                description=snapshot.desc_map.get(tname),
+            )
+        )
+    if not tmeta:
+        return None, "no introspected tables"
+    return (
+        SchemaArtifact(
+            schema_version="postgres_live",
+            tables=tmeta,
+            source_mode="postgres_schema_explorer",
+        ),
+        None,
+    )

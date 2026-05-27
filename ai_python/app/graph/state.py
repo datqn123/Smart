@@ -13,9 +13,11 @@ class AgentState(TypedDict, total=False):
 
     messages: Annotated[list[BaseMessage], add_messages]
     intent: str | None
+    route_source: str | None
     schema_version: str | None
     generated_sql: str | None
     sql_attempt_count: int
+    sql_repair_max_attempts: int | None
     validation_feedback: dict[str, Any] | None
     query_result: Any | None
     final_answer: str | None
@@ -88,6 +90,8 @@ def default_initial_state() -> AgentState:
     return {
         "context_compact_generation": 0,
         "sql_attempt_count": 0,
+        "sql_repair_max_attempts": None,
+        "route_source": None,
         "validation_feedback": {
             "intent_review": [],
             "policy": [],

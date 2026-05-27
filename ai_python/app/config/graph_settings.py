@@ -73,6 +73,44 @@ class GraphSettings(BaseSettings):
         description="Registry table (table_name, column_name, description) for per-column AI hints.",
     )
     pg_metadata_connect_timeout_seconds: int = Field(default=3, ge=1, le=30)
+    schema_cache_enabled: bool = Field(
+        default=True,
+        description="Enable in-process schema metadata cache for Postgres registry/introspection.",
+    )
+    schema_cache_ttl_seconds: int = Field(
+        default=600,
+        ge=30,
+        le=3600,
+        description="TTL for schema metadata cache items.",
+    )
+    schema_cache_max_items: int = Field(
+        default=64,
+        ge=1,
+        le=256,
+        description="LRU capacity for schema metadata cache.",
+    )
+    schema_fingerprint_check_interval_seconds: int = Field(
+        default=30,
+        ge=1,
+        le=300,
+        description="Interval between lightweight DB fingerprint checks.",
+    )
+    sql_review_max_retries: int = Field(
+        default=2,
+        ge=0,
+        le=8,
+        description="Max structured retries for sql_review LLM call.",
+    )
+    sql_review_skip_low_risk: bool = Field(
+        default=True,
+        description="Skip sql_review LLM for low-risk SQL queries when deterministic checks already pass.",
+    )
+    sql_repair_max_attempts: int = Field(
+        default=3,
+        ge=1,
+        le=12,
+        description="Global SQL repair attempts budget (retry loop cap).",
+    )
     # --- Task007 SQL-Factory-lite (defaults off / safe fallbacks) ---
     sql_enriched_schema_prompt: bool = Field(
         default=False,
@@ -320,6 +358,8 @@ class GraphSettings(BaseSettings):
         "chart_readiness_enabled",
         "chart_readiness_use_llm_critic",
         "context_compact_enabled",
+        "schema_cache_enabled",
+        "sql_review_skip_low_risk",
         mode="before",
     )
     @classmethod
@@ -341,6 +381,11 @@ class GraphSettings(BaseSettings):
         "context_compact_max_turns",
         "context_compact_summary_lines",
         "context_compact_keep_last_turns",
+        "schema_cache_ttl_seconds",
+        "schema_cache_max_items",
+        "schema_fingerprint_check_interval_seconds",
+        "sql_review_max_retries",
+        "sql_repair_max_attempts",
         mode="before",
     )
     @classmethod

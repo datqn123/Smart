@@ -15,6 +15,7 @@ from app.graph.deps import GraphDeps
 from app.graph.feedback import (
     FeedbackSource,
     append_feedback,
+    append_failure_signature,
     bump_attempts,
     empty_feedback,
     has_sql_fix_feedback,
@@ -194,6 +195,112 @@ def _last_user_message(state: AgentState) -> str:
     )
 
 
+def _build_failure_signature(kind: str, detail: str) -> str:
+    text = " ".join(str(detail or "").strip().split())
+    return f"{kind}:{text[:320]}".lower()
+
+
+def _classify_sql_repair_kind(*, detail: str, source: FeedbackSource) -> str:
+    d = (detail or "").lower()
+    if "table not in allowlist" in d or "column not in allowlist" in d or "allowlist" in d:
+        return "allowlist"
+    if "parse" in d or "syntax" in d or "not a single postgresql select" in d:
+        return "parse"
+    if source == "exec":
+        return "exec_upstream"
+    if source == "result":
+        return "empty_result"
+    return "policy"
+
+
+def _append_sql_repair_feedback(
+    state: AgentState,
+    *,
+    source: FeedbackSource,
+    detail: str,
+    hint: str | None = None,
+) -> dict[str, Any]:
+    """Append source + structured sql_fix + failure signature."""
+    kind = _classify_sql_repair_kind(detail=detail, source=source)
+    out = append_feedback(state, source, detail)
+    synthetic: AgentState = {**state, "validation_feedback": out}
+    fix = (
+        f"SQL repair [{kind}]: {detail}\n"
+        "Rewrite previous SQL with minimal edits, keep SELECT-only, stay in allowlist, and keep LIMIT.\n"
+    )
+    if hint:
+        fix += f"Retry hint: {hint.strip()}\n"
+    out = append_feedback(synthetic, "sql_fix", fix.strip())
+    synthetic = {**state, "validation_feedback": out}
+    return append_failure_signature(
+        synthetic,
+        signature=_build_failure_signature(kind, detail),
+    )
+
+
+def _deterministic_validation_context(
+    state: AgentState,
+    deps: GraphDeps,
+) -> tuple[list[str] | None, dict[str, set[str]] | None]:
+    allowlist = None
+    table_cols = None
+    snap = state.get("runtime_schema_artifact")
+    if isinstance(snap, dict):
+        try:
+            art = SchemaArtifact.model_validate(snap)
+        except Exception:
+            art = None
+        if art is not None:
+            try:
+                full_cols = art.allowlist_columns_map()
+                if deps.settings.sql_table_selection_enabled:
+                    cap = int(deps.settings.sql_max_selected_tables) + int(
+                        deps.settings.sql_allowlist_fk_extra_slots
+                    )
+                    allowlist = validation_allowlist_from_state(
+                        art,
+                        state,
+                        fk_expand=bool(deps.settings.sql_allowlist_fk_expand),
+                        fk_hops=int(deps.settings.sql_allowlist_fk_hops),
+                        max_tables=cap,
+                    )
+                else:
+                    allowlist = art.allowlist_table_names()
+                if allowlist is not None:
+                    table_cols = {t: cols for t, cols in full_cols.items() if t in allowlist}
+            except Exception:
+                allowlist = None
+                table_cols = None
+    return allowlist, table_cols
+
+
+def _should_skip_sql_review_llm(
+    *,
+    deps: GraphDeps,
+    state: AgentState,
+    sql: str,
+    user_q: str,
+) -> tuple[bool, str]:
+    if not deps.settings.sql_review_skip_low_risk:
+        return False, ""
+    if state.get("intent") != "system_data_query":
+        return False, ""
+    if detect_sql_query_domain(user_q) != "generic":
+        return False, ""
+    allowlist, table_cols = _deterministic_validation_context(state, deps)
+    ok, detail, _, notes = validate_sql_deterministic(
+        sql,
+        deps.settings,
+        allowlist_tables=allowlist,
+        table_columns=table_cols,
+    )
+    if not ok:
+        return False, detail or "deterministic check failed"
+    if notes:
+        return False, "; ".join(notes)
+    return True, "deterministic pass + low-risk generic domain"
+
+
 def _load_schema_artifact(
     deps: GraphDeps, _state: AgentState, *, user_q: str
 ) -> tuple[SchemaArtifact | None, Exception | None]:
@@ -298,6 +405,7 @@ def make_gen_sql_node(deps: GraphDeps):
                 return {
                     **emit_progress(state, "gen_sql"),
                     "sql_attempt_count": prev,
+                    "sql_repair_max_attempts": int(deps.settings.sql_repair_max_attempts),
                     "generated_sql": None,
                     "error_payload": pre_err,
                     "validation_feedback": bumped,
@@ -316,6 +424,7 @@ def make_gen_sql_node(deps: GraphDeps):
             return {
                 **emit_progress(state, "gen_sql"),
                 "sql_attempt_count": prev,
+                "sql_repair_max_attempts": int(deps.settings.sql_repair_max_attempts),
                 "generated_sql": None,
                 "error_payload": {
                     "error": "schema_load_failed",
@@ -482,6 +591,7 @@ def make_gen_sql_node(deps: GraphDeps):
             out_none: dict = {
                 **emit_progress(state, "gen_sql"),
                 "sql_attempt_count": nxt,
+                "sql_repair_max_attempts": int(deps.settings.sql_repair_max_attempts),
                 "generated_sql": sql,
                 "validation_feedback": bumped,
                 "sql_gen_mode": mode,
@@ -537,6 +647,7 @@ def make_gen_sql_node(deps: GraphDeps):
         out: dict = {
             **emit_progress(state, "gen_sql"),
             "sql_attempt_count": nxt,
+            "sql_repair_max_attempts": int(deps.settings.sql_repair_max_attempts),
             "generated_sql": sql_stripped,
             "validation_feedback": fb_for_append,
             "sql_gen_mode": mode,
@@ -582,10 +693,29 @@ def make_sql_review_node(deps: GraphDeps):
             return {
                 **emit_progress(state, "sql_review"),
                 "sql_review_ok": False,
-                "validation_feedback": append_feedback(state, "policy", msg),
+                "validation_feedback": _append_sql_repair_feedback(
+                    state,
+                    source="policy",
+                    detail=msg,
+                ),
             }
         client = reg.get("sql_review")
         user_q = _last_user_message(state)
+        skip_review, skip_reason = _should_skip_sql_review_llm(
+            deps=deps,
+            state=state,
+            sql=sql,
+            user_q=user_q,
+        )
+        if skip_review:
+            emit_agent_trace(
+                logger,
+                deps.settings,
+                agent="sql_review",
+                phase="Bỏ qua review LLM (low-risk)",
+                detail=f"ok=True; reason={skip_reason}",
+            )
+            return {**emit_progress(state, "sql_review"), "sql_review_ok": True}
         allow_block = ""
         snap = state.get("runtime_schema_artifact")
         if isinstance(snap, dict):
@@ -624,7 +754,7 @@ def make_sql_review_node(deps: GraphDeps):
                 ],
                 SqlReviewOutput,
                 json_output_contract=_SQL_REVIEW_JSON_CONTRACT,
-                max_retries=5,
+                max_retries=int(deps.settings.sql_review_max_retries),
             )
         except Exception:
             logger.warning("sql_review structured_predict failed; passing review", exc_info=True)
@@ -688,6 +818,13 @@ def make_sql_review_node(deps: GraphDeps):
                 "policy" if any(_POLICY_ISSUE_HINT.search(i) for i in issues) else "intent_review"
             )
             synthetic["validation_feedback"] = append_feedback(synthetic, src, summary)
+            synthetic = {
+                **state,
+                "validation_feedback": append_failure_signature(
+                    synthetic,
+                    signature=_build_failure_signature(src, summary),
+                ),
+            }
             upd["validation_feedback"] = synthetic["validation_feedback"]
         return upd
 
@@ -698,36 +835,7 @@ def make_validate_sql_node(deps: GraphDeps):
     def validate_sql(state: AgentState) -> dict:
         logger.info("node=validate_sql action=start")
         raw = state.get("generated_sql")
-        allowlist = None
-        table_cols = None
-        art: SchemaArtifact | None = None
-        snap = state.get("runtime_schema_artifact")
-        if isinstance(snap, dict):
-            try:
-                art = SchemaArtifact.model_validate(snap)
-            except Exception:
-                art = None
-        if art is not None:
-            try:
-                full_cols = art.allowlist_columns_map()
-                if deps.settings.sql_table_selection_enabled:
-                    cap = int(deps.settings.sql_max_selected_tables) + int(
-                        deps.settings.sql_allowlist_fk_extra_slots
-                    )
-                    allowlist = validation_allowlist_from_state(
-                        art,
-                        state,
-                        fk_expand=bool(deps.settings.sql_allowlist_fk_expand),
-                        fk_hops=int(deps.settings.sql_allowlist_fk_hops),
-                        max_tables=cap,
-                    )
-                else:
-                    allowlist = art.allowlist_table_names()
-                if allowlist is not None:
-                    table_cols = {t: cols for t, cols in full_cols.items() if t in allowlist}
-            except Exception:
-                allowlist = None
-                table_cols = None
+        allowlist, table_cols = _deterministic_validation_context(state, deps)
         ok, detail, sanitized, notes = validate_sql_deterministic(
             raw,
             deps.settings,
@@ -785,9 +893,11 @@ def make_validate_sql_node(deps: GraphDeps):
                         f"{msg}. Fix column names per schema (qualified table.column). "
                         "Do not invent columns; productunits uses id not unit_id."
                     )
-            synthetic["validation_feedback"] = append_feedback(synthetic, "policy", msg)
-            policy_fix = f"Policy fix: {msg}\nRewrite the SELECT to satisfy policy and allowlist."
-            synthetic["validation_feedback"] = append_feedback(synthetic, "sql_fix", policy_fix)
+            synthetic["validation_feedback"] = _append_sql_repair_feedback(
+                synthetic,
+                source="policy",
+                detail=msg,
+            )
         if notes or not ok:
             upd["validation_feedback"] = synthetic["validation_feedback"]
         return {**emit_progress(state, "validate_sql"), **upd}
@@ -843,7 +953,11 @@ def make_execute_sql_node(deps: GraphDeps):
             return {
                 **emit_progress(state, "execute_sql"),
                 "query_result": None,
-                "validation_feedback": append_feedback(state, "exec", str(exc)),
+                "validation_feedback": _append_sql_repair_feedback(
+                    state,
+                    source="exec",
+                    detail=str(exc),
+                ),
             }
 
     return execute_sql
@@ -857,10 +971,10 @@ def make_validate_result_node(deps: GraphDeps):
             return {
                 **emit_progress(state, "validate_result"),
                 "result_ok": False,
-                "validation_feedback": append_feedback(
+                "validation_feedback": _append_sql_repair_feedback(
                     state,
-                    "result",
-                    "empty or failed execution",
+                    source="result",
+                    detail="empty or failed execution",
                 ),
             }
         rows = qr.get("rows") if isinstance(qr, dict) else None
@@ -870,10 +984,10 @@ def make_validate_result_node(deps: GraphDeps):
             return {
                 **emit_progress(state, "validate_result"),
                 "result_ok": False,
-                "validation_feedback": append_feedback(
+                "validation_feedback": _append_sql_repair_feedback(
                     state,
-                    "result",
-                    "too many rows",
+                    source="result",
+                    detail="too many rows",
                 ),
             }
         return {**emit_progress(state, "validate_result"), "result_ok": True, "result_empty": False}

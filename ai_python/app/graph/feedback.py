@@ -100,6 +100,39 @@ def has_sql_fix_feedback(fb: ValidationFeedback | None) -> bool:
     return bool(fb and (fb.get("sql_fix") or []))
 
 
+def append_failure_signature(
+    state: AgentState,
+    *,
+    signature: str,
+    max_items: int = 16,
+) -> ValidationFeedback:
+    """Track normalized failure signatures for loop-prevention in retry policy."""
+    prev = state.get("validation_feedback")
+    if not isinstance(prev, dict):
+        base = empty_feedback()
+    else:
+        base = {
+            "intent_review": list(prev.get("intent_review", [])),
+            "policy": list(prev.get("policy", [])),
+            "exec": list(prev.get("exec", [])),
+            "result": list(prev.get("result", [])),
+            "sql_fix": list(prev.get("sql_fix", [])),
+            "attempts": int(prev.get("attempts", 0)),
+            "extras": prev.get("extras"),
+        }
+    sig = " ".join(str(signature or "").lower().split()).strip()
+    if not sig:
+        return base
+    extras = base.get("extras")
+    extras_obj: dict[str, Any] = dict(extras) if isinstance(extras, dict) else {}
+    prev_list = extras_obj.get("failure_signatures")
+    sig_list = list(prev_list) if isinstance(prev_list, list) else []
+    sig_list.append(sig)
+    extras_obj["failure_signatures"] = sig_list[-max(1, int(max_items)) :]
+    base["extras"] = extras_obj
+    return base
+
+
 def bump_attempts(state: AgentState) -> ValidationFeedback:
     prev = state.get("validation_feedback")
     if not isinstance(prev, dict):

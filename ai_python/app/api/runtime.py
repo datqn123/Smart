@@ -41,8 +41,9 @@ class GraphRuntime(Protocol):
 
 
 class LangGraphRuntime:
-    def __init__(self, compiled: Any) -> None:
+    def __init__(self, compiled: Any, *, graph_settings: Any) -> None:
         self._compiled = compiled
+        self._graph_settings = graph_settings
 
     def invoke(
         self,
@@ -54,6 +55,7 @@ class LangGraphRuntime:
         state = _build_state(
             request=request,
             correlation_id=correlation_id,
+            graph_settings=self._graph_settings,
             bearer_token=bearer_token,
         )
         config = _build_graph_config(request, correlation_id=correlation_id)
@@ -70,6 +72,7 @@ class LangGraphRuntime:
         state = _build_state(
             request=request,
             correlation_id=correlation_id,
+            graph_settings=self._graph_settings,
             bearer_token=bearer_token,
         )
         config = _build_graph_config(request, correlation_id=correlation_id)
@@ -85,6 +88,7 @@ def _build_state(
     *,
     request: ChatRequest,
     correlation_id: str,
+    graph_settings: Any,
     bearer_token: str | None = None,
 ) -> dict[str, Any]:
     state = dict(default_initial_state())
@@ -100,7 +104,9 @@ def _build_state(
     state["final_answer"] = None
     state["error_payload"] = None
     state["intent"] = None
+    state["route_source"] = None
     state["sql_review_ok"] = None
+    state["sql_repair_max_attempts"] = int(getattr(graph_settings, "sql_repair_max_attempts", 3))
     state["sql_valid"] = None
     state["result_ok"] = None
     state["result_empty"] = None
@@ -184,4 +190,4 @@ def _build_graph_deps() -> GraphDeps:
 def get_graph_runtime() -> GraphRuntime:
     deps = _build_graph_deps()
     compiled = compile_agent_graph(deps, use_checkpointer=True)
-    return LangGraphRuntime(compiled)
+    return LangGraphRuntime(compiled, graph_settings=deps.settings)

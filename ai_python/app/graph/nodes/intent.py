@@ -67,7 +67,11 @@ def make_intent_node(deps: GraphDeps):
                     f"câu_hỏi={_user_question_snippet(state)}"
                 ),
             )
-            return {**emit_progress(state, "classify_intent"), **mode_patch}
+            return {
+                **emit_progress(state, "classify_intent"),
+                **mode_patch,
+                "route_source": "interaction_mode",
+            }
         reg = deps.llm_registry
         if reg is None:
             emit_agent_trace(
@@ -77,7 +81,11 @@ def make_intent_node(deps: GraphDeps):
                 phase="Kết luận (stub, không gọi LLM)",
                 detail="intent=general_chat",
             )
-            return {**emit_progress(state, "classify_intent"), "intent": "general_chat"}
+            return {
+                **emit_progress(state, "classify_intent"),
+                "intent": "general_chat",
+                "route_source": "intent_auto",
+            }
         messages = _messages_for_intent(state)
         client = reg.get("intent")
         try:
@@ -96,7 +104,11 @@ def make_intent_node(deps: GraphDeps):
                 phase="Lỗi LLM — fallback",
                 detail="intent=general_chat",
             )
-            return {**emit_progress(state, "classify_intent"), "intent": "general_chat"}
+            return {
+                **emit_progress(state, "classify_intent"),
+                "intent": "general_chat",
+                "route_source": "intent_auto",
+            }
         normalized = normalize_intent(raw)
         emit_agent_trace(
             logger,
@@ -109,7 +121,11 @@ def make_intent_node(deps: GraphDeps):
                 f"câu_hỏi={_user_question_snippet(state)}"
             ),
         )
-        return {**emit_progress(state, "classify_intent"), "intent": normalized}
+        return {
+            **emit_progress(state, "classify_intent"),
+            "intent": normalized,
+            "route_source": "intent_auto",
+        }
 
     return intent
 

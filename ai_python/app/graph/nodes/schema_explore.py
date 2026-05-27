@@ -27,11 +27,7 @@ from app.graph.sql_table_selection import (
     ensure_context_tables_for_question,
     ensure_domain_tables_for_question,
 )
-from app.graph.schema_tools import (
-    build_artifact_for_tables,
-    format_catalog_for_prompt,
-    list_tables,
-)
+from app.graph import schema_tools
 from app.graph.spring_describe_client import build_spring_describe_client
 from app.graph.state import AgentState
 from app.llm.schemas import SchemaPlanOutput
@@ -77,7 +73,7 @@ def make_schema_explore_node(deps: GraphDeps):
         query_domain = detect_sql_query_domain(user_q)
         metric_id = resolve_metric(user_q)
         dimensions = detect_dimensions(user_q)
-        catalog, cerr = list_tables(deps.settings)
+        catalog, cerr = schema_tools.list_tables(deps.settings)
         if cerr:
             logger.warning("list_tables failed: %s", cerr)
             emit_agent_trace(
@@ -95,7 +91,7 @@ def make_schema_explore_node(deps: GraphDeps):
                 },
             }
 
-        catalog_text = format_catalog_for_prompt(catalog)
+        catalog_text = schema_tools.format_catalog_for_prompt(catalog)
         metric_hints = "\n".join(ledger_sql_hints(metric_id))
         reg = deps.llm_registry
         llm_tables: list[str] = []
@@ -155,7 +151,7 @@ def make_schema_explore_node(deps: GraphDeps):
 
         describe_client = build_spring_describe_client(deps.settings)
         cid = state.get("correlation_id")
-        art, aerr = build_artifact_for_tables(
+        art, aerr = schema_tools.build_artifact_for_tables(
             deps.settings,
             tables,
             describe_client=describe_client,

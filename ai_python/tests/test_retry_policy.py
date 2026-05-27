@@ -101,3 +101,37 @@ def test_intent_review_budget_exhausted_at_max_attempts() -> None:
     }
     d = decide_sql_retry(state, kind="intent_review")
     assert d.action == RetryAction.FAIL
+
+
+def test_sql_repair_max_attempts_from_state_overrides_default() -> None:
+    state = {
+        "intent": "system_data_query",
+        "sql_attempt_count": 2,
+        "sql_repair_max_attempts": 2,
+        "validation_feedback": {"policy": [], "result": [], "exec": [], "intent_review": []},
+    }
+    d = decide_sql_retry(state, kind="policy")
+    assert d.action == RetryAction.FAIL
+
+
+def test_duplicate_sql_with_same_failure_signature_stops_early() -> None:
+    sql = "SELECT id FROM customers LIMIT 10"
+    state = {
+        "intent": "system_data_query",
+        "sql_attempt_count": 2,
+        "sql_attempt_history": [sql, sql],
+        "validation_feedback": {
+            "policy": ["table not in allowlist"],
+            "result": [],
+            "exec": [],
+            "intent_review": [],
+            "extras": {
+                "failure_signatures": [
+                    "allowlist:table not in allowlist",
+                    "allowlist:table not in allowlist",
+                ]
+            },
+        },
+    }
+    d = decide_sql_retry(state, kind="policy")
+    assert d.action == RetryAction.FAIL
