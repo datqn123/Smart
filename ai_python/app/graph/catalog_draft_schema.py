@@ -219,6 +219,8 @@ def enrich_catalog_draft_rows(
             if not values.get("name") or not str(values.get("name", "")).strip():
                 values["name"] = f"{theme} {idx}"
             # skuCode must be explicit for DB validation (no duplicate / missing category checks).
+            if not values.get("skuCode") or not str(values.get("skuCode", "")).strip():
+                values["skuCode"] = f"AI-{idx:03d}"
             if not values.get("baseUnitName") or not str(values.get("baseUnitName", "")).strip():
                 values["baseUnitName"] = "Cái"
             sale = values.get("salePrice")
@@ -233,6 +235,8 @@ def enrich_catalog_draft_rows(
                 elif price is not None:
                     values["costPrice"] = int(round(price * 0.8))
             # categoryName/categoryCode must exist in DB — do not invent.
+            if not values.get("categoryName") and not values.get("categoryCode") and theme != "Sản phẩm":
+                values["categoryName"] = theme
             if not values.get("status"):
                 values["status"] = "Active"
         elif entity_type == "category":

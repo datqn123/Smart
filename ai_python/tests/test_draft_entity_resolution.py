@@ -189,7 +189,7 @@ def test_resolve_catalog_finds_do_uong_category() -> None:
     )
 
     def execute(sql: str, **kwargs: Any) -> dict[str, Any]:
-        if "categories" in sql.lower():
+        if sql.lower().strip().startswith("select c.id"):
             return {
                 "rows": [
                     {"id": 2, "category_code": "CAT002", "name": "Đồ uống", "status": "Active"},

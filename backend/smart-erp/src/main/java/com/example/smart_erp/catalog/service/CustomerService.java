@@ -78,6 +78,14 @@ public class CustomerService {
 				.orElseThrow(() -> new BusinessException(ApiErrorCode.NOT_FOUND, "Không tìm thấy khách hàng"));
 	}
 
+	@Transactional(readOnly = true)
+	public java.util.Optional<Integer> findIdByCustomerCode(String customerCode) {
+		if (!StringUtils.hasText(customerCode)) {
+			return java.util.Optional.empty();
+		}
+		return customerJdbcRepository.findIdByCustomerCode(customerCode.trim());
+	}
+
 	@Transactional
 	public CustomerData create(CustomerCreateRequest req) {
 		String code = req.customerCode().trim();
@@ -97,11 +105,16 @@ public class CustomerService {
 	}
 
 	@Transactional
+	public CustomerData patch(int id, JsonNode body) {
+		return patch(id, body, null);
+	}
+
+	@Transactional
 	public CustomerData patch(int id, JsonNode body, Jwt jwt) {
 		if (body == null || !body.isObject() || body.isEmpty()) {
 			throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Body PATCH không được rỗng");
 		}
-		if (body.has("loyaltyPoints") && isStaffRole(jwt)) {
+		if (body.has("loyaltyPoints") && jwt != null && isStaffRole(jwt)) {
 			throw new BusinessException(ApiErrorCode.FORBIDDEN, "Bạn không có quyền chỉnh điểm tích lũy");
 		}
 		CustomerLockRow locked = customerJdbcRepository.lockCustomerForUpdate(id).orElseThrow(

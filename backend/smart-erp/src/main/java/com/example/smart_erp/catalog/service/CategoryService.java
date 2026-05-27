@@ -121,6 +121,14 @@ public class CategoryService {
 				.orElseThrow(() -> new BusinessException(ApiErrorCode.NOT_FOUND, "Không tìm thấy danh mục"));
 	}
 
+	@Transactional(readOnly = true)
+	public java.util.Optional<Long> findIdByCategoryCode(String categoryCode) {
+		if (!StringUtils.hasText(categoryCode)) {
+			return java.util.Optional.empty();
+		}
+		return categoryJdbcRepository.findActiveIdByExactCode(categoryCode.trim());
+	}
+
 	@Transactional
 	public CategoryNodeResponse create(CategoryCreateRequest req) {
 		String code = requireNonBlank(req.categoryCode(), "categoryCode", 50);

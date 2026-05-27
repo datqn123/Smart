@@ -130,6 +130,12 @@ public class ProductJdbcRepository {
 		return !hit.isEmpty();
 	}
 
+	public Optional<Integer> findIdBySku(String skuCode) {
+		List<Integer> hit = namedJdbc.query("SELECT id FROM products WHERE sku_code = :s LIMIT 1",
+				Map.of("s", skuCode), (rs, rn) -> rs.getInt("id"));
+		return hit.isEmpty() ? Optional.empty() : Optional.of(hit.getFirst());
+	}
+
 	public boolean existsOtherSku(int excludeId, String skuCode) {
 		List<Integer> hit = namedJdbc.query("SELECT 1 FROM products WHERE sku_code = :s AND id <> :id LIMIT 1",
 				Map.of("s", skuCode, "id", excludeId), (rs, rn) -> 1);

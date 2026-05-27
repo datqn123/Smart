@@ -96,18 +96,36 @@ def make_resolve_catalog_draft_node(deps: GraphDeps):
             slots=slots,
             executor=deps.sql_executor,
             tenant_id=state.get("tenant_id"),
+            llm_registry=deps.llm_registry,
+            settings=deps.settings,
         )
         if patch:
-            msg = str(patch.get("final_answer") or "")
-            patch["messages"] = [AIMessage(content=msg)]
-            emit_agent_trace(
-                logger,
-                deps.settings,
-                agent="catalog_resolve",
-                phase="Tra cứu DB trước nháp",
-                detail="clarify",
-            )
-            return patch
+            if "final_answer" in patch:
+                msg = str(patch.get("final_answer") or "")
+                patch["messages"] = [AIMessage(content=msg)]
+                emit_agent_trace(
+                    logger,
+                    deps.settings,
+                    agent="catalog_resolve",
+                    phase="Tra cứu DB trước nháp",
+                    detail="clarify",
+                )
+                return patch
+            else:
+                emit_agent_trace(
+                    logger,
+                    deps.settings,
+                    agent="catalog_resolve",
+                    phase="Tra cứu DB trước nháp (Tải dữ liệu có sẵn)",
+                    detail=f"loaded existing rows: {len(patch.get('catalog_draft_existing_data') or [])}",
+                )
+                return {
+                    **emit_progress(state, "draft_resolve"),
+                    "catalog_entity_type": slots.entity_type,
+                    "catalog_row_count_hint": slots.row_count_hint,
+                    "catalog_draft_slots": slots.model_dump(),
+                    **patch
+                }
         emit_agent_trace(
             logger,
             deps.settings,

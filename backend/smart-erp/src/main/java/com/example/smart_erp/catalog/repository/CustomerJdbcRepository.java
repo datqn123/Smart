@@ -133,6 +133,13 @@ public class CustomerJdbcRepository {
 		return !hit.isEmpty();
 	}
 
+	public Optional<Integer> findIdByCustomerCode(String customerCode) {
+		List<Integer> hit = namedJdbc.query(
+				"SELECT id FROM customers WHERE customer_code = :c AND deleted_at IS NULL LIMIT 1",
+				Map.of("c", customerCode), (rs, rn) -> rs.getInt("id"));
+		return hit.isEmpty() ? Optional.empty() : Optional.of(hit.getFirst());
+	}
+
 	public boolean existsOtherCustomerCode(int excludeId, String customerCode) {
 		List<Integer> hit = namedJdbc.query(
 				"SELECT 1 FROM customers WHERE customer_code = :c AND id <> :id AND deleted_at IS NULL LIMIT 1",

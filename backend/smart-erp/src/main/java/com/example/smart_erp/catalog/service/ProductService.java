@@ -99,6 +99,14 @@ public class ProductService {
 		throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Tham số status không hợp lệ");
 	}
 
+	@Transactional(readOnly = true)
+	public Optional<Integer> findIdBySku(String skuCode) {
+		if (skuCode == null || skuCode.isBlank()) {
+			return Optional.empty();
+		}
+		return productJdbcRepository.findIdBySku(skuCode.trim());
+	}
+
 	@Transactional
 	public ProductCreatedData create(ProductCreateRequest req) {
 		String sku = req.skuCode().trim();

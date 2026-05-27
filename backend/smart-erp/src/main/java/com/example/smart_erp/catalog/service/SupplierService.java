@@ -79,6 +79,14 @@ public class SupplierService {
 				.orElseThrow(() -> new BusinessException(ApiErrorCode.NOT_FOUND, "Không tìm thấy nhà cung cấp"));
 	}
 
+	@Transactional(readOnly = true)
+	public java.util.Optional<Integer> findIdBySupplierCode(String supplierCode) {
+		if (!StringUtils.hasText(supplierCode)) {
+			return java.util.Optional.empty();
+		}
+		return supplierJdbcRepository.findIdBySupplierCode(supplierCode.trim());
+	}
+
 	@Transactional
 	public SupplierDetailData create(SupplierCreateRequest req) {
 		String code = req.supplierCode().trim();

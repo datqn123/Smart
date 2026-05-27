@@ -115,21 +115,52 @@ public class AiCatalogDraftCommitter {
 		}
 		BigDecimal cost = decimalRequired(v, "costPrice");
 		BigDecimal sale = decimalRequired(v, "salePrice");
-		ProductCreateRequest req = new ProductCreateRequest(
-				required(v, "skuCode"),
-				textOrNull(v, "barcode"),
-				required(v, "name"),
-				categoryId,
-				textOrNull(v, "description"),
-				decimalOptional(v, "weight"),
-				textOrDefault(v, "status", "Active"),
-				null,
-				required(v, "baseUnitName", "Cái"),
-				cost,
-				sale,
-				textOrNull(v, "priceEffectiveDate"));
-		ProductCreatedData created = productService.create(req);
-		return created.id();
+		String skuCode = required(v, "skuCode");
+		java.util.Optional<Integer> existingIdOpt = productService.findIdBySku(skuCode);
+		if (existingIdOpt.isPresent()) {
+			int pid = existingIdOpt.get();
+			ObjectNode patchBody = objectMapper.createObjectNode();
+			patchBody.put("skuCode", skuCode);
+			patchBody.put("name", required(v, "name"));
+			if (categoryId != null) {
+				patchBody.put("categoryId", categoryId);
+			} else {
+				patchBody.putNull("categoryId");
+			}
+			if (v.hasNonNull("barcode")) {
+				patchBody.put("barcode", v.get("barcode").asText());
+			}
+			if (v.hasNonNull("description")) {
+				patchBody.put("description", v.get("description").asText());
+			}
+			if (v.hasNonNull("weight")) {
+				patchBody.put("weight", v.get("weight").decimalValue());
+			}
+			patchBody.put("status", textOrDefault(v, "status", "Active"));
+			patchBody.put("costPrice", cost);
+			patchBody.put("salePrice", sale);
+			if (v.hasNonNull("priceEffectiveDate")) {
+				patchBody.put("priceEffectiveDate", v.get("priceEffectiveDate").asText());
+			}
+			com.example.smart_erp.catalog.response.ProductDetailData updated = productService.patch(pid, patchBody);
+			return updated.id();
+		} else {
+			ProductCreateRequest req = new ProductCreateRequest(
+					skuCode,
+					textOrNull(v, "barcode"),
+					required(v, "name"),
+					categoryId,
+					textOrNull(v, "description"),
+					decimalOptional(v, "weight"),
+					textOrDefault(v, "status", "Active"),
+					null,
+					required(v, "baseUnitName", "Cái"),
+					cost,
+					sale,
+					textOrNull(v, "priceEffectiveDate"));
+			com.example.smart_erp.catalog.response.ProductCreatedData created = productService.create(req);
+			return created.id();
+		}
 	}
 
 	private int commitCategory(ObjectNode v) {
@@ -146,41 +177,106 @@ public class AiCatalogDraftCommitter {
 			}
 		}
 		Integer sortOrder = intOrNullNode(v.get("sortOrder"));
-		CategoryCreateRequest req = new CategoryCreateRequest(
-				required(v, "categoryCode"),
-				required(v, "name"),
-				textOrNull(v, "description"),
-				parentId,
-				sortOrder,
-				textOrDefault(v, "status", "Active"));
-		CategoryNodeResponse created = categoryService.create(req);
-		return Math.toIntExact(created.id());
+		String categoryCode = required(v, "categoryCode");
+		java.util.Optional<Long> existingIdOpt = categoryService.findIdByCategoryCode(categoryCode);
+		if (existingIdOpt.isPresent()) {
+			long cid = existingIdOpt.get();
+			ObjectNode patchBody = objectMapper.createObjectNode();
+			patchBody.put("categoryCode", categoryCode);
+			patchBody.put("name", required(v, "name"));
+			if (v.hasNonNull("description")) {
+				patchBody.put("description", v.get("description").asText());
+			}
+			if (parentId != null) {
+				patchBody.put("parentId", parentId);
+			} else {
+				patchBody.putNull("parentId");
+			}
+			if (sortOrder != null) {
+				patchBody.put("sortOrder", sortOrder);
+			}
+			patchBody.put("status", textOrDefault(v, "status", "Active"));
+			CategoryNodeResponse updated = categoryService.patch(cid, patchBody);
+			return Math.toIntExact(updated.id());
+		} else {
+			CategoryCreateRequest req = new CategoryCreateRequest(
+					categoryCode,
+					required(v, "name"),
+					textOrNull(v, "description"),
+					parentId,
+					sortOrder,
+					textOrDefault(v, "status", "Active"));
+			CategoryNodeResponse created = categoryService.create(req);
+			return Math.toIntExact(created.id());
+		}
 	}
 
 	private int commitSupplier(ObjectNode v) {
-		SupplierCreateRequest req = new SupplierCreateRequest(
-				required(v, "supplierCode"),
-				required(v, "name"),
-				required(v, "contactPerson"),
-				required(v, "phone"),
-				textOrNull(v, "email"),
-				textOrNull(v, "address"),
-				textOrNull(v, "taxCode"),
-				textOrDefault(v, "status", "Active"));
-		SupplierDetailData created = supplierService.create(req);
-		return created.id();
+		String supplierCode = required(v, "supplierCode");
+		java.util.Optional<Integer> existingIdOpt = supplierService.findIdBySupplierCode(supplierCode);
+		if (existingIdOpt.isPresent()) {
+			int sid = existingIdOpt.get();
+			ObjectNode patchBody = objectMapper.createObjectNode();
+			patchBody.put("supplierCode", supplierCode);
+			patchBody.put("name", required(v, "name"));
+			patchBody.put("contactPerson", required(v, "contactPerson"));
+			patchBody.put("phone", required(v, "phone"));
+			if (v.hasNonNull("email")) {
+				patchBody.put("email", v.get("email").asText());
+			}
+			if (v.hasNonNull("address")) {
+				patchBody.put("address", v.get("address").asText());
+			}
+			if (v.hasNonNull("taxCode")) {
+				patchBody.put("taxCode", v.get("taxCode").asText());
+			}
+			patchBody.put("status", textOrDefault(v, "status", "Active"));
+			SupplierDetailData updated = supplierService.patch(sid, patchBody);
+			return updated.id();
+		} else {
+			SupplierCreateRequest req = new SupplierCreateRequest(
+					supplierCode,
+					required(v, "name"),
+					required(v, "contactPerson"),
+					required(v, "phone"),
+					textOrNull(v, "email"),
+					textOrNull(v, "address"),
+					textOrNull(v, "taxCode"),
+					textOrDefault(v, "status", "Active"));
+			SupplierDetailData created = supplierService.create(req);
+			return created.id();
+		}
 	}
 
 	private int commitCustomer(ObjectNode v) {
-		CustomerCreateRequest req = new CustomerCreateRequest(
-				required(v, "customerCode"),
-				required(v, "name"),
-				required(v, "phone"),
-				textOrNull(v, "email"),
-				textOrNull(v, "address"),
-				textOrDefault(v, "status", "Active"));
-		CustomerData created = customerService.create(req);
-		return created.id();
+		String customerCode = required(v, "customerCode");
+		java.util.Optional<Integer> existingIdOpt = customerService.findIdByCustomerCode(customerCode);
+		if (existingIdOpt.isPresent()) {
+			int cid = existingIdOpt.get();
+			ObjectNode patchBody = objectMapper.createObjectNode();
+			patchBody.put("customerCode", customerCode);
+			patchBody.put("name", required(v, "name"));
+			patchBody.put("phone", required(v, "phone"));
+			if (v.hasNonNull("email")) {
+				patchBody.put("email", v.get("email").asText());
+			}
+			if (v.hasNonNull("address")) {
+				patchBody.put("address", v.get("address").asText());
+			}
+			patchBody.put("status", textOrDefault(v, "status", "Active"));
+			CustomerData updated = customerService.patch(cid, patchBody);
+			return updated.id();
+		} else {
+			CustomerCreateRequest req = new CustomerCreateRequest(
+					customerCode,
+					required(v, "name"),
+					required(v, "phone"),
+					textOrNull(v, "email"),
+					textOrNull(v, "address"),
+					textOrDefault(v, "status", "Active"));
+			CustomerData created = customerService.create(req);
+			return created.id();
+		}
 	}
 
 	private static CatalogDraftRowCommitOutcome fail(String rowId, String message, JsonNode fieldErrors) {

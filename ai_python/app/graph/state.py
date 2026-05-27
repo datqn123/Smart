@@ -59,6 +59,7 @@ class AgentState(TypedDict, total=False):
     catalog_draft_payload: dict[str, Any] | None
     catalog_draft_id: str | None
     catalog_draft_sse: dict[str, Any] | None
+    catalog_draft_existing_data: list[dict[str, Any]] | None
     # Inventory document draft HITL (Task111)
     inventory_doc_type: str | None
     inventory_line_count_hint: int | None

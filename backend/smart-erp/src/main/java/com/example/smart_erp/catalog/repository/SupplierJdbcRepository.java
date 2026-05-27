@@ -118,6 +118,12 @@ public class SupplierJdbcRepository {
 		return !hit.isEmpty();
 	}
 
+	public Optional<Integer> findIdBySupplierCode(String supplierCode) {
+		List<Integer> hit = namedJdbc.query("SELECT id FROM suppliers WHERE supplier_code = :c LIMIT 1",
+				Map.of("c", supplierCode), (rs, rn) -> rs.getInt("id"));
+		return hit.isEmpty() ? Optional.empty() : Optional.of(hit.getFirst());
+	}
+
 	public boolean existsOtherSupplierCode(int excludeId, String supplierCode) {
 		List<Integer> hit = namedJdbc.query(
 				"SELECT 1 FROM suppliers WHERE supplier_code = :c AND id <> :id LIMIT 1",

@@ -89,6 +89,42 @@ def make_generate_catalog_draft_node(deps: GraphDeps):
                 f"resolved_slots={slots_dict}\n\n"
                 f"Câu người dùng:\n{question}"
             )
+            existing_data = state.get("catalog_draft_existing_data")
+            if existing_data and isinstance(existing_data, list):
+                if entity_type == "product":
+                    headers = ["skuCode", "name", "categoryName", "categoryCode", "baseUnitName", "costPrice", "salePrice", "barcode", "status"]
+                    id_col = "skuCode"
+                    label_vi = "sản phẩm"
+                elif entity_type == "supplier":
+                    headers = ["supplierCode", "name", "contactPerson", "phone", "email", "address", "taxCode", "status"]
+                    id_col = "supplierCode"
+                    label_vi = "nhà cung cấp"
+                elif entity_type == "customer":
+                    headers = ["customerCode", "name", "phone", "email", "address", "status"]
+                    id_col = "customerCode"
+                    label_vi = "khách hàng"
+                elif entity_type == "category":
+                    headers = ["categoryCode", "name", "description", "parentName", "parentCode", "status"]
+                    id_col = "categoryCode"
+                    label_vi = "danh mục"
+                else:
+                    headers = list(existing_data[0].keys()) if existing_data else []
+                    id_col = headers[0] if headers else ""
+                    label_vi = entity_type
+                
+                rows_md = ["| " + " | ".join(headers) + " |", "| " + " | ".join("---" for _ in headers) + " |"]
+                for row in existing_data:
+                    vals = [str(row.get(h) if row.get(h) is not None else "") for h in headers]
+                    rows_md.append("| " + " | ".join(vals) + " |")
+                md_table = "\n".join(rows_md)
+                user_block += (
+                    f"\n\n## DỮ LIỆU HIỆN CÓ SẴN TRONG HỆ THỐNG:\n{md_table}\n\n"
+                    f"CHỈ THỊ QUAN TRỌNG:\n"
+                    f"1. Người dùng đang muốn nạp dữ liệu hiện có này vào bảng để chỉnh sửa/cập nhật. Hãy đọc kỹ bảng trên.\n"
+                    f"2. Hãy xuất toàn bộ các {label_vi} trong danh sách này vào kết quả JSON dưới dạng danh sách `rows` (giữ nguyên đúng {id_col} của từng dòng để thực hiện cập nhật).\n"
+                    f"3. ĐỒNG THỜI, hãy áp dụng chính xác các yêu cầu chỉnh sửa/cập nhật bằng ngôn ngữ tự nhiên từ câu người dùng (ví dụ: thay đổi thông tin, trạng thái, địa chỉ, tăng giá...) lên dữ liệu gốc trên trước khi ghi nhận vào JSON.\n"
+                    f"4. Không tự ý bịa thêm dữ liệu rác ngoài bảng trên trừ khi người dùng yêu cầu rõ ràng việc tạo mới."
+                )
             try:
                 out = client.structured_predict(
                     [SystemMessage(content=draft_system), HumanMessage(content=user_block)],

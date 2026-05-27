@@ -79,9 +79,10 @@ public class CatalogDraftReferenceValidator {
 		if (!batchSku.add(skuKey)) {
 			issues.add("Dòng " + lineNo + ": mã SKU \"" + sku + "\" bị trùng trong bảng nháp");
 		}
-		if (activeProductExists(sku)) {
-			issues.add("Dòng " + lineNo + ": mã SKU \"" + sku + "\" đã tồn tại — dùng SKU khác");
-		}
+		// Bỏ qua kiểm tra trùng SKU trên DB để hỗ trợ cập nhật (PATCH)
+		// if (activeProductExists(sku)) {
+		// 	issues.add("Dòng " + lineNo + ": mã SKU \"" + sku + "\" đã tồn tại — dùng SKU khác");
+		// }
 		String categoryName = text(values, "categoryName");
 		String categoryCode = text(values, "categoryCode");
 		if (!StringUtils.hasText(categoryName) && !StringUtils.hasText(categoryCode)) {
@@ -119,16 +120,18 @@ public class CatalogDraftReferenceValidator {
 		if (!batchCategoryCode.add(codeKey)) {
 			issues.add("Dòng " + lineNo + ": mã danh mục \"" + code + "\" bị trùng trong bảng nháp");
 		}
-		if (activeCategoryCodeExists(code)) {
-			issues.add("Dòng " + lineNo + ": mã danh mục \"" + code + "\" đã tồn tại trong hệ thống");
-		}
+		// Bỏ qua kiểm tra trùng mã danh mục trên DB để hỗ trợ cập nhật
+		// if (activeCategoryCodeExists(code)) {
+		// 	issues.add("Dòng " + lineNo + ": mã danh mục \"" + code + "\" đã tồn tại trong hệ thống");
+		// }
 		String nameKey = name.toLowerCase(Locale.ROOT);
 		if (!batchCategoryName.add(nameKey)) {
 			issues.add("Dòng " + lineNo + ": tên danh mục \"" + name + "\" bị trùng trong bảng nháp");
 		}
-		if (categoryJdbcRepository.existsActiveWithNameIgnoreCase(name)) {
-			issues.add("Dòng " + lineNo + ": tên danh mục \"" + name + "\" đã tồn tại trong hệ thống");
-		}
+		// Bỏ qua kiểm tra trùng tên danh mục trên DB để hỗ trợ cập nhật
+		// if (categoryJdbcRepository.existsActiveWithNameIgnoreCase(name)) {
+		// 	issues.add("Dòng " + lineNo + ": tên danh mục \"" + name + "\" đã tồn tại trong hệ thống");
+		// }
 		String parentName = text(values, "parentName");
 		if (StringUtils.hasText(parentName)) {
 			if (parentName.equalsIgnoreCase(name)) {
@@ -150,9 +153,10 @@ public class CatalogDraftReferenceValidator {
 		if (!batchCodes.add(codeKey)) {
 			issues.add("Dòng " + lineNo + ": mã NCC \"" + code + "\" bị trùng trong bảng nháp");
 		}
-		if (activeSupplierCodeExists(code)) {
-			issues.add("Dòng " + lineNo + ": mã NCC \"" + code + "\" đã tồn tại trong hệ thống");
-		}
+		// Bỏ qua kiểm tra trùng mã NCC trên DB để hỗ trợ cập nhật (PATCH)
+		// if (activeSupplierCodeExists(code)) {
+		// 	issues.add("Dòng " + lineNo + ": mã NCC \"" + code + "\" đã tồn tại trong hệ thống");
+		// }
 	}
 
 	private void validateCustomerLine(int lineNo, ObjectNode values, List<String> issues, Set<String> batchCodes) {
@@ -165,9 +169,10 @@ public class CatalogDraftReferenceValidator {
 		if (!batchCodes.add(codeKey)) {
 			issues.add("Dòng " + lineNo + ": mã khách hàng \"" + code + "\" bị trùng trong bảng nháp");
 		}
-		if (activeCustomerCodeExists(code)) {
-			issues.add("Dòng " + lineNo + ": mã khách hàng \"" + code + "\" đã tồn tại trong hệ thống");
-		}
+		// Bỏ qua kiểm tra trùng mã khách hàng trên DB để hỗ trợ cập nhật (PATCH)
+		// if (activeCustomerCodeExists(code)) {
+		// 	issues.add("Dòng " + lineNo + ": mã khách hàng \"" + code + "\" đã tồn tại trong hệ thống");
+		// }
 	}
 
 	private boolean activeProductExists(String skuCode) {
