@@ -20,6 +20,7 @@ import { AiChatDraftTableCard } from "../components/AiChatDraftTableCard"
 import { AiChatReceiptDraftCard } from "../components/AiChatReceiptDraftCard"
 import { AiChatQueryTableCard } from "../components/AiChatQueryTableCard"
 import { AiChatClarifyCard } from "../components/AiChatClarifyCard"
+import { AiChatMessageText } from "../components/AiChatMessageText"
 import type { CatalogDraftTablePayload } from "../api/aiCatalogDraftApi"
 import type { DomainClarifyPayload } from "../api/aiDomainClarifyTypes"
 import type { InventoryReceiptDraftPayload } from "../api/aiInventoryDraftApi"
@@ -109,34 +110,6 @@ export function ChatBotPage() {
     }
   }, [])
 
-  const appendDeltaSmart = (current: string, delta: string) => {
-    if (!current) return delta
-    if (!delta) return current
-    const last = current.slice(-1)
-    const first = delta.slice(0, 1)
-
-    // Punctuation rules: no space before closing punctuations, and no space after opening punctuations.
-    const noSpaceBefore = ",.!?:;)]}".includes(first)
-    const noSpaceAfter = "([{".includes(last)
-    if (noSpaceBefore || noSpaceAfter) return `${current}${delta}`
-
-    const isLetter = (c: string) => /[A-Za-zÀ-ỹ]/.test(c)
-    const isDigit = (c: string) => /[0-9]/.test(c)
-    const isWordish = (c: string) => isLetter(c) || isDigit(c)
-
-    // Add a space after punctuation when the next chunk starts a word.
-    // Example: "Xin chào!" + "Rất vui..." => "Xin chào! Rất vui..."
-    const spaceAfterPunct = ",.!?:;".includes(last) && isWordish(first)
-    if (spaceAfterPunct) return `${current} ${delta}`
-
-    // Do not insert spaces inside numbers like 2024.
-    if (isDigit(last) && isDigit(first)) return `${current}${delta}`
-
-    // Insert space only between word-ish boundaries (e.g. "Hello" + "world", "Năm" + "2024").
-    const needsSpace = isWordish(last) && isWordish(first) && !/\s/.test(last) && !/\s/.test(first)
-    return needsSpace ? `${current} ${delta}` : `${current}${delta}`
-  }
-
   const startAssistantStream = (query: string, options?: { autoSpeakOnComplete?: boolean }) => {
     streamRef.current?.abort()
     streamRef.current = null
@@ -156,6 +129,7 @@ export function ChatBotPage() {
     setProgressText("Đang xử lý...")
 
     let firstDeltaReceived = false
+    let usesDeltaFull = false
     streamRef.current = startAiChatPostStream({
       query,
       conversationId,
@@ -164,13 +138,26 @@ export function ChatBotPage() {
         setProgressText(text)
       },
       onDelta: (delta) => {
+        if (usesDeltaFull) return
         if (!firstDeltaReceived) {
           firstDeltaReceived = true
           setProgressText("")
         }
         setMessages(prev =>
           prev.map(m =>
-            m.id === assistantId ? { ...m, content: appendDeltaSmart(m.content ?? "", delta) } : m
+            m.id === assistantId ? { ...m, content: `${m.content ?? ""}${delta}` } : m
+          )
+        )
+      },
+      onDeltaFull: (text) => {
+        usesDeltaFull = true
+        if (!firstDeltaReceived) {
+          firstDeltaReceived = true
+          setProgressText("")
+        }
+        setMessages(prev =>
+          prev.map(m =>
+            m.id === assistantId ? { ...m, content: text } : m
           )
         )
       },
@@ -461,7 +448,6 @@ export function ChatBotPage() {
             : hasArtifact
               ? "max-w-[96%] sm:max-w-[min(720px,92%)]"
               : "max-w-[85%] sm:max-w-[70%]"
-          const assistantText = (msg.content ?? "").replace(/\*\*/g, "")
           return (
           <div key={msg.id} className={`flex w-full ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
             <div className={`flex gap-3 min-w-0 ${layoutClass} ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
@@ -496,7 +482,7 @@ export function ChatBotPage() {
                   )}
                   {msg.role === "assistant" && !hasClarify ? (
                     <div className="flex items-start justify-between gap-2">
-                      <span className="whitespace-pre-line break-words flex-1">{assistantText}</span>
+                      <AiChatMessageText text={msg.content ?? ""} />
                       {ttsSupported && msg.content.trim() && !isTyping ? (
                         <Button
                           type="button"

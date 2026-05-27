@@ -280,6 +280,8 @@ def _iter_chat_sse_events(
                 if mode == "custom" and isinstance(payload, dict) and "final_answer" in payload:
                     had_custom_payload = True
                     current = str(payload["final_answer"])
+                    yield _sse_ui_event("delta_full", current)
+                    had_stream_payload = True
                     if current.startswith(prev_answer) and len(current) > len(prev_answer):
                         delta = current[len(prev_answer) :]
                         if delta:
@@ -293,6 +295,8 @@ def _iter_chat_sse_events(
                     continue
             if "final_answer" in update and update["final_answer"] and not had_custom_payload:
                 current = str(update["final_answer"])
+                yield _sse_ui_event("delta_full", current)
+                had_stream_payload = True
                 if current.startswith(prev_answer) and len(current) > len(prev_answer):
                     delta = current[len(prev_answer) :]
                     if delta:

@@ -217,9 +217,9 @@ public class AiChatRelayController {
 						}
 						if (line.startsWith("data:")) {
 							String chunk = line.substring("data:".length());
-							if (chunk.startsWith(" ")) {
-								chunk = chunk.substring(1);
-							}
+							// Preserve leading whitespace exactly as upstream emitted it.
+							// Some token chunks intentionally start with a space (" bạn", " rất"...).
+							// Stripping here can glue Vietnamese words when relayed to the browser.
 							if (!data.isEmpty()) {
 								data.append("\n");
 							}

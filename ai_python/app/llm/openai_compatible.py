@@ -38,9 +38,15 @@ class OpenAICompatibleChatClient:
             messages.append(SystemMessage(content=system))
         messages.append(HumanMessage(content=user))
         for chunk in self._chat.stream(messages):
-            text = getattr(chunk, "content", None)
-            if text:
-                yield str(text)
+            # Prefer LangChain's normalized text accessor to preserve streaming text shape.
+            # `content` may be structured blocks in newer providers/APIs.
+            text = getattr(chunk, "text", None)
+            if isinstance(text, str) and text:
+                yield text
+                continue
+            raw = getattr(chunk, "content", None)
+            if isinstance(raw, str) and raw:
+                yield raw
 
     def structured_predict(
         self,

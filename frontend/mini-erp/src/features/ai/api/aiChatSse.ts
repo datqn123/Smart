@@ -10,6 +10,7 @@ type OpenAiChatStreamArgs = {
   conversationId: string
   interactionMode?: AiInteractionMode
   onDelta: (delta: string) => void
+  onDeltaFull?: (text: string) => void
   onDone: () => void
   onError: (message: string) => void
   /** When FastAPI emits SSE `progress` (user-facing status text). */
@@ -188,8 +189,9 @@ function parseSseBlock(block: string): { event: string; data: string } | null {
     if (line.startsWith("event:")) {
       event = line.slice(6).trim()
     } else if (line.startsWith("data:")) {
-      let d = line.slice(5)
-      if (d.startsWith(" ")) d = d.slice(1)
+      // Preserve meaningful leading spaces in payload chunks.
+      // Only drop a single separator space when the wire line is explicitly "data: <payload>".
+      const d = line.startsWith("data: ") ? line.slice(6) : line.slice(5)
       dataLines.push(d)
     }
   }
@@ -296,6 +298,9 @@ export function startAiChatPostStream(args: OpenAiChatStreamArgs): AiChatStreamH
           if (parsed.event === "progress" && parsed.data.length > 0 && args.onProgress) {
             args.onProgress(parsed.data)
           }
+          if (parsed.event === "delta_full" && parsed.data.length > 0 && args.onDeltaFull) {
+            args.onDeltaFull(parsed.data)
+          }
           if (parsed.event === "delta" && parsed.data.length > 0) args.onDelta(parsed.data)
           if (parsed.event === "chart" && parsed.data.length > 0 && args.onChart) {
             try {
@@ -341,6 +346,9 @@ export function startAiChatPostStream(args: OpenAiChatStreamArgs): AiChatStreamH
         }
         if (parsed?.event === "progress" && parsed.data.length > 0 && args.onProgress) {
           args.onProgress(parsed.data)
+        }
+        if (parsed?.event === "delta_full" && parsed.data.length > 0 && args.onDeltaFull) {
+          args.onDeltaFull(parsed.data)
         }
         if (parsed?.event === "delta" && parsed.data.length > 0) args.onDelta(parsed.data)
         if (parsed?.event === "chart" && parsed.data.length > 0 && args.onChart) {
