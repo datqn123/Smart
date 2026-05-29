@@ -92,6 +92,28 @@ def make_intent_node(deps: GraphDeps):
                 **mode_patch,
                 "route_source": "interaction_mode",
             }
+        planned_intent = state.get("intent")
+        if (
+            str(state.get("route_source") or "") == "planner"
+            and isinstance(planned_intent, str)
+            and planned_intent
+        ):
+            emit_agent_trace(
+                logger,
+                deps.settings,
+                agent="intent",
+                phase="Nhận route từ planner",
+                detail=(
+                    f"intent={planned_intent}\n"
+                    f"strategy={state.get('planner_strategy')}\n"
+                    f"câu_hỏi={_user_question_snippet(state)}"
+                ),
+            )
+            return {
+                **emit_progress(state, "classify_intent"),
+                "intent": normalize_intent(planned_intent),
+                "route_source": "planner",
+            }
         reg = deps.llm_registry
         if reg is None:
             emit_agent_trace(

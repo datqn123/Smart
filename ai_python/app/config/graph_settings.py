@@ -238,6 +238,27 @@ class GraphSettings(BaseSettings):
         le=8,
         description="Max GUID chunks retrieved per turn for domain_guard.",
     )
+    # --- Planner (pre-intent strategy) ---
+    planner_enabled: bool = Field(
+        default=True,
+        description="Enable pre-intent planner node for flexible strategy selection.",
+    )
+    planner_md_context_enabled: bool = Field(
+        default=True,
+        description="Load curated markdown snippets (runtime docs) into planner context.",
+    )
+    planner_max_md_chars: int = Field(
+        default=2600,
+        ge=400,
+        le=12000,
+        description="Maximum markdown context characters passed to planner prompts.",
+    )
+    planner_confidence_threshold: float = Field(
+        default=0.55,
+        ge=0.0,
+        le=1.0,
+        description="Minimum planner confidence to apply intent override from planner output.",
+    )
     # --- Context compaction (conversation memory) ---
     context_compact_enabled: bool = Field(
         default=True,
@@ -357,6 +378,8 @@ class GraphSettings(BaseSettings):
         "sql_validate_ledger_metric",
         "chart_readiness_enabled",
         "chart_readiness_use_llm_critic",
+        "planner_enabled",
+        "planner_md_context_enabled",
         "context_compact_enabled",
         "schema_cache_enabled",
         "sql_review_skip_low_risk",
@@ -386,6 +409,7 @@ class GraphSettings(BaseSettings):
         "schema_fingerprint_check_interval_seconds",
         "sql_review_max_retries",
         "sql_repair_max_attempts",
+        "planner_max_md_chars",
         mode="before",
     )
     @classmethod

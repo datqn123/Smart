@@ -41,6 +41,52 @@ def test_route_general_chat() -> None:
     assert out.get("final_answer")
 
 
+def test_planner_override_routes_general_chat() -> None:
+    reg = LlmRegistry()
+    reg.register("default", FakeLlmClient())
+    reg.register(
+        "planner",
+        FakeLlmClient(
+            planner_strategy="answer_direct",
+            planner_intent="general_chat",
+            planner_confidence=0.95,
+        ),
+    )
+    reg.register("intent", FakeLlmClient(intent="system_data_query"))
+    reg.register("chat", FakeLlmClient(stream_parts=["xin", " chao"]))
+    deps = GraphDeps(
+        llm_registry=reg,
+        sql_executor=StubSqlExecutor(),
+        settings=GraphSettings(planner_enabled=True),
+    )
+    g = compile_agent_graph(deps, use_checkpointer=False)
+    base = default_initial_state()
+    base["messages"] = [HumanMessage(content="xin chào")]
+    out = g.invoke(base)
+    assert out.get("intent") == "general_chat"
+    assert out.get("route_source") == "planner"
+    assert out.get("final_answer")
+
+
+def test_planner_defer_falls_back_to_intent() -> None:
+    reg = LlmRegistry()
+    reg.register("default", FakeLlmClient())
+    reg.register("planner", FakeLlmClient(planner_strategy="defer_to_intent"))
+    reg.register("intent", FakeLlmClient(intent="general_chat"))
+    reg.register("chat", FakeLlmClient(stream_parts=["hel", "lo"]))
+    deps = GraphDeps(
+        llm_registry=reg,
+        sql_executor=StubSqlExecutor(),
+        settings=GraphSettings(planner_enabled=True),
+    )
+    g = compile_agent_graph(deps, use_checkpointer=False)
+    base = default_initial_state()
+    base["messages"] = [HumanMessage(content="hello")]
+    out = g.invoke(base)
+    assert out.get("intent") == "general_chat"
+    assert out.get("route_source") == "intent_auto"
+
+
 def test_route_sql_happy_path(monkeypatch: pytest.MonkeyPatch, patch_pg_schema_v1: None) -> None:
     monkeypatch.delenv("SQL_ALLOWED_TABLES", raising=False)
     reg = LlmRegistry()

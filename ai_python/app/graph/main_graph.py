@@ -21,6 +21,7 @@ from app.graph.nodes.query_table import (
 from app.graph.nodes.chat_normal import make_chat_normal_node
 from app.graph.nodes.context_compact import make_context_compact_node
 from app.graph.nodes.domain_guard import make_domain_guard_node, route_after_domain_guard
+from app.graph.nodes.planner import make_agent_planner_node
 from app.graph.nodes.intent import make_intent_node, route_after_intent
 from app.graph.nodes.summarize import make_summarize_answer_node
 from app.graph.catalog_draft_subgraph import build_catalog_draft_subgraph
@@ -37,6 +38,7 @@ def build_main_graph(deps: GraphDeps):
     inventory_inner = build_inventory_draft_subgraph(deps)
     g.add_node("domain_guard", wrap("domain_guard", make_domain_guard_node(deps)))
     g.add_node("context_compact", wrap("context_compact", make_context_compact_node(deps)))
+    g.add_node("agent_planner", wrap("agent_planner", make_agent_planner_node(deps)))
     g.add_node("classify_intent", wrap("classify_intent", make_intent_node(deps)))
     g.add_node("chat_normal", wrap("chat_normal", make_chat_normal_node(deps)))
     g.add_node("catalog_draft_branch", catalog_inner.compile())
@@ -58,7 +60,8 @@ def build_main_graph(deps: GraphDeps):
             "stop": END,
         },
     )
-    g.add_edge("context_compact", "classify_intent")
+    g.add_edge("context_compact", "agent_planner")
+    g.add_edge("agent_planner", "classify_intent")
     g.add_conditional_edges(
         "classify_intent",
         route_after_intent,

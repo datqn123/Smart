@@ -5,6 +5,7 @@ Each `.md` file = **system prompt** for one LLM node in the graph. Loaded via `a
 | File | Graph node | Registry key (LLM) |
 |------|------------|-------------------|
 | `intent.md` | `classify_intent` | `intent` |
+| `planner.md` | `agent_planner` | `planner` |
 | `chat_normal.md` | `chat_normal` | `chat` |
 | `summarize.md` | `summarize_answer` | `summarize` |
 | `idea.md` | `agent_idea` | `idea` |

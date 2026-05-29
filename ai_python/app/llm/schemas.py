@@ -17,6 +17,33 @@ class IntentOutput(BaseModel):
     ]
 
 
+class AgentPlannerOutput(BaseModel):
+    """Pre-intent planner output: strategy + optional intent override."""
+
+    strategy: Literal[
+        "defer_to_intent",
+        "answer_direct",
+        "ask_clarification",
+        "data_query",
+        "data_table",
+        "data_chart",
+        "data_then_chart",
+        "catalog_draft",
+        "inventory_draft",
+        "guide_answer",
+    ] = "defer_to_intent"
+    intent: Literal[
+        "general_chat",
+        "system_data_query",
+        "system_data_chart",
+        "catalog_data_entry",
+        "inventory_data_entry",
+    ] | None = None
+    reason: str = ""
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    need_clarification: bool = False
+
+
 class DomainIssue(BaseModel):
     type: Literal[
         "term_mismatch",

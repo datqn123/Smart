@@ -18,6 +18,7 @@ _NODE_PROGRESS_AGENT: dict[str, str] = {
 _PROGRESS_MAP: dict[tuple[str, str], str] = {
     ("domain_guard", ""): "Đang kiểm tra phạm vi câu hỏi...",
     ("context_compact", ""): "Đang tóm tắt lịch sử hội thoại...",
+    ("agent_planner", ""): "Đang chọn chiến lược trả lời...",
     ("classify_intent", ""): "Đang phân loại yêu cầu...",
     ("chat_normal", ""): "Đang soạn câu trả lời...",
     ("gen_sql", ""): "Đang tạo truy vấn SQL...",

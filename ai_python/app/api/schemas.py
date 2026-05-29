@@ -15,6 +15,8 @@ InteractionMode = Literal[
     "inventory_draft",
 ]
 
+PlanningMode = Literal["auto", "classic", "planner"]
+
 
 class ChatMetadata(BaseModel):
     user_id: str = Field(min_length=1)
@@ -27,6 +29,7 @@ class ChatOptions(BaseModel):
     stream: bool = False
     locale: str | None = None
     interaction_mode: InteractionMode = "auto"
+    planning_mode: PlanningMode = "auto"
     clarification: "ClarificationOptions | None" = None
 
 

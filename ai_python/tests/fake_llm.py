@@ -20,12 +20,18 @@ class FakeLlmClient:
         reply: str = "ok",
         stream_parts: list[str] | None = None,
         intent: str | None = None,
+        planner_strategy: str | None = None,
+        planner_intent: str | None = None,
+        planner_confidence: float = 0.0,
         sql_review_failures: int = 0,
         table_pick: list[str] | None = None,
     ) -> None:
         self._reply = reply
         self._stream_parts = stream_parts or ["hel", "lo"]
         self._intent = intent
+        self._planner_strategy = planner_strategy
+        self._planner_intent = planner_intent
+        self._planner_confidence = planner_confidence
         self._sql_review_fail_left = sql_review_failures
         self._table_pick = table_pick
         self.invoke_count = 0
@@ -50,6 +56,17 @@ class FakeLlmClient:
         if schema.__name__ == "IntentOutput":
             intent_val = self._intent if self._intent is not None else "general_chat"
             return schema.model_validate({"intent": intent_val})  # type: ignore[return-value]
+        if schema.__name__ == "AgentPlannerOutput":
+            strategy = self._planner_strategy or "defer_to_intent"
+            return schema.model_validate(  # type: ignore[return-value]
+                {
+                    "strategy": strategy,
+                    "intent": self._planner_intent,
+                    "reason": "fake planner",
+                    "confidence": self._planner_confidence,
+                    "need_clarification": False,
+                },
+            )
         if schema.__name__ == "IdeaPlannerOutput":
             return schema.model_validate(  # type: ignore[return-value]
                 {

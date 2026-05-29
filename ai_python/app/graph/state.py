@@ -88,6 +88,12 @@ class AgentState(TypedDict, total=False):
     # Context compaction (conversation memory)
     conversation_summary: str | None
     context_compact_generation: int | None
+    # Pre-intent planner (strategy routing)
+    planning_mode: str | None
+    planner_strategy: str | None
+    planner_reason: str | None
+    planner_confidence: float | None
+    planner_doc_refs: list[str] | None
     # SSE progress text shown to user during processing
     progress_text: str | None
 
@@ -98,6 +104,11 @@ def default_initial_state() -> AgentState:
         "sql_attempt_count": 0,
         "sql_repair_max_attempts": None,
         "route_source": None,
+        "planning_mode": "auto",
+        "planner_strategy": None,
+        "planner_reason": None,
+        "planner_confidence": None,
+        "planner_doc_refs": None,
         "validation_feedback": {
             "intent_review": [],
             "policy": [],

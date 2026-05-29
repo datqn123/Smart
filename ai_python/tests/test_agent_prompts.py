@@ -16,6 +16,7 @@ from app.prompts.load import (
 _EXPECTED_IDS = frozenset(
     {
         "intent",
+        "planner",
         "chat_normal",
         "summarize",
         "idea",

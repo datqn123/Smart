@@ -144,8 +144,13 @@ def _build_state(
     state["inventory_draft_id"] = None
     state["inventory_draft_sse"] = None
     state["interaction_mode"] = request.options.interaction_mode
+    state["planning_mode"] = request.options.planning_mode
     state["show_query_table"] = None
     state["query_table_sse"] = None
+    state["planner_strategy"] = None
+    state["planner_reason"] = None
+    state["planner_confidence"] = None
+    state["planner_doc_refs"] = None
     state["domain_guard_action"] = None
     state["normalized_user_question"] = None
     state["domain_context"] = None
