@@ -87,6 +87,7 @@ from app.graph.validate_sql import (
     validate_sql_deterministic,
 )
 from app.llm.schemas import SqlReviewOutput
+from app.harness import ToolCallContext
 
 logger = logging.getLogger(__name__)
 
@@ -318,7 +319,11 @@ def _load_schema_artifact(
     """Build schema from Postgres: ai_table_description registry + live catalog (no YAML)."""
     from app.graph.pg_schema_context import build_schema_artifact_from_postgres
 
-    art, err = build_schema_artifact_from_postgres(deps.settings, user_q)
+    art, err = deps.harness.run_tool(
+        tool_name="schema.build_artifact_from_postgres",
+        tool=lambda: build_schema_artifact_from_postgres(deps.settings, user_q),
+        context=ToolCallContext(tool_name="schema.build_artifact_from_postgres"),
+    )
     if art is not None:
         return art, None
     msg = (err or "unknown postgres schema error").strip() or "unknown postgres schema error"
@@ -988,11 +993,20 @@ def make_execute_sql_node(deps: GraphDeps):
         cid = state.get("correlation_id")
         schema_ver = state.get("schema_version")
         try:
-            result = deps.sql_executor.execute(
-                sql,
-                tenant_id=str(tenant_id) if tenant_id is not None else None,
-                correlation_id=str(cid) if cid is not None else None,
-                schema_version=str(schema_ver) if schema_ver is not None else None,
+            result = deps.harness.run_tool(
+                tool_name="sql.execute_readonly",
+                tool=lambda: deps.sql_executor.execute(
+                    sql,
+                    tenant_id=str(tenant_id) if tenant_id is not None else None,
+                    correlation_id=str(cid) if cid is not None else None,
+                    schema_version=str(schema_ver) if schema_ver is not None else None,
+                ),
+                context=ToolCallContext(
+                    tool_name="sql.execute_readonly",
+                    correlation_id=str(cid) if cid is not None else None,
+                    tenant_id=str(tenant_id) if tenant_id is not None else None,
+                    thread_id=str(state.get("thread_id") or "") or None,
+                ),
             )
             rows = result.get("rows") if isinstance(result, dict) else None
             nrows = len(rows) if isinstance(rows, list) else "?"

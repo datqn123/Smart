@@ -299,6 +299,15 @@ class GraphSettings(BaseSettings):
         le=120.0,
         description="Max seconds for one answer_enrich LLM call.",
     )
+    # --- Harness execution boundary ---
+    harness_enabled: bool = Field(
+        default=True,
+        description="Enable harness permission gating + lifecycle hooks for tool execution.",
+    )
+    harness_audit_jsonl_path: str | None = Field(
+        default=None,
+        description="Optional JSONL audit sink for beforeToolCall/afterToolCall events.",
+    )
 
     @field_validator("ai_display_timezone", mode="before")
     @classmethod
@@ -383,6 +392,7 @@ class GraphSettings(BaseSettings):
         "context_compact_enabled",
         "schema_cache_enabled",
         "sql_review_skip_low_risk",
+        "harness_enabled",
         mode="before",
     )
     @classmethod

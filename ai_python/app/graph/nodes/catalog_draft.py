@@ -29,6 +29,7 @@ from app.graph.spring_catalog_draft_client import (
     validate_catalog_draft_references,
 )
 from app.graph.state import AgentState
+from app.harness import ToolCallContext
 from app.llm.schemas import CatalogDraftGenerateOutput
 from app.prompts.load import (
     load_catalog_draft_json_contract,
@@ -213,12 +214,21 @@ def make_persist_catalog_draft_node(deps: GraphDeps):
         columns = payload.get("columns") or default_columns(entity_type)
         bearer = state.get("spring_bearer_token")
         try:
-            db_issues = validate_catalog_draft_references(
-                deps.settings,
-                bearer_token=bearer,
-                entity_type=entity_type,
-                columns=columns if isinstance(columns, list) else default_columns(entity_type),
-                rows=rows,
+            db_issues = deps.harness.run_tool(
+                tool_name="catalog_draft.validate_references",
+                tool=lambda: validate_catalog_draft_references(
+                    deps.settings,
+                    bearer_token=bearer,
+                    entity_type=entity_type,
+                    columns=columns if isinstance(columns, list) else default_columns(entity_type),
+                    rows=rows,
+                ),
+                context=ToolCallContext(
+                    tool_name="catalog_draft.validate_references",
+                    correlation_id=str(state.get("correlation_id") or "") or None,
+                    tenant_id=str(state.get("tenant_id") or "") or None,
+                    thread_id=str(state.get("thread_id") or "") or None,
+                ),
             )
         except Exception as exc:
             logger.warning("catalog draft DB validate failed", exc_info=True)
@@ -245,14 +255,23 @@ def make_persist_catalog_draft_node(deps: GraphDeps):
             }
         conversation_id = state.get("thread_id")
         try:
-            saved = post_catalog_draft(
-                deps.settings,
-                bearer_token=bearer,
-                entity_type=entity_type,
-                columns=columns if isinstance(columns, list) else default_columns(entity_type),
-                rows=rows,
-                conversation_id=conversation_id,
-                meta=payload.get("meta") if isinstance(payload.get("meta"), dict) else None,
+            saved = deps.harness.run_tool(
+                tool_name="catalog_draft.post",
+                tool=lambda: post_catalog_draft(
+                    deps.settings,
+                    bearer_token=bearer,
+                    entity_type=entity_type,
+                    columns=columns if isinstance(columns, list) else default_columns(entity_type),
+                    rows=rows,
+                    conversation_id=conversation_id,
+                    meta=payload.get("meta") if isinstance(payload.get("meta"), dict) else None,
+                ),
+                context=ToolCallContext(
+                    tool_name="catalog_draft.post",
+                    correlation_id=str(state.get("correlation_id") or "") or None,
+                    tenant_id=str(state.get("tenant_id") or "") or None,
+                    thread_id=str(state.get("thread_id") or "") or None,
+                ),
             )
         except Exception as exc:
             logger.warning("persist catalog draft failed", exc_info=True)

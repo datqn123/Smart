@@ -31,6 +31,7 @@ from app.graph.spring_inventory_draft_client import (
 )
 from app.graph.sql_prompts import format_schema_block
 from app.graph.state import AgentState
+from app.harness import ToolCallContext
 from app.llm.schemas import InventoryDraftGenerateOutput
 from app.prompts.load import (
     load_inventory_draft_json_contract,
@@ -80,8 +81,12 @@ def make_classify_inventory_doc_node(deps: GraphDeps):
 def _build_schema_context_for_draft(deps: GraphDeps) -> str:
     """Introspect Postgres schema for inventory-related tables and format for LLM."""
     try:
-        artifact, err = build_schema_artifact_for_table_names(
-            deps.settings, _INVENTORY_SCHEMA_TABLES
+        artifact, err = deps.harness.run_tool(
+            tool_name="schema.build_artifact_for_table_names",
+            tool=lambda: build_schema_artifact_for_table_names(
+                deps.settings, _INVENTORY_SCHEMA_TABLES
+            ),
+            context=ToolCallContext(tool_name="schema.build_artifact_for_table_names"),
         )
         if artifact is not None:
             return format_schema_block(artifact, selected_tables=None, enriched=True)
@@ -240,15 +245,24 @@ def make_persist_inventory_draft_node(deps: GraphDeps):
         # SKU và Nhà cung cấp trước khi vào đây. Tiết kiệm ~2-4s trễ mạng.
         conversation_id = state.get("thread_id")
         try:
-            saved = post_inventory_draft(
-                deps.settings,
-                bearer_token=bearer,
-                entity_type=doc_type,
-                header=header,
-                line_columns=line_columns if isinstance(line_columns, list) else default_line_columns(doc_type),
-                lines=lines,
-                conversation_id=conversation_id,
-                meta=payload.get("meta") if isinstance(payload.get("meta"), dict) else None,
+            saved = deps.harness.run_tool(
+                tool_name="inventory_draft.post",
+                tool=lambda: post_inventory_draft(
+                    deps.settings,
+                    bearer_token=bearer,
+                    entity_type=doc_type,
+                    header=header,
+                    line_columns=line_columns if isinstance(line_columns, list) else default_line_columns(doc_type),
+                    lines=lines,
+                    conversation_id=conversation_id,
+                    meta=payload.get("meta") if isinstance(payload.get("meta"), dict) else None,
+                ),
+                context=ToolCallContext(
+                    tool_name="inventory_draft.post",
+                    correlation_id=str(state.get("correlation_id") or "") or None,
+                    tenant_id=str(state.get("tenant_id") or "") or None,
+                    thread_id=str(state.get("thread_id") or "") or None,
+                ),
             )
         except Exception as exc:
             logger.warning("persist inventory draft failed", exc_info=True)

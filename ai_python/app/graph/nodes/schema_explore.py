@@ -30,6 +30,7 @@ from app.graph.sql_table_selection import (
 from app.graph import schema_tools
 from app.graph.spring_describe_client import build_spring_describe_client
 from app.graph.state import AgentState
+from app.harness import ToolCallContext
 from app.llm.schemas import SchemaPlanOutput
 from app.prompts.load import load_agent_json_contract, load_agent_prompt
 
@@ -73,7 +74,17 @@ def make_schema_explore_node(deps: GraphDeps):
         query_domain = detect_sql_query_domain(user_q)
         metric_id = resolve_metric(user_q)
         dimensions = detect_dimensions(user_q)
-        catalog, cerr = schema_tools.list_tables(deps.settings)
+        ctx = ToolCallContext(
+            tool_name="schema.list_tables",
+            correlation_id=str(state.get("correlation_id") or "") or None,
+            tenant_id=str(state.get("tenant_id") or "") or None,
+            thread_id=str(state.get("thread_id") or "") or None,
+        )
+        catalog, cerr = deps.harness.run_tool(
+            tool_name="schema.list_tables",
+            tool=lambda: schema_tools.list_tables(deps.settings),
+            context=ctx,
+        )
         if cerr:
             logger.warning("list_tables failed: %s", cerr)
             emit_agent_trace(
@@ -151,12 +162,21 @@ def make_schema_explore_node(deps: GraphDeps):
 
         describe_client = build_spring_describe_client(deps.settings)
         cid = state.get("correlation_id")
-        art, aerr = schema_tools.build_artifact_for_tables(
-            deps.settings,
-            tables,
-            describe_client=describe_client,
-            correlation_id=str(cid) if cid else None,
-            describe_max=int(deps.settings.sql_schema_explorer_describe_max_tables),
+        art, aerr = deps.harness.run_tool(
+            tool_name="schema.build_artifact_for_tables",
+            tool=lambda: schema_tools.build_artifact_for_tables(
+                deps.settings,
+                tables,
+                describe_client=describe_client,
+                correlation_id=str(cid) if cid else None,
+                describe_max=int(deps.settings.sql_schema_explorer_describe_max_tables),
+            ),
+            context=ToolCallContext(
+                tool_name="schema.build_artifact_for_tables",
+                correlation_id=str(state.get("correlation_id") or "") or None,
+                tenant_id=str(state.get("tenant_id") or "") or None,
+                thread_id=str(state.get("thread_id") or "") or None,
+            ),
         )
         if describe_client is not None:
             try:

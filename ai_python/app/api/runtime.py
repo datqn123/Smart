@@ -14,6 +14,7 @@ from app.config.graph_settings import load_graph_settings
 from app.config.settings import load_llm_settings
 from app.graph import compile_agent_graph, default_initial_state, iter_graph_stream
 from app.graph.deps import GraphDeps
+from app.harness import AgentHarness
 from app.graph.sql_executor import build_sql_executor
 from app.llm.registry import LlmRegistry, build_llm_registry
 
@@ -194,6 +195,10 @@ def _build_graph_deps() -> GraphDeps:
     return GraphDeps(
         llm_registry=llm_registry,
         sql_executor=build_sql_executor(graph_settings),
+        harness=AgentHarness(
+            enabled=bool(graph_settings.harness_enabled),
+            audit_jsonl_path=graph_settings.harness_audit_jsonl_path,
+        ),
         settings=graph_settings,
     )
 
