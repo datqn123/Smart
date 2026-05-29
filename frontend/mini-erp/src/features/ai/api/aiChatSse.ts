@@ -9,6 +9,12 @@ type OpenAiChatStreamArgs = {
   query: string
   conversationId: string
   interactionMode?: AiInteractionMode
+  clarifyContinuation?: {
+    clarifyId?: string
+    clarifyKind?: string
+    continuationContext?: Record<string, unknown>
+    suggestedRewrite?: string
+  } | null
   onDelta: (delta: string) => void
   onDeltaFull?: (text: string) => void
   onDone: () => void
@@ -256,6 +262,16 @@ export function startAiChatPostStream(args: OpenAiChatStreamArgs): AiChatStreamH
           conversationId: args.conversationId,
           ...(args.interactionMode && args.interactionMode !== "auto"
             ? { interactionMode: args.interactionMode }
+            : {}),
+          ...(args.clarifyContinuation?.clarifyId
+            ? {
+                clarify: {
+                  clarifyId: args.clarifyContinuation.clarifyId,
+                  clarifyKind: args.clarifyContinuation.clarifyKind,
+                  continuationContext: args.clarifyContinuation.continuationContext,
+                  suggestedRewrite: args.clarifyContinuation.suggestedRewrite,
+                },
+              }
             : {}),
         }),
       })

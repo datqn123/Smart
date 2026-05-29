@@ -37,6 +37,13 @@ const INTERACTION_MODES: { id: AiInteractionMode; label: string }[] = [
   { id: "inventory_draft", label: "Phiếu nhập kho" },
 ]
 
+type ClarifyContinuation = {
+  clarifyId?: string
+  clarifyKind?: string
+  continuationContext?: Record<string, unknown>
+  suggestedRewrite?: string
+}
+
 export function ChatBotPage() {
   const { setTitle } = usePageTitle()
   useEffect(() => { setTitle("Trợ lý ảo AI") }, [setTitle])
@@ -110,11 +117,15 @@ export function ChatBotPage() {
     }
   }, [])
 
-  const startAssistantStream = (query: string, options?: { autoSpeakOnComplete?: boolean }) => {
+  const startAssistantStream = (
+    query: string,
+    options?: { autoSpeakOnComplete?: boolean; clarifyContinuation?: ClarifyContinuation | null }
+  ) => {
     streamRef.current?.abort()
     streamRef.current = null
 
     const autoSpeak = options?.autoSpeakOnComplete ?? false
+    const clarifyContinuation = options?.clarifyContinuation ?? null
     const assistantId = (Date.now() + 1).toString()
     const assistantMsg: ChatMessage = {
       id: assistantId,
@@ -134,6 +145,7 @@ export function ChatBotPage() {
       query,
       conversationId,
       interactionMode,
+      clarifyContinuation,
       onProgress: (text) => {
         setProgressText(text)
       },
@@ -242,7 +254,12 @@ export function ChatBotPage() {
     })
   }
 
-  const handleSend = (text?: string, type: "text" | "image" | "voice" = "text", metadata?: ChatMessage["metadata"]) => {
+  const handleSend = (
+    text?: string,
+    type: "text" | "image" | "voice" = "text",
+    metadata?: ChatMessage["metadata"],
+    clarifyContinuation?: ClarifyContinuation | null
+  ) => {
     const content = (text ?? inputValue).trim()
     if (!content && type === "text") return
     if (!content && type === "voice") return
@@ -279,7 +296,10 @@ export function ChatBotPage() {
       return
     }
 
-    startAssistantStream(content, { autoSpeakOnComplete: autoSpeakReply })
+    startAssistantStream(content, {
+      autoSpeakOnComplete: autoSpeakReply,
+      clarifyContinuation: clarifyContinuation ?? null,
+    })
   }
 
   const stopRecordingTimers = () => {
@@ -538,7 +558,12 @@ export function ChatBotPage() {
                     payload={msg.metadata.domainClarify}
                     onPickSuggestion={(text) => {
                       setInputValue(text)
-                      handleSend(text)
+                      handleSend(text, "text", undefined, {
+                        clarifyId: msg.metadata?.domainClarify?.clarifyId,
+                        clarifyKind: msg.metadata?.domainClarify?.clarifyKind,
+                        continuationContext: msg.metadata?.domainClarify?.continuationContext,
+                        suggestedRewrite: msg.metadata?.domainClarify?.suggestedRewrite,
+                      })
                     }}
                   />
                 ) : null}

@@ -8,6 +8,8 @@ export type DomainClarifyIssue = {
 }
 
 export type DomainClarifyPayload = {
+  clarifyId?: string
+  clarifyKind?: string
   questions: string[]
   /** Main explanation text (inventory/catalog clarify). */
   assistantIntro?: string
@@ -20,4 +22,6 @@ export type DomainClarifyPayload = {
   /** @deprecated use suggestedRewrite */
   suggestedNormalized?: string
   matchedModules?: string[]
+  continuationContext?: Record<string, unknown>
+  requiredChoices?: string[]
 }

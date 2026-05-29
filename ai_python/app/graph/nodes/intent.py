@@ -52,6 +52,26 @@ def _user_question_snippet(state: AgentState, max_chars: int = 220) -> str:
 def make_intent_node(deps: GraphDeps):
     def intent(state: AgentState) -> dict:
         logger.info("node=intent action=start")
+        clarification_ctx = state.get("clarification_applied_context")
+        if isinstance(clarification_ctx, dict):
+            clarify_kind = str(clarification_ctx.get("clarify_kind") or "")
+            if clarify_kind == "data_followup_detail":
+                emit_agent_trace(
+                    logger,
+                    deps.settings,
+                    agent="intent",
+                    phase="Override theo clarification continuation",
+                    detail=(
+                        f"clarify_kind={clarify_kind}\n"
+                        f"intent=system_data_query\n"
+                        f"câu_hỏi={_user_question_snippet(state)}"
+                    ),
+                )
+                return {
+                    **emit_progress(state, "classify_intent"),
+                    "intent": "system_data_query",
+                    "route_source": "clarification",
+                }
         mode_patch = resolve_mode_override(state.get("interaction_mode"))
         if mode_patch is not None:
             normalized = str(mode_patch["intent"])

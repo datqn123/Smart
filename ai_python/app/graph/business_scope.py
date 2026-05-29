@@ -401,6 +401,7 @@ def resolve_business_scope(
     intent: str | None = None,
     previous_scope: dict[str, Any] | None = None,
     previous_data_answer: dict[str, Any] | None = None,
+    force_followup_inherit: bool = False,
 ) -> dict[str, Any] | None:
     """Build a stable business scope for SQL/summarize from the current turn."""
     if intent and intent not in _DATA_INTENTS:
@@ -414,7 +415,7 @@ def resolve_business_scope(
     base_scope = deepcopy(previous_scope) if isinstance(previous_scope, dict) else None
     if base_scope is None:
         base_scope = _scope_from_last_data_answer(previous_data_answer)
-    inherited = bool(base_scope) and _is_short_follow_up(raw_q)
+    inherited = bool(base_scope) and (force_followup_inherit or _is_short_follow_up(raw_q))
     if inherited and isinstance(base_scope, dict):
         scope = deepcopy(base_scope)
         action = _follow_up_action(q)

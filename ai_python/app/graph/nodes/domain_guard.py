@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 import logging
 from typing import Any
+from uuid import uuid4
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
@@ -189,6 +191,16 @@ def make_domain_guard_node(deps: GraphDeps):
             }
 
         question = latest_human_question(state.get("messages"))
+        consumed = _consume_clarification_response(state, question=question)
+        if consumed is not None:
+            emit_agent_trace(
+                logger,
+                deps.settings,
+                agent="domain_guard",
+                phase="Consume clarification continuation",
+                detail=f"question={question}",
+            )
+            return consumed
         previous_scope = state.get("last_business_scope") if isinstance(state.get("last_business_scope"), dict) else None
         previous_data_answer = state.get("last_data_answer") if isinstance(state.get("last_data_answer"), dict) else None
         followup_clarify = build_followup_detail_clarify_advice(
@@ -225,6 +237,15 @@ def make_domain_guard_node(deps: GraphDeps):
                 llm_normalized=suggested or question,
                 missing_slots=["chiều liệt kê"],
                 index=None,
+                clarify_kind="data_followup_detail",
+                pending_clarification={
+                    "clarify_kind": "data_followup_detail",
+                    "scope_snapshot": deepcopy(followup_clarify.get("scope")),
+                    "previous_data_answer": deepcopy(previous_data_answer)
+                    if isinstance(previous_data_answer, dict)
+                    else None,
+                    "required_choices": ["dimension", "status_scope"],
+                },
             )
         dialog_tail = _dialog_context_for_guard(state, deps.settings)
         data_dir = deps.settings.erp_guide_data_dir
@@ -374,6 +395,8 @@ def _pack_clarify(
     llm_normalized: str | None = None,
     missing_slots: list[str] | None = None,
     index: dict[str, Any] | None = None,
+    clarify_kind: str = "generic",
+    pending_clarification: dict[str, Any] | None = None,
 ) -> dict:
     slots = list(missing_slots or [])
     suggested = resolve_suggested_rewrite(
@@ -383,7 +406,16 @@ def _pack_clarify(
         index=index,
         missing_slots=slots,
     )
+    clarify_id = uuid4().hex
+    pending = deepcopy(pending_clarification) if isinstance(pending_clarification, dict) else None
+    if pending is not None:
+        pending["clarify_id"] = clarify_id
+        pending["clarify_kind"] = str(pending.get("clarify_kind") or clarify_kind)
+        pending["original_question"] = question
+        pending["suggested_rewrite"] = suggested
     clarify_sse = {
+        "clarifyId": clarify_id,
+        "clarifyKind": clarify_kind,
         "questions": questions or [],
         "issues": [i.model_dump() for i in issues],
         "guideRefs": [s.get("guide_ref", "") for s in snippets],
@@ -392,13 +424,57 @@ def _pack_clarify(
         "suggestedNormalized": suggested,
         "matchedModules": matched_modules or [],
     }
+    if pending is not None:
+        clarify_sse["continuationContext"] = {
+            "clarifyId": clarify_id,
+            "clarifyKind": pending.get("clarify_kind"),
+            "requiredChoices": pending.get("required_choices") or [],
+            "scopeSnapshot": pending.get("scope_snapshot"),
+        }
+        clarify_sse["requiredChoices"] = list(pending.get("required_choices") or [])
     msg = _short_clarify_intro(issues)
-    return {
+    out = {
         **emit_progress(state, "domain_guard"),
         "domain_guard_action": "clarify",
         "domain_clarify_sse": clarify_sse,
         "final_answer": msg,
         "messages": [AIMessage(content=msg)],
+    }
+    if pending is not None:
+        out["pending_clarification"] = pending
+    return out
+
+
+def _consume_clarification_response(
+    state: AgentState,
+    *,
+    question: str,
+) -> dict[str, Any] | None:
+    pending = state.get("pending_clarification") if isinstance(state.get("pending_clarification"), dict) else None
+    response = state.get("clarification_response") if isinstance(state.get("clarification_response"), dict) else None
+    if pending is None or response is None:
+        return None
+    pending_id = str(pending.get("clarify_id") or "").strip()
+    response_id = str(response.get("clarify_id") or "").strip()
+    if not pending_id or not response_id or pending_id != response_id:
+        return None
+    suggested = str(response.get("suggested_rewrite") or pending.get("suggested_rewrite") or question).strip()
+    normalized = default_normalized_for_proceed(suggested or question)
+    applied_ctx = {
+        "clarify_id": pending_id,
+        "clarify_kind": str(pending.get("clarify_kind") or response.get("clarify_kind") or "generic"),
+        "scope_snapshot": deepcopy(pending.get("scope_snapshot")) if isinstance(pending.get("scope_snapshot"), dict) else None,
+        "previous_data_answer": deepcopy(pending.get("previous_data_answer"))
+        if isinstance(pending.get("previous_data_answer"), dict)
+        else None,
+        "required_choices": list(pending.get("required_choices") or []),
+    }
+    return {
+        **emit_progress(state, "domain_guard"),
+        "domain_guard_action": "proceed",
+        "normalized_user_question": normalized,
+        "clarification_applied_context": applied_ctx,
+        "pending_clarification": None,
     }
 
 

@@ -286,3 +286,44 @@ def test_domain_guard_does_not_clarify_when_followup_already_has_dimension() -> 
     }
     out = node(state)
     assert out.get("domain_guard_action") == "proceed"
+
+
+def test_domain_guard_consumes_pending_clarification_response() -> None:
+    node = make_domain_guard_node(
+        GraphDeps(
+            llm_registry=None,
+            sql_executor=StubSqlExecutor(),
+            settings=GraphSettings(erp_domain_guard_enabled=True),
+        )
+    )
+    state = {
+        "messages": [HumanMessage(content="Liệt kê theo phiếu thu theo cùng mốc thời gian")],
+        "pending_clarification": {
+            "clarify_id": "clar-123",
+            "clarify_kind": "data_followup_detail",
+            "scope_snapshot": {
+                "metric": "cash_in",
+                "time_scope": {"kind": "current_year"},
+                "status_scope": {"mode": "completed_only"},
+            },
+            "previous_data_answer": {
+                "intent": "system_data_query",
+                "effective_question": "Tổng tiền thu vào trong năm nay",
+                "result_shape": "scalar",
+                "scalar_total": {"value": 1103700, "column": "total_received_amount"},
+            },
+            "required_choices": ["dimension", "status_scope"],
+            "suggested_rewrite": "Liệt kê theo phiếu thu theo cùng mốc thời gian",
+        },
+        "clarification_response": {
+            "clarify_id": "clar-123",
+            "clarify_kind": "data_followup_detail",
+            "suggested_rewrite": "Liệt kê theo phiếu thu theo cùng mốc thời gian",
+        },
+    }
+    out = node(state)
+    assert out.get("domain_guard_action") == "proceed"
+    assert out.get("pending_clarification") is None
+    applied = out.get("clarification_applied_context")
+    assert isinstance(applied, dict)
+    assert applied.get("clarify_id") == "clar-123"

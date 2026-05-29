@@ -27,6 +27,14 @@ class ChatOptions(BaseModel):
     stream: bool = False
     locale: str | None = None
     interaction_mode: InteractionMode = "auto"
+    clarification: "ClarificationOptions | None" = None
+
+
+class ClarificationOptions(BaseModel):
+    clarify_id: str = Field(min_length=1)
+    clarify_kind: str | None = None
+    suggested_rewrite: str | None = None
+    continuation_context: dict[str, Any] | None = None
 
 
 class ChatRequest(BaseModel):

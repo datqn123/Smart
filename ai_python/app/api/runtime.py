@@ -150,6 +150,13 @@ def _build_state(
     state["normalized_user_question"] = None
     state["domain_context"] = None
     state["domain_clarify_sse"] = None
+    clar = getattr(request.options, "clarification", None)
+    state["clarification_response"] = (
+        clar.model_dump(mode="json")
+        if clar is not None
+        else None
+    )
+    state["clarification_applied_context"] = None
     state["progress_text"] = None
     state["spring_bearer_token"] = bearer_token
     return state

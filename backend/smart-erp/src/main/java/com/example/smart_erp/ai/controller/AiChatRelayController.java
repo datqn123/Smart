@@ -45,7 +45,12 @@ public class AiChatRelayController {
 
 	private static final Logger log = LoggerFactory.getLogger(AiChatRelayController.class);
 
-	public record AiChatRelayRequest(String message, String conversationId, String interactionMode) {
+	public record ClarifyContinuation(String clarifyId, String clarifyKind, Object continuationContext,
+			String suggestedRewrite) {
+	}
+
+	public record AiChatRelayRequest(String message, String conversationId, String interactionMode,
+			ClarifyContinuation clarify) {
 	}
 
 	public record SynthesizeRelayRequest(String text, String voice) {
@@ -144,6 +149,20 @@ public class AiChatRelayController {
 			String mode = body.interactionMode();
 			if (mode != null && !mode.isBlank() && !"auto".equalsIgnoreCase(mode.trim())) {
 				options.put("interaction_mode", mode.trim().toLowerCase());
+			}
+			ClarifyContinuation clarify = body.clarify();
+			if (clarify != null && clarify.clarifyId() != null && !clarify.clarifyId().isBlank()) {
+				ObjectNode clarifyNode = options.putObject("clarification");
+				clarifyNode.put("clarify_id", clarify.clarifyId().trim());
+				if (clarify.clarifyKind() != null && !clarify.clarifyKind().isBlank()) {
+					clarifyNode.put("clarify_kind", clarify.clarifyKind().trim());
+				}
+				if (clarify.suggestedRewrite() != null && !clarify.suggestedRewrite().isBlank()) {
+					clarifyNode.put("suggested_rewrite", clarify.suggestedRewrite().trim());
+				}
+				if (clarify.continuationContext() != null) {
+					clarifyNode.set("continuation_context", objectMapper.valueToTree(clarify.continuationContext()));
+				}
 			}
 			jsonBody = objectMapper.writeValueAsString(root);
 		}

@@ -76,6 +76,24 @@ def test_follow_up_inherits_scope_from_last_data_answer_when_scope_missing() -> 
     assert now["followup"]["wants_detail_breakdown"] is True
 
 
+def test_force_followup_inherit_for_clarification_rewrite_sentence() -> None:
+    prev = resolve_business_scope(
+        "Tổng tiền thu vào năm nay là bao nhiêu?",
+        intent="system_data_query",
+        previous_scope=None,
+    )
+    assert prev is not None
+    now = resolve_business_scope(
+        "Liệt kê theo phiếu thu theo cùng mốc thời gian",
+        intent="system_data_query",
+        previous_scope=prev,
+        force_followup_inherit=True,
+    )
+    assert now is not None
+    assert now["followup"]["inherits_previous_scope"] is True
+    assert now["followup"]["wants_detail_breakdown"] is True
+
+
 def test_scope_sql_policy_rejects_missing_completed_filter_on_cashtransactions() -> None:
     scope = resolve_business_scope(
         "Tổng tiền thu vào tháng này",

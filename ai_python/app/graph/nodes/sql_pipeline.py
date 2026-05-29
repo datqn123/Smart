@@ -409,11 +409,33 @@ def make_gen_sql_node(deps: GraphDeps):
         user_q = _last_user_message(state)
         previous_scope = state.get("last_business_scope") if isinstance(state.get("last_business_scope"), dict) else None
         previous_data_answer = state.get("last_data_answer") if isinstance(state.get("last_data_answer"), dict) else None
+        clarification_ctx = (
+            state.get("clarification_applied_context")
+            if isinstance(state.get("clarification_applied_context"), dict)
+            else None
+        )
+        clarification_scope = (
+            clarification_ctx.get("scope_snapshot")
+            if isinstance(clarification_ctx, dict) and isinstance(clarification_ctx.get("scope_snapshot"), dict)
+            else None
+        )
+        clarification_prev_answer = (
+            clarification_ctx.get("previous_data_answer")
+            if isinstance(clarification_ctx, dict) and isinstance(clarification_ctx.get("previous_data_answer"), dict)
+            else None
+        )
+        effective_previous_data_answer = clarification_prev_answer or previous_data_answer
+        force_followup_inherit = bool(clarification_scope) and (
+            str(clarification_ctx.get("clarify_kind") or "") == "data_followup_detail"
+            if isinstance(clarification_ctx, dict)
+            else False
+        )
         scope = resolve_business_scope(
             user_q,
             intent=str(state.get("intent") or "") or None,
-            previous_scope=previous_scope,
-            previous_data_answer=previous_data_answer,
+            previous_scope=clarification_scope or previous_scope,
+            previous_data_answer=effective_previous_data_answer,
+            force_followup_inherit=force_followup_inherit,
         )
         user_q_effective = scope_effective_question(user_q, scope)
         pre_err = state.get("error_payload")
@@ -565,7 +587,7 @@ def make_gen_sql_node(deps: GraphDeps):
             extra = "Query domain hints:\n" + "\n".join(f"- {h}" for h in domain_hint_lines) + "\n\n"
             domain_block = (domain_block or "") + extra
         scope_block = render_business_scope_sql_block(scope)
-        data_context_block = render_last_data_answer_sql_block(previous_data_answer, scope)
+        data_context_block = render_last_data_answer_sql_block(effective_previous_data_answer, scope)
         query_table_mode = should_route_query_table(state)
         pool = list(state.get("sql_local_pool") or [])
         dup_warn = False
@@ -1033,6 +1055,25 @@ def make_validate_result_node(deps: GraphDeps):
             previous_data_answer=previous_data_answer,
             query_result=qr if isinstance(qr, dict) else None,
         )
+        clarification_ctx = (
+            state.get("clarification_applied_context")
+            if isinstance(state.get("clarification_applied_context"), dict)
+            else None
+        )
+        clarify_kind = str(clarification_ctx.get("clarify_kind") or "") if isinstance(clarification_ctx, dict) else ""
+        if clarify_kind == "data_followup_detail" and not bool(reconcile_meta.get("required")):
+            return {
+                **emit_progress(state, "validate_result"),
+                "result_ok": False,
+                "validation_feedback": _append_sql_repair_feedback(
+                    state,
+                    source="result",
+                    detail=(
+                        "clarification follow-up detail query must reconcile with previous scalar total; "
+                        "missing reconcile context."
+                    ),
+                ),
+            }
         merged_scope = merge_scope_reconcile_meta(scope, reconcile_meta)
         if not reconcile_ok:
             detail = (
