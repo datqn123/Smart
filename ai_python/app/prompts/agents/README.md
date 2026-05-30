@@ -2,6 +2,12 @@
 
 Each `.md` file = **system prompt** for one LLM node in the graph. Loaded via `app.prompts.load.load_agent_prompt(<id>)`.
 
+## Global language policy (chatbot output)
+
+- Nội dung trả về cho người dùng cuối phải là **tiếng Việt thuần**.
+- Không trộn tiếng Anh trong câu trả lời, trừ tên riêng hoặc mã định danh dữ liệu bắt buộc hiển thị.
+- Thuật ngữ kỹ thuật phải được diễn đạt bằng tiếng Việt dễ hiểu theo ngữ cảnh nghiệp vụ ERP.
+
 | File | Graph node | Registry key (LLM) |
 |------|------------|-------------------|
 | `intent.md` | `classify_intent` | `intent` |

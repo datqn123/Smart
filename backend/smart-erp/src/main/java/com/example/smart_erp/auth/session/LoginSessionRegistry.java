@@ -4,8 +4,11 @@ import java.time.Duration;
 
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import com.example.smart_erp.auth.support.JwtTokenService;
+import com.example.smart_erp.common.api.ApiErrorCode;
+import com.example.smart_erp.common.exception.BusinessException;
 
 /**
  * Phiên đăng nhập tại thời điểm (Task001): lưu trong Redis để dùng chung giữa nhiều instance.
@@ -18,6 +21,7 @@ import com.example.smart_erp.auth.support.JwtTokenService;
 public class LoginSessionRegistry {
 
 	private static final String KEY_PREFIX = "auth:session:";
+	private static final String FORBIDDEN_CONCURRENT_SESSION = "Tài khoản đang được đăng nhập trên thiết bị khác";
 
 	private final JwtTokenService jwtTokenService;
 	private final StringRedisTemplate redis;
@@ -30,6 +34,21 @@ public class LoginSessionRegistry {
 	public void register(Integer userId, String accessToken) {
 		long ttlSeconds = Math.max(60L, jwtTokenService.getAccessTtlSeconds());
 		redis.opsForValue().set(key(userId), accessToken, Duration.ofSeconds(ttlSeconds));
+	}
+
+	/**
+	 * Task001/Task100: chỉ chặn đăng nhập mới nếu session hiện tại còn active.
+	 */
+	public void assertNoConcurrentSession(Integer userId) {
+		String existing = redis.opsForValue().get(key(userId));
+		if (!StringUtils.hasText(existing)) {
+			return;
+		}
+		if (!jwtTokenService.isAccessTokenActiveForSessionMap(existing)) {
+			redis.delete(key(userId));
+			return;
+		}
+		throw new BusinessException(ApiErrorCode.FORBIDDEN, FORBIDDEN_CONCURRENT_SESSION);
 	}
 
 	/** Dùng cho test / logout (Task002). */

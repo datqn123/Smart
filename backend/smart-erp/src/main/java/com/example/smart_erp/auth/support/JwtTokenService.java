@@ -87,6 +87,13 @@ public class JwtTokenService {
 	}
 
 	/**
+	 * Dùng cho session registry: token còn active khi parse/verify hợp lệ và chưa hết hạn.
+	 */
+	public boolean isAccessTokenActiveForSessionMap(String compactJwt) {
+		return tryParseActiveAccessClaims(compactJwt).isPresent();
+	}
+
+	/**
 	 * Parse + verify chữ ký + iss/aud + exp chưa qua (theo đồng hồ server).
 	 */
 	private Optional<Claims> tryParseActiveAccessClaims(String compactJwt) {

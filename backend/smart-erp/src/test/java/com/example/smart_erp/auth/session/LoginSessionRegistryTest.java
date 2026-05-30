@@ -2,6 +2,7 @@ package com.example.smart_erp.auth.session;
 
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -16,6 +17,8 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
 import com.example.smart_erp.auth.support.JwtTokenService;
+import com.example.smart_erp.common.api.ApiErrorCode;
+import com.example.smart_erp.common.exception.BusinessException;
 
 @ExtendWith(MockitoExtension.class)
 class LoginSessionRegistryTest {
@@ -55,5 +58,34 @@ class LoginSessionRegistryTest {
 	void clear_removesSessionKey() {
 		registry.clear(9);
 		verify(redis).delete("auth:session:9");
+	}
+
+	@Test
+	void assertNoConcurrentSession_allowsWhenNoExistingToken() {
+		when(values.get("auth:session:5")).thenReturn(null);
+
+		registry.assertNoConcurrentSession(5);
+
+		verify(redis, never()).delete("auth:session:5");
+	}
+
+	@Test
+	void assertNoConcurrentSession_deletesWhenExistingTokenIsStale() {
+		when(values.get("auth:session:5")).thenReturn("expired.jwt");
+		when(jwtTokenService.isAccessTokenActiveForSessionMap("expired.jwt")).thenReturn(false);
+
+		registry.assertNoConcurrentSession(5);
+
+		verify(redis).delete("auth:session:5");
+	}
+
+	@Test
+	void assertNoConcurrentSession_throwsForbiddenWhenExistingTokenIsActive() {
+		when(values.get("auth:session:5")).thenReturn("active.jwt");
+		when(jwtTokenService.isAccessTokenActiveForSessionMap("active.jwt")).thenReturn(true);
+
+		org.assertj.core.api.Assertions.assertThatThrownBy(() -> registry.assertNoConcurrentSession(5))
+				.isInstanceOfSatisfying(BusinessException.class,
+						ex -> org.assertj.core.api.Assertions.assertThat(ex.getCode()).isEqualTo(ApiErrorCode.FORBIDDEN));
 	}
 }

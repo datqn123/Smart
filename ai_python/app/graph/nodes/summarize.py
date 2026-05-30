@@ -47,6 +47,7 @@ _COLUMN_LABELS_VI: dict[str, str] = {
     "revenue": "doanh thu",
     "quantity": "số lượng",
     "amount": "số tiền",
+    "total_distinct_products_received": "tổng số mặt hàng đã nhập (không trùng)",
 }
 
 _COL_DISPLAY_VI: dict[str, str] = {

@@ -142,6 +142,17 @@ def test_scalar_summary_hides_raw_coalesce_label() -> None:
     assert "250.000" in ans
 
 
+def test_scalar_summary_distinct_product_label_is_vietnamese() -> None:
+    ans = _try_single_scalar_summary(
+        {"rows": [{"total_distinct_products_received": 51}]},
+        "trong năm nay đã nhập bao nhiêu mặt hàng vào kho",
+        business_scope=None,
+    )
+    assert ans
+    assert "distinct products received" not in ans.lower()
+    assert "tổng số mặt hàng đã nhập" in ans.lower()
+
+
 def test_sql_prompt_includes_business_scope_block() -> None:
     scope = resolve_business_scope(
         "Tổng tiền thu vào năm nay",
@@ -265,3 +276,76 @@ def test_build_followup_clarify_advice_for_ambiguous_detail_followup() -> None:
     )
     assert advice is not None
     assert "phiếu" in str(advice.get("suggested_rewrite") or "").lower()
+
+
+def test_distinct_product_followup_reconcile_contract_is_created() -> None:
+    scope = resolve_business_scope(
+        "trong năm nay đã nhập bao nhiêu mặt hàng vào kho",
+        intent="system_data_query",
+        previous_scope=None,
+    )
+    assert scope is not None
+    ctx = build_last_data_answer_context(
+        intent="system_data_query",
+        user_question="trong năm nay đã nhập bao nhiêu mặt hàng vào kho",
+        effective_question=scope_effective_question(
+            "trong năm nay đã nhập bao nhiêu mặt hàng vào kho",
+            scope,
+        ),
+        business_scope=scope,
+        query_result={"rows": [{"total_distinct_products_received": 51}]},
+        generated_sql=(
+            "SELECT COUNT(DISTINCT srd.product_id) AS total_distinct_products_received "
+            "FROM stockreceiptdetails srd LIMIT 1000"
+        ),
+    )
+    assert isinstance(ctx, dict)
+    contract = ctx.get("reconcile_contract")
+    assert isinstance(contract, dict)
+    assert contract.get("metric_class") == "distinct_count"
+    assert contract.get("dimension_kind") == "product"
+
+
+def test_distinct_product_followup_reconcile_uses_dimension_count() -> None:
+    scope = resolve_business_scope(
+        "trong năm nay đã nhập bao nhiêu mặt hàng vào kho",
+        intent="system_data_query",
+        previous_scope=None,
+    )
+    assert scope is not None
+    prev_ctx = build_last_data_answer_context(
+        intent="system_data_query",
+        user_question="trong năm nay đã nhập bao nhiêu mặt hàng vào kho",
+        effective_question=scope_effective_question(
+            "trong năm nay đã nhập bao nhiêu mặt hàng vào kho",
+            scope,
+        ),
+        business_scope=scope,
+        query_result={"rows": [{"total_distinct_products_received": 3}]},
+        generated_sql=(
+            "SELECT COUNT(DISTINCT srd.product_id) AS total_distinct_products_received "
+            "FROM stockreceiptdetails srd LIMIT 1000"
+        ),
+    )
+    assert isinstance(prev_ctx, dict)
+    follow = resolve_business_scope(
+        "liệt kê chi tiết tất cả sản phẩm",
+        intent="system_data_query",
+        previous_scope=scope,
+        previous_data_answer=prev_ctx,
+    )
+    assert follow is not None
+    ok, detail, meta = reconcile_detail_rows_with_previous_total(
+        scope=follow,
+        previous_data_answer=prev_ctx,
+        query_result={
+            "rows": [
+                {"sku_code": "SP01", "name": "A"},
+                {"sku_code": "SP02", "name": "B"},
+                {"sku_code": "SP03", "name": "C"},
+            ]
+        },
+    )
+    assert ok
+    assert detail is None
+    assert meta.get("metric_class") == "distinct_count"

@@ -34,6 +34,34 @@ _STRATEGY_TO_INTENT: dict[str, str] = {
     "inventory_draft": "inventory_data_entry",
 }
 
+_TABLE_REQUEST_HINTS = (
+    "liệt kê",
+    "liet ke",
+    "chi tiết",
+    "chi tiet",
+    "danh sách",
+    "danh sach",
+    "xem bảng",
+    "xem bang",
+    "bảng",
+    "bang",
+    "từng dòng",
+    "tung dong",
+)
+
+_SCALAR_REQUEST_HINTS = (
+    "bao nhiêu",
+    "bao nhieu",
+    "bao nhiêu?",
+    "tổng",
+    "tong",
+    "số lượng",
+    "so luong",
+    "đếm",
+    "dem",
+    "count",
+)
+
 
 def _planner_prompt(state: AgentState, *, md_context: str) -> str:
     user_q = effective_user_question(
@@ -64,6 +92,19 @@ def _intent_from_planner(out: AgentPlannerOutput) -> str | None:
     if mapped:
         return normalize_intent(mapped)
     return None
+
+
+def _wants_table_view(user_q: str | None) -> bool:
+    q = (user_q or "").strip().lower()
+    if not q:
+        return False
+    has_table = any(h in q for h in _TABLE_REQUEST_HINTS)
+    has_scalar = any(h in q for h in _SCALAR_REQUEST_HINTS)
+    if has_table:
+        return True
+    if has_scalar:
+        return False
+    return False
 
 
 def make_agent_planner_node(deps: GraphDeps):
@@ -112,7 +153,9 @@ def make_agent_planner_node(deps: GraphDeps):
             patch["intent"] = intent
             patch["route_source"] = "planner"
             if out.strategy == "data_table":
-                patch["show_query_table"] = True
+                selected_mode = normalize_interaction_mode(state.get("interaction_mode"))
+                if selected_mode == "data_table" or _wants_table_view(user_q):
+                    patch["show_query_table"] = True
             emit_agent_trace(
                 logger,
                 deps.settings,
@@ -138,4 +181,3 @@ def make_agent_planner_node(deps: GraphDeps):
         return patch
 
     return planner
-

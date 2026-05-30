@@ -87,6 +87,67 @@ def test_planner_defer_falls_back_to_intent() -> None:
     assert out.get("route_source") == "intent_auto"
 
 
+def test_planner_data_table_does_not_force_table_for_scalar_question() -> None:
+    reg = LlmRegistry()
+    reg.register("default", FakeLlmClient())
+    reg.register(
+        "planner",
+        FakeLlmClient(
+            planner_strategy="data_table",
+            planner_intent="system_data_query",
+            planner_confidence=0.98,
+        ),
+    )
+    reg.register("intent", FakeLlmClient(intent="system_data_query"))
+    reg.register("sql_gen", FakeLlmClient(reply="SELECT COUNT(*) AS receipt_count FROM stockreceipts LIMIT 10"))
+    reg.register("sql_review", FakeLlmClient())
+    reg.register("summarize", FakeLlmClient(reply="Có 10 phiếu nhập kho."))
+    deps = GraphDeps(
+        llm_registry=reg,
+        sql_executor=StubSqlExecutor(),
+        settings=GraphSettings(planner_enabled=True),
+    )
+    g = compile_agent_graph(deps, use_checkpointer=False)
+    base = default_initial_state()
+    base["interaction_mode"] = "auto"
+    base["messages"] = [HumanMessage(content="từ đầu năm tới giờ có bao nhiêu phiếu nhập kho")]
+    out = g.invoke(base)
+    assert out.get("intent") == "system_data_query"
+    assert out.get("route_source") == "planner"
+    assert out.get("show_query_table") is not True
+    assert out.get("query_table_sse") in (None, {})
+
+
+def test_planner_data_table_keeps_table_for_listing_question() -> None:
+    reg = LlmRegistry()
+    reg.register("default", FakeLlmClient())
+    reg.register(
+        "planner",
+        FakeLlmClient(
+            planner_strategy="data_table",
+            planner_intent="system_data_query",
+            planner_confidence=0.98,
+        ),
+    )
+    reg.register("intent", FakeLlmClient(intent="system_data_query"))
+    reg.register("sql_gen", FakeLlmClient(reply="SELECT receipt_code FROM stockreceipts LIMIT 10"))
+    reg.register("sql_review", FakeLlmClient())
+    reg.register("summarize", FakeLlmClient(reply="Danh sách phiếu đã được hiển thị."))
+    deps = GraphDeps(
+        llm_registry=reg,
+        sql_executor=StubSqlExecutor(),
+        settings=GraphSettings(planner_enabled=True),
+    )
+    g = compile_agent_graph(deps, use_checkpointer=False)
+    base = default_initial_state()
+    base["interaction_mode"] = "auto"
+    base["messages"] = [HumanMessage(content="liệt kê chi tiết các phiếu nhập kho")]
+    out = g.invoke(base)
+    assert out.get("intent") == "system_data_query"
+    assert out.get("route_source") == "planner"
+    assert out.get("show_query_table") is True
+
+
 def test_route_sql_happy_path(monkeypatch: pytest.MonkeyPatch, patch_pg_schema_v1: None) -> None:
     monkeypatch.delenv("SQL_ALLOWED_TABLES", raising=False)
     reg = LlmRegistry()

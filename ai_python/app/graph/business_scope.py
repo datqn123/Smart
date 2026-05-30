@@ -158,6 +158,8 @@ _DETAIL_DIMENSION_HINTS = (
     "theo mat hang",
 )
 
+_DISTINCT_PRODUCT_HINTS = ("total_distinct_products_received", "distinct_product", "product_count")
+
 
 def _norm(text: str) -> str:
     return " ".join((text or "").strip().lower().split())
@@ -290,12 +292,25 @@ def _follow_up_effective_question(scope: dict[str, Any], original: str) -> str:
         status_text = ""
     q = _norm(original)
     action = _follow_up_action(q)
+    follow = scope.get("followup") if isinstance(scope.get("followup"), dict) else {}
+    contract = (
+        follow.get("reconcile_contract")
+        if isinstance(follow.get("reconcile_contract"), dict)
+        else {}
+    )
+    dimension_kind = str(contract.get("dimension_kind") or "")
     if action == "chart":
         core = f"Vẽ biểu đồ {label} {suffix}".strip()
     elif action == "table":
-        core = f"Hiển thị bảng chi tiết {label} {suffix}".strip()
+        if dimension_kind == "product":
+            core = f"Hiển thị bảng chi tiết theo từng sản phẩm {suffix}".strip()
+        else:
+            core = f"Hiển thị bảng chi tiết {label} {suffix}".strip()
     else:
-        core = f"Liệt kê chi tiết các khoản cấu thành {label} {suffix}".strip()
+        if dimension_kind == "product":
+            core = f"Liệt kê chi tiết theo từng sản phẩm {suffix}".strip()
+        else:
+            core = f"Liệt kê chi tiết các khoản cấu thành {label} {suffix}".strip()
     return f"{core}{status_text}".strip()
 
 
@@ -322,6 +337,15 @@ def _scalar_total_from_last_data_answer(last_data_answer: dict[str, Any] | None)
         "column": str(scalar.get("column") or ""),
         "label": str(scalar.get("label") or ""),
     }
+
+
+def _reconcile_contract_from_last_data_answer(last_data_answer: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(last_data_answer, dict):
+        return None
+    contract = last_data_answer.get("reconcile_contract")
+    if not isinstance(contract, dict):
+        return None
+    return deepcopy(contract)
 
 
 def _detail_breakdown_wanted(scope: dict[str, Any] | None) -> bool:
@@ -430,6 +454,9 @@ def resolve_business_scope(
         }
         if scalar_prev is not None:
             scope["followup"]["previous_scalar_total"] = scalar_prev["value"]
+        contract_prev = _reconcile_contract_from_last_data_answer(previous_data_answer)
+        if isinstance(contract_prev, dict):
+            scope["followup"]["reconcile_contract"] = contract_prev
         mode = _status_mode_from_question(q, str(scope.get("metric") or "generic"))
         if mode in ("completed_only", "all_statuses"):
             status_scope = scope.get("status_scope") if isinstance(scope.get("status_scope"), dict) else {}
@@ -586,6 +613,17 @@ def build_last_data_answer_context(
     }
     if scalar_total is not None:
         out["scalar_total"] = scalar_total
+        col_norm = _norm(str(scalar_total.get("column") or "")).replace(" ", "_")
+        sql_norm = _norm(generated_sql or "")
+        if any(h in col_norm for h in _DISTINCT_PRODUCT_HINTS) or (
+            "count(distinct" in sql_norm and ("product_id" in sql_norm or "products" in sql_norm)
+        ):
+            out["reconcile_contract"] = {
+                "metric_class": "distinct_count",
+                "dimension_kind": "product",
+                "dimension_candidates": ["product_id", "sku_code", "name"],
+                "expected_total": float(scalar_total["value"]),
+            }
     if isinstance(reconcile_meta, dict) and reconcile_meta:
         out["reconcile"] = dict(reconcile_meta)
     return out
@@ -649,6 +687,47 @@ def reconcile_detail_rows_with_previous_total(
             "expected_total": prev_scalar["value"],
             "reason": "empty_rows",
         }
+    contract = _reconcile_contract_from_last_data_answer(previous_data_answer)
+    if isinstance(contract, dict) and str(contract.get("metric_class") or "") == "distinct_count":
+        expected = float(contract.get("expected_total") or prev_scalar["value"])
+        candidates_raw = contract.get("dimension_candidates")
+        candidates = (
+            [str(x) for x in candidates_raw if str(x).strip()]
+            if isinstance(candidates_raw, list)
+            else ["product_id", "sku_code", "name"]
+        )
+        chosen = next((c for c in candidates if any(isinstance(r, dict) and c in r for r in rows)), None)
+        if chosen is None:
+            return False, "reconcile: thiếu cột định danh để đối chiếu tổng số lượng không trùng", {
+                "required": True,
+                "ok": False,
+                "expected_total": expected,
+                "reason": "missing_dimension_column",
+            }
+        unique_vals = {
+            str(r.get(chosen)).strip().lower()
+            for r in rows
+            if isinstance(r, dict) and r.get(chosen) is not None and str(r.get(chosen)).strip()
+        }
+        got = float(len(unique_vals))
+        diff = abs(got - expected)
+        meta = {
+            "required": True,
+            "ok": diff == 0.0,
+            "dimension_column": chosen,
+            "detail_distinct_count": got,
+            "expected_total": expected,
+            "difference": diff,
+            "tolerance": 0.0,
+            "metric_class": "distinct_count",
+        }
+        if diff > 0.0:
+            detail = (
+                f"reconcile mismatch: DISTINCT({chosen})={got:.0f} differs from previous total "
+                f"{expected:.0f} (diff={diff:.0f})."
+            )
+            return False, detail, meta
+        return True, None, meta
     picked = _pick_reconcile_numeric_column(rows)
     if picked is None:
         return False, "reconcile: cannot find amount/value column to match previous total", {

@@ -74,6 +74,8 @@ public class AuthService {
 		User user = userRepository.findActiveByEmailIgnoreCase(emailNorm)
 				.orElseThrow(() -> new BusinessException(ApiErrorCode.UNAUTHORIZED, UNAUTHORIZED_LOGIN));
 
+		loginSessionRegistry.assertNoConcurrentSession(user.getId());
+
 		if (!passwordEncoder.matches(password, user.getPasswordHash())) {
 			loginBruteForceProtection.onFailure(user.getId(), userRepository);
 			throw new BusinessException(ApiErrorCode.UNAUTHORIZED, UNAUTHORIZED_LOGIN);

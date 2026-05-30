@@ -14,9 +14,16 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtClaimValidator;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtTimestampValidator;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2TokenValidator;
+import org.springframework.security.oauth2.jwt.JwtIssuerValidator;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.util.StringUtils;
 
 import com.example.smart_erp.auth.support.MenuPermissionClaims;
 
@@ -40,7 +47,24 @@ public class JwtResourceServerWebSecurityConfiguration {
 							+ "must be non-empty UTF-8 with byte length >= 32 (HS256).");
 		}
 		SecretKey key = Keys.hmacShaKeyFor(keyBytes);
-		return NimbusJwtDecoder.withSecretKey(key).macAlgorithm(MacAlgorithm.HS256).build();
+		NimbusJwtDecoder decoder = NimbusJwtDecoder.withSecretKey(key).macAlgorithm(MacAlgorithm.HS256).build();
+		decoder.setJwtValidator(buildJwtValidator(props));
+		return decoder;
+	}
+
+	private static OAuth2TokenValidator<Jwt> buildJwtValidator(AppSecurityProperties props) {
+		var validators = new java.util.ArrayList<OAuth2TokenValidator<Jwt>>();
+		validators.add(new JwtTimestampValidator());
+		validators.add(JwtValidators.createDefault());
+		if (StringUtils.hasText(props.getJwt().getIssuer())) {
+			validators.add(new JwtIssuerValidator(props.getJwt().getIssuer().trim()));
+		}
+		if (StringUtils.hasText(props.getJwt().getAudience())) {
+			String expectedAudience = props.getJwt().getAudience().trim();
+			validators.add(new JwtClaimValidator<java.util.Collection<String>>("aud",
+					aud -> aud != null && aud.contains(expectedAudience)));
+		}
+		return new DelegatingOAuth2TokenValidator<>(validators);
 	}
 
 	@Bean
