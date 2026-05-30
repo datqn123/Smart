@@ -72,7 +72,8 @@ class AuthServiceLoginTest {
 		when(userRepository.countActiveByEmailIgnoreCase("admin@example.com")).thenReturn(1L);
 		when(userRepository.findActiveByEmailIgnoreCase("admin@example.com")).thenReturn(Optional.of(user));
 		when(userRepository.findByEmailIgnoreCase("admin@example.com")).thenReturn(Optional.of(user));
-		org.mockito.Mockito.doThrow(new BusinessException(ApiErrorCode.FORBIDDEN, "Tài khoản đang được đăng nhập trên thiết bị khác"))
+		org.mockito.Mockito.doThrow(new BusinessException(ApiErrorCode.FORBIDDEN,
+				"Tài khoản đang được đăng nhập ở một thiết bị khác. Vui lòng đăng xuất ở thiết bị đó hoặc liên hệ Admin."))
 				.when(loginSessionRegistry).assertNoConcurrentSession(7);
 
 		assertThatThrownBy(() -> authService.login("admin@example.com", "secret123"))

@@ -22,6 +22,7 @@ class SqlExecutor(Protocol):
         tenant_id: str | None,
         correlation_id: str | None = None,
         schema_version: str | None = None,
+        bearer_token: str | None = None,
     ) -> dict[str, Any]:
         """Return {'rows': [...], 'meta': {...}} or raise."""
         ...
@@ -45,8 +46,9 @@ class StubSqlExecutor:
         tenant_id: str | None,
         correlation_id: str | None = None,
         schema_version: str | None = None,
+        bearer_token: str | None = None,
     ) -> dict[str, Any]:
-        _ = tenant_id, correlation_id, schema_version
+        _ = tenant_id, correlation_id, schema_version, bearer_token
         return {"rows": [{"_stub": 1, "sql_ok": True}], "meta": {"mode": "stub"}}
 
 
@@ -84,6 +86,7 @@ class HttpSpringSqlExecutor:
         tenant_id: str | None,
         correlation_id: str | None = None,
         schema_version: str | None = None,
+        bearer_token: str | None = None,
     ) -> dict[str, Any]:
         enforce_read_only_sql(sql)
         row_cap = self._settings.sql_executor_row_limit
@@ -94,6 +97,10 @@ class HttpSpringSqlExecutor:
         }
         started = time.perf_counter()
         req_headers: dict[str, str] = {}
+        if bearer_token and bearer_token.strip():
+            req_headers["Authorization"] = f"Bearer {bearer_token.strip()}"
+        elif self._settings.spring_sql_bearer_token:
+            req_headers["Authorization"] = f"Bearer {self._settings.spring_sql_bearer_token.strip()}"
         if correlation_id and correlation_id.strip():
             req_headers["X-Correlation-Id"] = correlation_id.strip()
         try:

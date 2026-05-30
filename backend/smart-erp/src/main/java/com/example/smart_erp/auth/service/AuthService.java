@@ -25,7 +25,7 @@ public class AuthService {
 
 	private static final int REFRESH_TTL_DAYS = 30;
 
-	private static final String UNAUTHORIZED_LOGIN = "Email hoặc mật khẩu không chính xác hoặc tài khoản bị khóa";
+	private static final String UNAUTHORIZED_LOGIN = "Email hoặc mật khẩu không chính xác";
 
 	private static final String ACCOUNT_LOCKED_LOGIN = "Tài khoản đã bị vô hiệu hoá, vui lòng liên hệ Owner";
 

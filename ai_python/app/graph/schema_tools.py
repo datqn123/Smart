@@ -37,12 +37,17 @@ def describe_table(
     table_name: str,
     *,
     correlation_id: str | None = None,
+    bearer_token: str | None = None,
 ) -> tuple[list[dict[str, Any]], str | None]:
     """Tool: column metadata via Spring /sql/describe (optional)."""
     if client is None:
         return [], "describe client unavailable (stub mode or missing SPRING_SQL_URL)"
     try:
-        data = client.describe(table_name, correlation_id=correlation_id)
+        data = client.describe(
+            table_name,
+            correlation_id=correlation_id,
+            bearer_token=bearer_token,
+        )
     except SpringDescribeError as exc:
         return [], str(exc)
     cols_raw = data.get("columns") or []
@@ -90,6 +95,7 @@ def build_artifact_for_tables(
     *,
     describe_client: SpringDescribeClient | None = None,
     correlation_id: str | None = None,
+    bearer_token: str | None = None,
     describe_max: int = 6,
 ) -> tuple[SchemaArtifact | None, str | None]:
     """Build SchemaArtifact for selected tables; optional Spring describe overlay."""
@@ -102,7 +108,12 @@ def build_artifact_for_tables(
     for tname in table_names:
         if n >= describe_max:
             break
-        cols, derr = describe_table(describe_client, tname, correlation_id=correlation_id)
+        cols, derr = describe_table(
+            describe_client,
+            tname,
+            correlation_id=correlation_id,
+            bearer_token=bearer_token,
+        )
         if derr:
             logger.debug("describe_table %s skipped: %s", tname, derr)
             continue

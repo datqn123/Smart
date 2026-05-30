@@ -992,6 +992,7 @@ def make_execute_sql_node(deps: GraphDeps):
         tenant_id = state.get("tenant_id")
         cid = state.get("correlation_id")
         schema_ver = state.get("schema_version")
+        bearer_token = state.get("spring_bearer_token")
         try:
             result = deps.harness.run_tool(
                 tool_name="sql.execute_readonly",
@@ -1000,6 +1001,7 @@ def make_execute_sql_node(deps: GraphDeps):
                     tenant_id=str(tenant_id) if tenant_id is not None else None,
                     correlation_id=str(cid) if cid is not None else None,
                     schema_version=str(schema_ver) if schema_ver is not None else None,
+                    bearer_token=str(bearer_token) if bearer_token is not None else None,
                 ),
                 context=ToolCallContext(
                     tool_name="sql.execute_readonly",

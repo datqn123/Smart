@@ -1,6 +1,7 @@
 package com.example.smart_erp.auth.session;
 
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -66,7 +67,7 @@ class LoginSessionRegistryTest {
 
 		registry.assertNoConcurrentSession(5);
 
-		verify(redis, never()).delete("auth:session:5");
+		verify(redis, never()).execute(any(), any(), any());
 	}
 
 	@Test
@@ -76,7 +77,7 @@ class LoginSessionRegistryTest {
 
 		registry.assertNoConcurrentSession(5);
 
-		verify(redis).delete("auth:session:5");
+		verify(redis).execute(any(), eq(java.util.List.of("auth:session:5")), eq("expired.jwt"));
 	}
 
 	@Test

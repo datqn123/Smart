@@ -162,6 +162,7 @@ def make_schema_explore_node(deps: GraphDeps):
 
         describe_client = build_spring_describe_client(deps.settings)
         cid = state.get("correlation_id")
+        bearer_token = state.get("spring_bearer_token")
         art, aerr = deps.harness.run_tool(
             tool_name="schema.build_artifact_for_tables",
             tool=lambda: schema_tools.build_artifact_for_tables(
@@ -169,6 +170,7 @@ def make_schema_explore_node(deps: GraphDeps):
                 tables,
                 describe_client=describe_client,
                 correlation_id=str(cid) if cid else None,
+                bearer_token=str(bearer_token) if bearer_token else None,
                 describe_max=int(deps.settings.sql_schema_explorer_describe_max_tables),
             ),
             context=ToolCallContext(

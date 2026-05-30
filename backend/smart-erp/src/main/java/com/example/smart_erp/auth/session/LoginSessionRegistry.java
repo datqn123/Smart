@@ -1,8 +1,10 @@
 package com.example.smart_erp.auth.session;
 
 import java.time.Duration;
+import java.util.List;
 
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -21,7 +23,11 @@ import com.example.smart_erp.common.exception.BusinessException;
 public class LoginSessionRegistry {
 
 	private static final String KEY_PREFIX = "auth:session:";
-	private static final String FORBIDDEN_CONCURRENT_SESSION = "Tài khoản đang được đăng nhập trên thiết bị khác";
+	private static final String FORBIDDEN_CONCURRENT_SESSION =
+			"Tài khoản đang được đăng nhập ở một thiết bị khác. Vui lòng đăng xuất ở thiết bị đó hoặc liên hệ Admin.";
+	private static final DefaultRedisScript<Long> COMPARE_AND_DELETE_SCRIPT = new DefaultRedisScript<>(
+			"if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+			Long.class);
 
 	private final JwtTokenService jwtTokenService;
 	private final StringRedisTemplate redis;
@@ -45,7 +51,7 @@ public class LoginSessionRegistry {
 			return;
 		}
 		if (!jwtTokenService.isAccessTokenActiveForSessionMap(existing)) {
-			redis.delete(key(userId));
+			compareAndDeleteIfUnchanged(key(userId), existing);
 			return;
 		}
 		throw new BusinessException(ApiErrorCode.FORBIDDEN, FORBIDDEN_CONCURRENT_SESSION);
@@ -58,5 +64,9 @@ public class LoginSessionRegistry {
 
 	private static String key(Integer userId) {
 		return KEY_PREFIX + userId;
+	}
+
+	private void compareAndDeleteIfUnchanged(String redisKey, String expectedToken) {
+		redis.execute(COMPARE_AND_DELETE_SCRIPT, List.of(redisKey), expectedToken);
 	}
 }

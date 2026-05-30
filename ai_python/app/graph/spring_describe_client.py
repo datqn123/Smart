@@ -68,9 +68,14 @@ class SpringDescribeClient:
         object_name: str,
         *,
         correlation_id: str | None = None,
+        bearer_token: str | None = None,
     ) -> dict[str, Any]:
         payload = {"object_name": object_name.strip()}
         req_headers: dict[str, str] = {}
+        if bearer_token and bearer_token.strip():
+            req_headers["Authorization"] = f"Bearer {bearer_token.strip()}"
+        elif self._settings.spring_sql_bearer_token:
+            req_headers["Authorization"] = f"Bearer {self._settings.spring_sql_bearer_token.strip()}"
         if correlation_id and correlation_id.strip():
             req_headers["X-Correlation-Id"] = correlation_id.strip()
         started = time.perf_counter()

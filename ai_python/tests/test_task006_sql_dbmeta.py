@@ -110,6 +110,44 @@ def test_http_spring_rows_truncated_to_cap() -> None:
     assert len(out["rows"]) == 50
 
 
+def test_http_spring_prefers_request_bearer_token() -> None:
+    received: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        received["authorization"] = request.headers.get("Authorization")
+        return httpx.Response(200, json={"columns": [], "rows": [], "row_count": 0})
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.Client(transport=transport)
+    settings = GraphSettings(
+        sql_executor_mode="http_spring",
+        spring_sql_url="http://example.test/ro/exec",
+        spring_sql_bearer_token="static-token",
+    )
+    ex = HttpSpringSqlExecutor(settings, client=client)
+    ex.execute("SELECT 1", tenant_id=None, bearer_token="dynamic-token")
+    assert received.get("authorization") == "Bearer dynamic-token"
+
+
+def test_http_spring_falls_back_to_static_bearer_token() -> None:
+    received: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        received["authorization"] = request.headers.get("Authorization")
+        return httpx.Response(200, json={"columns": [], "rows": [], "row_count": 0})
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.Client(transport=transport)
+    settings = GraphSettings(
+        sql_executor_mode="http_spring",
+        spring_sql_url="http://example.test/ro/exec",
+        spring_sql_bearer_token="static-token",
+    )
+    ex = HttpSpringSqlExecutor(settings, client=client)
+    ex.execute("SELECT 1", tenant_id=None)
+    assert received.get("authorization") == "Bearer static-token"
+
+
 def test_enforce_read_only_blocks_insert() -> None:
     with pytest.raises(SqlSafetyError):
         enforce_read_only_sql("INSERT INTO t VALUES (1)")

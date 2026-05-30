@@ -46,8 +46,6 @@ const ownerResetRequestSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>
 type OwnerResetRequestValues = z.infer<typeof ownerResetRequestSchema>
 
-const ACCOUNT_LOCKED_MESSAGE = "Tài khoản đã bị vô hiệu hoá, vui lòng liên hệ Owner"
-
 export function LoginForm() {
   const [isLoading, setIsLoading] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -101,10 +99,6 @@ export function LoginForm() {
       )
       navigate("/dashboard")
     } catch (err) {
-      if (err instanceof ApiRequestError && err.status === 403) {
-        setSubmitError(ACCOUNT_LOCKED_MESSAGE)
-        return
-      }
       if (err instanceof ApiRequestError && err.status === 400 && err.body.details) {
         const d = err.body.details
         if (d.email) {

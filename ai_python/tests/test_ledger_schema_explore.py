@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import httpx
+
 from app.config.graph_settings import GraphSettings
 from app.graph.ledger_metrics import ledger_sql_hints, resolve_metric
 from app.graph.reference_joins import join_hints_for_plan, salesorders_join_requires_reference_type
-from app.graph.spring_describe_client import derive_spring_describe_url
+from app.graph.spring_describe_client import SpringDescribeClient, derive_spring_describe_url
 from app.graph.sql_prompts import build_gen_sql_user_prompt
 from app.graph.validate_sql import check_ledger_metric_policy
 
@@ -88,3 +90,39 @@ def test_build_gen_sql_prompt_ledger_first() -> None:
 def test_graph_settings_schema_explorer_flags() -> None:
     s = GraphSettings(sql_schema_explorer_enabled=True, sql_ledger_first_prompts=True)
     assert s.sql_schema_explorer_enabled is True
+
+
+def test_spring_describe_prefers_request_bearer_token() -> None:
+    received: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        received["authorization"] = request.headers.get("Authorization")
+        return httpx.Response(200, json={"columns": []})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    settings = GraphSettings(
+        sql_executor_mode="http_spring",
+        spring_sql_url="http://example.test/api/v1/ai/db/sql/query-readonly-raw",
+        spring_sql_bearer_token="static-token",
+    )
+    describe = SpringDescribeClient(settings, client=client)
+    describe.describe("financeledger", bearer_token="dynamic-token")
+    assert received.get("authorization") == "Bearer dynamic-token"
+
+
+def test_spring_describe_falls_back_to_static_bearer_token() -> None:
+    received: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        received["authorization"] = request.headers.get("Authorization")
+        return httpx.Response(200, json={"columns": []})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    settings = GraphSettings(
+        sql_executor_mode="http_spring",
+        spring_sql_url="http://example.test/api/v1/ai/db/sql/query-readonly-raw",
+        spring_sql_bearer_token="static-token",
+    )
+    describe = SpringDescribeClient(settings, client=client)
+    describe.describe("financeledger")
+    assert received.get("authorization") == "Bearer static-token"

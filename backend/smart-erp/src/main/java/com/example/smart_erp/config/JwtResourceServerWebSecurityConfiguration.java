@@ -86,8 +86,7 @@ public class JwtResourceServerWebSecurityConfiguration {
 			Converter<Jwt, AbstractAuthenticationToken> accessTokenConverter) throws Exception {
 		http.cors(Customizer.withDefaults()).csrf(csrf -> csrf.disable())
 				.authorizeHttpRequests(auth -> auth
-						// Python AI → JDBC read-only bridge (template-first). Lock down via network / future API key.
-						.requestMatchers("/api/v1/ai/db/**").permitAll()
+						// DB tool endpoints are sensitive; require authenticated context in jwt-api mode.
 						.requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
 						.anyRequest().authenticated())
 				.oauth2ResourceServer(oauth2 -> oauth2.jwt(
