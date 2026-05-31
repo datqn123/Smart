@@ -1,6 +1,6 @@
 import { apiJson } from "@/lib/api/http"
 
-/** Task061 — `GET /api/v1/approvals/pending` — `frontend/docs/api/API_Task061_approvals_pending_get_list.md`. */
+/** Task061 — `GET /api/v1/approvals/pending` — `docs/frontend/api/API_Task061_approvals_pending_get_list.md`. */
 export const APPROVALS_PENDING_QUERY_KEY = ["approvals", "pending"] as const
 
 export type ApprovalsPendingSummary = {
@@ -51,7 +51,7 @@ export function getPendingApprovals(params: GetPendingApprovalsParams = {}) {
   })
 }
 
-/** Task062 — `GET /api/v1/approvals/history` — `frontend/docs/api/API_Task062_approvals_history_get_list.md`. */
+/** Task062 — `GET /api/v1/approvals/history` — `docs/frontend/api/API_Task062_approvals_history_get_list.md`. */
 export const APPROVALS_HISTORY_QUERY_KEY = ["approvals", "history"] as const
 
 export type ApprovalsHistoryItem = {

@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react"
 import { useForm, type FieldPath } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { z } from "zod"
 import { X, User, Phone, Mail, MapPin, CheckCircle2, UserPlus, Trophy } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -21,18 +20,7 @@ import { ApiRequestError } from "@/lib/api/http"
 import { toast } from "sonner"
 import { applyCustomerCreateApiError } from "../api/customersApi"
 import type { Customer } from "../types"
-
-const customerSchema = z.object({
-  name: z.string().min(1, "Vui lòng nhập tên khách hàng").max(255),
-  customerCode: z.string().min(1, "Vui lòng nhập mã khách hàng").max(50),
-  phone: z.string().min(1, "Vui lòng nhập số điện thoại").max(20),
-  email: z.string().email("Email không hợp lệ").optional().or(z.literal("")),
-  address: z.string().optional(),
-  status: z.enum(["Active", "Inactive"]),
-  loyaltyPoints: z.coerce.number().int().min(0).optional(),
-})
-
-export type CustomerFormData = z.infer<typeof customerSchema>
+import { customerSchema, type CustomerFormData } from "../validation"
 
 /** Báo form: đừng đóng dialog (Task051 hoặc trạng thái chưa sẵn sàng). */
 export class CustomerFormSubmitAborted extends Error {

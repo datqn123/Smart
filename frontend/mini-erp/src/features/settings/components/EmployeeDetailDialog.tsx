@@ -4,10 +4,9 @@ import {
   DialogContent, 
   DialogHeader, 
   DialogTitle,
-  DialogDescription 
 } from "@/components/ui/dialog"
 import type { Employee } from "../types"
-import { User, Shield, Mail, Phone, Calendar, Activity, BadgeCheck, Lock } from "lucide-react"
+import { User, Shield, Mail, Phone, Calendar, Activity, BadgeCheck, Lock, type LucideIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { ApiRequestError } from "@/lib/api/http"
@@ -23,13 +22,15 @@ interface EmployeeDetailDialogProps {
 }
 
 export function EmployeeDetailDialog({ employee, isOpen, onClose }: EmployeeDetailDialogProps) {
-  if (!employee) return null;
-
   const [loading, setLoading] = useState(false)
   const [detail, setDetail] = useState<UserDetailData | null>(null)
 
   useEffect(() => {
-    if (!isOpen || !employee) return
+    if (!isOpen || !employee) {
+      setDetail(null)
+      setLoading(false)
+      return
+    }
     let cancelled = false
     void (async () => {
       setLoading(true)
@@ -41,7 +42,6 @@ export function EmployeeDetailDialog({ employee, isOpen, onClose }: EmployeeDeta
           // RBAC self-view (OQ-1): Staff có thể bị 403 khi xem người khác
           // Chỉ toast 1 câu ngắn theo message để UI không crash
           // (không phân nhánh theo error code vì backend đã chuẩn hoá message)
-          // eslint-disable-next-line no-console
           console.warn("getUserById failed", e.status, e.body?.error)
         }
         if (!cancelled) setDetail(null)
@@ -56,6 +56,8 @@ export function EmployeeDetailDialog({ employee, isOpen, onClose }: EmployeeDeta
 
   const username = detail?.username ?? null
   const lastLogin = detail?.lastLogin ?? null
+
+  if (!employee) return null;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -164,7 +166,7 @@ export function EmployeeDetailDialog({ employee, isOpen, onClose }: EmployeeDeta
   );
 }
 
-function InfoCard({ icon: Icon, label, value }: { icon: any, label: string, value: string }) {
+function InfoCard({ icon: Icon, label, value }: { icon: LucideIcon, label: string, value: string }) {
     return (
         <div className="flex items-center gap-3">
             <div className="h-9 w-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 border border-slate-200">

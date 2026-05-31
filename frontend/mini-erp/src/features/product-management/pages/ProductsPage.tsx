@@ -117,11 +117,6 @@ export function ProductsPage() {
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | undefined>()
 
-  const selectedProductRef = useRef<Product | null>(null)
-  const editingProductRef = useRef<Product | undefined>(undefined)
-  selectedProductRef.current = selectedProduct
-  editingProductRef.current = editingProduct
-
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS)
     return () => clearTimeout(t)
@@ -313,14 +308,20 @@ export function ProductsPage() {
       void queryClient.invalidateQueries({ queryKey: ["product-management", "products", "list"] })
       void queryClient.invalidateQueries({ queryKey: ["product-management", "products", "detail", deletedId] })
       setSelectedIds((prev) => prev.filter((i) => i !== deletedId))
-      setSelectedProduct((p) => (p?.id === deletedId ? null : p))
-      if (selectedProductRef.current?.id === deletedId) {
-        setIsDetailOpen(false)
-      }
-      setEditingProduct((p) => (p?.id === deletedId ? undefined : p))
-      if (editingProductRef.current?.id === deletedId) {
-        setIsFormOpen(false)
-      }
+      setSelectedProduct((p) => {
+        if (p?.id === deletedId) {
+          setIsDetailOpen(false)
+          return null
+        }
+        return p
+      })
+      setEditingProduct((p) => {
+        if (p?.id === deletedId) {
+          setIsFormOpen(false)
+          return undefined
+        }
+        return p
+      })
       toast.success("Đã xóa sản phẩm")
     },
     onError: toastProductMutationEnvelope,

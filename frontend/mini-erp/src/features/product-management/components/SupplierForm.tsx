@@ -1,7 +1,6 @@
 import React, { useState } from "react"
 import { useForm, type FieldPath } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { z } from "zod"
 import { Building2, Phone, Mail, MapPin, CheckCircle2, CreditCard, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -26,19 +25,7 @@ import { FORM_LABEL_CLASS, FORM_INPUT_CLASS } from "@/lib/data-table-layout"
 import { ApiRequestError } from "@/lib/api/http"
 import { toast } from "sonner"
 import type { Supplier } from "../types"
-
-const supplierSchema = z.object({
-  name: z.string().min(1, "Vui lòng nhập tên nhà cung cấp"),
-  supplierCode: z.string().min(1, "Vui lòng nhập mã nhà cung cấp"),
-  contactPerson: z.string().min(1, "Vui lòng nhập người liên hệ"),
-  phone: z.string().min(1, "Vui lòng nhập số điện thoại"),
-  email: z.string().email("Email không hợp lệ").optional().or(z.literal("")),
-  address: z.string().optional(),
-  taxCode: z.string().optional(),
-  status: z.enum(["Active", "Inactive"]),
-})
-
-export type SupplierFormData = z.infer<typeof supplierSchema>
+import { supplierSchema, type SupplierFormData } from "../validation"
 
 /** Báo cho form: đừng đóng dialog (Task045 trở lên mới nối PATCH). */
 export class SupplierFormSubmitAborted extends Error {
@@ -173,7 +160,7 @@ export function SupplierForm({ open, onOpenChange, supplier, onSubmit }: Supplie
                 <Label className={FORM_LABEL_CLASS}>Trạng thái</Label>
                 <Select 
                   defaultValue={form.getValues("status")}
-                  onValueChange={(val) => form.setValue("status", val as any)}
+                  onValueChange={(val) => form.setValue("status", val as "Active" | "Inactive")}
                 >
                   <SelectTrigger className={FORM_INPUT_CLASS}>
                     <SelectValue />

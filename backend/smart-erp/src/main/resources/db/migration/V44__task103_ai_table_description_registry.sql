@@ -1,4 +1,4 @@
--- Task103 — SRS_Task103_ai-table-description-registry + docs/plan/feature/spring_ai_table_description_registry.plan.md
+-- Task103 — SRS_Task103_ai-table-description-registry + docs/plans/existing/feature/spring_ai_table_description_registry.plan.md
 -- Bảng registry mô tả nghiệp vụ theo bảng PostgreSQL cho downstream AI (ai_python merge SchemaArtifact.tables[].name).
 -- Không tạo schema riêng: giữ public như các bảng nghiệp vụ snake_case gần đây (vd. cash_funds).
 

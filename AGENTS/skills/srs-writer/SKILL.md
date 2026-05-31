@@ -16,9 +16,9 @@ Read only the slices needed for the requested feature, but cover every affected 
 
 ### Always Read
 
-- `frontend/mini-erp/src/features/FEATURES_UI_INDEX.md`
-- Related files in `frontend/docs/api/` when an API contract exists.
-- Related existing SRS in `backend/docs/srs/`, `frontend/docs/srs/`, or `ai_python/docs/srs/`.
+- `docs/frontend/mini-erp/features/FEATURES_UI_INDEX.md`
+- Related files in `docs/frontend/api/` when an API contract exists.
+- Related existing SRS in `docs/backend/srs/`, `docs/frontend/srs/`, or `docs/ai-python/srs/`.
 - The relevant controller/service/API route files.
 - Relevant Flyway migrations under `backend/smart-erp/src/main/resources/db/migration/`.
 
@@ -112,10 +112,10 @@ Choose location by scope:
 
 | Scope | Location |
 | :--- | :--- |
-| Backend/API primary | `backend/docs/srs/SRS_TaskXXX_<slug>.md` |
-| UI-only Mini-ERP | `frontend/docs/srs/SRS_TaskXXX_<slug>.md` |
-| AI-only design/docs | `ai_python/docs/srs/SRS_AI_TaskXXX_<slug>.md` |
-| Full-stack / cross-layer | Prefer `backend/docs/srs/` if Spring API is the main contract; otherwise use `docs/srs/`. |
+| Backend/API primary | `docs/backend/srs/SRS_TaskXXX_<slug>.md` |
+| UI-only Mini-ERP | `docs/frontend/srs/SRS_TaskXXX_<slug>.md` |
+| AI-only design/docs | `docs/ai-python/srs/SRS_AI_TaskXXX_<slug>.md` |
+| Full-stack / cross-layer | Prefer `docs/backend/srs/` if Spring API is the main contract; otherwise use `docs/srs/`. |
 
 Use kebab-case for the slug.
 

@@ -14,9 +14,9 @@
 | Source | Path / note |
 | :--- | :--- |
 | Brief / ticket | `<link or summary>` |
-| API spec | `frontend/docs/api/API_TaskXXX_*.md` |
+| API spec | `docs/frontend/api/API_TaskXXX_*.md` |
 | Existing SRS | `<path>` |
-| UI index | `frontend/mini-erp/src/features/FEATURES_UI_INDEX.md` |
+| UI index | `docs/frontend/mini-erp/features/FEATURES_UI_INDEX.md` |
 | Backend code | `backend/smart-erp/src/main/java/...` |
 | Flyway / DB | `backend/smart-erp/src/main/resources/db/migration/...` |
 | AI flow | `ai_python/app/graph/...`, `ai_python/app/api/...` |

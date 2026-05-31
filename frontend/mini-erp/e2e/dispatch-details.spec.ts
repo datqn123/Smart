@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test('verify dispatch details and form expansion', async ({ page }) => {
-  await page.goto('http://localhost:5173/inventory/dispatch');
+  await page.goto('http://localhost:3000/inventory/dispatch');
   
   // 1. Verify Detail Dialog
   // Open the first row

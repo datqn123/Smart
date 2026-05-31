@@ -26,9 +26,9 @@
 
 | Agent | Output chính |
 | :-- | :-- |
-| AI_PLANNER | `ai_python/docs/prd/PRD_*.md` |
-| AI_BA | `ai_python/docs/srs/SRS_AI_*.md` |
-| AI_PM | `ai_python/TASKS/Task*.md`, `ai_python/docs/task*/` |
-| AI_TECH_LEAD | `ai_python/docs/adr/ADR-*.md` |
+| AI_PLANNER | `docs/ai-python/prd/PRD_*.md` |
+| AI_BA | `docs/ai-python/srs/SRS_AI_*.md` |
+| AI_PM | `docs/ai-python/tasks/Task*.md`, `docs/ai-python/task*/` |
+| AI_TECH_LEAD | `docs/ai-python/adr/ADR-*.md` |
 | AI_DEVELOPER | code `ai_python/app/**`, tests, coverage |
-| AI_CODE_REVIEWER | `ai_python/docs/task*/05-code-review/CODE_REVIEW_*.md` |
+| AI_CODE_REVIEWER | `docs/ai-python/task*/05-code-review/CODE_REVIEW_*.md` |

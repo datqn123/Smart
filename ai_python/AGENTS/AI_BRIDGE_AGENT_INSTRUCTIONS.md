@@ -10,11 +10,11 @@
 ## Tham chiếu chéo repo
 
 - [`frontend/AGENTS/docs/FE_API_CONNECTION_GUIDE.md`](../../frontend/AGENTS/docs/FE_API_CONNECTION_GUIDE.md)
-- [`frontend/docs/api/`](../../frontend/docs/api/) — nếu task yêu cầu file bridge FE, **handoff** rõ — agent bridge trong điều phối FE/BE có thể đảm nhiệm file ngoài `ai_python/`.
+- [`docs/frontend/api/`](../../docs/frontend/api/) — nếu task yêu cầu file bridge FE, **handoff** rõ — agent bridge trong điều phối FE/BE có thể đảm nhiệm file ngoài `ai_python/`.
 
 ## Output gợi ý trong `ai_python`
 
-- `ai_python/docs/api/bridge/BRIDGE_AI_<task>_<slug>.md` — mô tả mapping, sample request/response, version.
+- `docs/ai-python/api/bridge/BRIDGE_AI_<task>_<slug>.md` — mô tả mapping, sample request/response, version.
 
 ## STOP
 

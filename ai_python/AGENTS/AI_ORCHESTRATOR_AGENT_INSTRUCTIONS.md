@@ -9,7 +9,7 @@
 
 ## Output gợi ý
 
-- `ai_python/docs/orchestration/AUDIT_<Task>_final.md`
+- `docs/ai-python/orchestration/AUDIT_<Task>_final.md`
 
 ## WARN / FAIL
 

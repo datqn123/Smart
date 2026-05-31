@@ -4,7 +4,7 @@ import org.springframework.http.HttpStatus;
 
 /**
  * Machine-readable codes for JSON field {@code error}; must stay aligned with
- * {@code frontend/docs/api/API_RESPONSE_ENVELOPE.md}.
+ * {@code docs/frontend/api/API_RESPONSE_ENVELOPE.md}.
  */
 public enum ApiErrorCode {
 	BAD_REQUEST(HttpStatus.BAD_REQUEST),

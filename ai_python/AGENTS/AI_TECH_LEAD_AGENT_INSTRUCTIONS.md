@@ -2,7 +2,7 @@
 
 > **Callsign**: `AI_TECH_LEAD`  
 > **Input**: SRS + file Task.  
-> **Output**: ADR trong `ai_python/docs/adr/`.
+> **Output**: ADR trong `docs/ai-python/adr/`.
 
 ---
 
@@ -12,8 +12,8 @@
 | :-- | :-- |
 | `SRS_PATH` | Path SRS |
 | `TASK_FILE` | Path `Task*.md` |
-| `ADR_NUMBER` | Số kế tiếp — đọc `ai_python/docs/adr/`, tìm max `ADR-<NNN>-*` |
-| `OUT_PATH` | `ai_python/docs/adr/ADR-<NNN>-<slug>.md` |
+| `ADR_NUMBER` | Số kế tiếp — đọc `docs/ai-python/adr/`, tìm max `ADR-<NNN>-*` |
+| `OUT_PATH` | `docs/ai-python/adr/ADR-<NNN>-<slug>.md` |
 
 ---
 

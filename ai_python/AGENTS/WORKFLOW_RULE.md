@@ -26,12 +26,12 @@ AI_PLANNER → AI_BA → AI_PM → AI_TECH_LEAD → AI_DEVELOPER → AI_CODE_REV
 
 | Gate | Agent | Artifact chính |
 | :-- | :-- | :-- |
-| G-AI-PLAN | `AI_PLANNER` | `ai_python/docs/prd/PRD_<slug>.md` |
-| G-AI-BA | `AI_BA` | `ai_python/docs/srs/SRS_AI_<task>_<slug>.md` (hoặc quy ước tương đương trong SRS instruction) |
-| G-AI-PM | `AI_PM` | `ai_python/TASKS/Task<XXX>.md` + `ai_python/docs/task<XXX>/` |
-| G-AI-TL | `AI_TECH_LEAD` | `ai_python/docs/adr/ADR-<NNN>-<slug>.md` |
+| G-AI-PLAN | `AI_PLANNER` | `docs/ai-python/prd/PRD_<slug>.md` |
+| G-AI-BA | `AI_BA` | `docs/ai-python/srs/SRS_AI_<task>_<slug>.md` (hoặc quy ước tương đương trong SRS instruction) |
+| G-AI-PM | `AI_PM` | `docs/ai-python/tasks/Task<XXX>.md` + `docs/ai-python/task<XXX>/` |
+| G-AI-TL | `AI_TECH_LEAD` | `docs/ai-python/adr/ADR-<NNN>-<slug>.md` |
 | G-AI-DEV | `AI_DEVELOPER` | `ai_python/app/**` (hoặc cấu trúc app hiện có) + tests |
-| G-AI-CR | `AI_CODE_REVIEWER` | `ai_python/docs/task<XXX>/05-code-review/CODE_REVIEW_<task>.md` |
+| G-AI-CR | `AI_CODE_REVIEWER` | `docs/ai-python/task<XXX>/05-code-review/CODE_REVIEW_<task>.md` |
 
 **Kết thúc lean**: báo cáo Code Review verdict **PASS**.
 
@@ -72,4 +72,4 @@ WORKFLOW_RULE ai_python — đọc @ai_python/AGENTS/WORKFLOW_RULE.md — tiếp
 
 ## §2 Đồng bộ với repo gốc
 
-- **AI_PLANNER** toàn repo (methodology PRD): có thể tham chiếu [`../../AGENTS/AI_PLANNER_AGENT_INSTRUCTIONS.md`](../../AGENTS/AI_PLANNER_AGENT_INSTRUCTIONS.md); output **task ai_python** vẫn tuân path trong `ai_python/docs/prd/`.
+- **AI_PLANNER** toàn repo (methodology PRD): có thể tham chiếu [`../../AGENTS/AI_PLANNER_AGENT_INSTRUCTIONS.md`](../../AGENTS/AI_PLANNER_AGENT_INSTRUCTIONS.md); output **task ai_python** vẫn tuân path trong `docs/ai-python/prd/`.

@@ -12,7 +12,7 @@
 | `SRS_PATH` | SRS |
 | `ADR_PATH` | ADR |
 | `TASK_FILE` | Task — scope & nhãn báo cáo |
-| `OUT_PATH` | `ai_python/docs/task<XXX>/05-code-review/CODE_REVIEW_<task>.md` |
+| `OUT_PATH` | `docs/ai-python/task<XXX>/05-code-review/CODE_REVIEW_<task>.md` |
 | `ITERATION` | Số vòng (1…4) — ghi trong báo cáo |
 
 ---

@@ -81,9 +81,13 @@ class Task001LoginPostmanBodyContractTest {
 		if (Files.isDirectory(direct)) {
 			return direct;
 		}
-		Path fromRepoRoot = cwd.resolve("backend/smart-erp/docs/postman");
+		Path fromRepoRoot = cwd.resolve("docs/backend/smart-erp/postman");
 		if (Files.isDirectory(fromRepoRoot)) {
 			return fromRepoRoot;
+		}
+		Path fromBackendModule = cwd.resolve("../../docs/backend/smart-erp/postman").normalize();
+		if (Files.isDirectory(fromBackendModule)) {
+			return fromBackendModule;
 		}
 		return direct;
 	}

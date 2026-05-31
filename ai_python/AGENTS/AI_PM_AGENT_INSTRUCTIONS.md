@@ -10,10 +10,10 @@
 
 | Slot | Mô tả |
 | :-- | :-- |
-| `SRS_PATH` | `ai_python/docs/srs/SRS_AI_*.md` |
-| `TASK_ID` | `Task<XXX>` — nếu driver để trống, PM đề xuất ID kế tiếp không trùng `ai_python/TASKS/` |
-| `OUT_TASK_FILE` | `ai_python/TASKS/Task<XXX>.md` hoặc `ai_python/TASKS/DESIGN/Task_*.md` theo quy ước repo |
-| `OUT_TASK_FOLDER` | `ai_python/docs/task<XXX>/` — các mục con: ví dụ `01-scope`, `05-code-review`, … (khớp instruction DEV/CR) |
+| `SRS_PATH` | `docs/ai-python/srs/SRS_AI_*.md` |
+| `TASK_ID` | `Task<XXX>` — nếu driver để trống, PM đề xuất ID kế tiếp không trùng `docs/ai-python/tasks/` |
+| `OUT_TASK_FILE` | `docs/ai-python/tasks/Task<XXX>.md` hoặc `docs/ai-python/tasks/DESIGN/Task_*.md` theo quy ước repo |
+| `OUT_TASK_FOLDER` | `docs/ai-python/task<XXX>/` — các mục con: ví dụ `01-scope`, `05-code-review`, … (khớp instruction DEV/CR) |
 
 ---
 

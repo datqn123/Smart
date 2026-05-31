@@ -1,5 +1,5 @@
 -- Flyway V1 — baseline lần đầu (PostgreSQL, DB trống hoặc chưa có bảng flyway_schema_history).
--- Nguồn đặc tả: frontend/docs/UC/schema.sql — khi sửa schema hãy copy lại file này hoặc dùng V2+.
+-- Nguồn đặc tả: docs/frontend/UC/schema.sql — khi sửa schema hãy copy lại file này hoặc dùng V2+.
 -- ============================================================
 -- SMART INVENTORY MANAGEMENT - PostgreSQL Schema
 -- Version: 5.2 — bổ sung theo API spec / Database_Specification: SalesOrders (kênh/thanh toán), StoreProfiles,

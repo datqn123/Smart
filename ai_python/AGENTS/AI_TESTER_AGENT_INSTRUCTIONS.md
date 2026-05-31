@@ -9,7 +9,7 @@
 
 ## Output gợi ý
 
-- `ai_python/docs/task<XXX>/04-tester/` — plan, kết quả, metrics.
+- `docs/ai-python/task<XXX>/04-tester/` — plan, kết quả, metrics.
 
 ## Tham chiếu
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build erp_domain_index.json and guide chunks from GUID_ERP.md (Task112)."""
+"""Build erp_domain_index.json and guide chunks from docs/guides/GUID_ERP.md (Task112)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_DEFAULT_GUIDE = _REPO_ROOT / "GUID_ERP.md"
+_DEFAULT_GUIDE = _REPO_ROOT / "docs" / "guides" / "GUID_ERP.md"
 _OUT_DIR = Path(__file__).resolve().parents[1] / "app" / "data" / "erp"
 _CHUNKS_DIR = _OUT_DIR / "guide_chunks"
 

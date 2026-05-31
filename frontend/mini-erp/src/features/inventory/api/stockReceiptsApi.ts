@@ -5,7 +5,7 @@ import type { StockReceipt } from "../types"
 export const STOCK_RECEIPT_REJECT_REASON_MIN_LEN = 15
 
 /**
- * Task013 — `GET /api/v1/stock-receipts` — `frontend/docs/api/API_Task013_stock_receipts_get_list.md` §7.
+ * Task013 — `GET /api/v1/stock-receipts` — `docs/frontend/api/API_Task013_stock_receipts_get_list.md` §7.
  * Sort BE: `id:asc|id:desc`, `createdAt:asc|createdAt:desc` (mặc định BE khi không gửi sort: `created_at` desc).
  */
 export type StockReceiptListItemResponse = {
@@ -121,7 +121,7 @@ export function getStockReceiptList(params: GetStockReceiptListParams) {
   })
 }
 
-/** Task014 — `POST /api/v1/stock-receipts` — `frontend/docs/api/API_Task014_stock_receipts_post.md` §5–6. */
+/** Task014 — `POST /api/v1/stock-receipts` — `docs/frontend/api/API_Task014_stock_receipts_post.md` §5–6. */
 export type StockReceiptCreateSaveMode = "draft" | "pending"
 
 export type StockReceiptCreateDetailBody = {
@@ -227,7 +227,7 @@ export function mapStockReceiptViewToUi(v: StockReceiptViewResponse): StockRecei
   }
 }
 
-/** Task015 — `GET /api/v1/stock-receipts/{id}` — `frontend/docs/api/API_Task015_stock_receipts_get_by_id.md` §5–6. */
+/** Task015 — `GET /api/v1/stock-receipts/{id}` — `docs/frontend/api/API_Task015_stock_receipts_get_by_id.md` §5–6. */
 export function getStockReceiptById(id: number) {
   return apiJson<StockReceiptViewResponse>(`/api/v1/stock-receipts/${id}`, {
     method: "GET",
@@ -252,7 +252,7 @@ export type StockReceiptPatchBody = {
   details?: StockReceiptCreateDetailBody[]
 }
 
-/** Task016 — `PATCH /api/v1/stock-receipts/{id}` — `frontend/docs/api/API_Task016_stock_receipts_patch.md` §4–5. */
+/** Task016 — `PATCH /api/v1/stock-receipts/{id}` — `docs/frontend/api/API_Task016_stock_receipts_patch.md` §4–5. */
 export function patchStockReceipt(id: number, body: StockReceiptPatchBody) {
   return apiJson<StockReceiptViewResponse>(`/api/v1/stock-receipts/${id}`, {
     method: "PATCH",
@@ -261,7 +261,7 @@ export function patchStockReceipt(id: number, body: StockReceiptPatchBody) {
   })
 }
 
-/** Task017 — `DELETE /api/v1/stock-receipts/{id}` — `frontend/docs/api/API_Task017_stock_receipts_delete.md`. */
+/** Task017 — `DELETE /api/v1/stock-receipts/{id}` — `docs/frontend/api/API_Task017_stock_receipts_delete.md`. */
 export function deleteStockReceipt(id: number) {
   return apiJson<null>(`/api/v1/stock-receipts/${id}`, {
     method: "DELETE",
@@ -269,7 +269,7 @@ export function deleteStockReceipt(id: number) {
   })
 }
 
-/** Draft → Pending — `POST /api/v1/stock-receipts/{id}/submit` — `frontend/docs/api/API_Task018_stock_receipts_submit.md`. */
+/** Draft → Pending — `POST /api/v1/stock-receipts/{id}/submit` — `docs/frontend/api/API_Task018_stock_receipts_submit.md`. */
 export function submitStockReceipt(id: number) {
   return apiJson<StockReceiptViewResponse>(`/api/v1/stock-receipts/${id}/submit`, {
     method: "POST",
@@ -282,7 +282,7 @@ export type StockReceiptApproveBody = {
   inboundLocationId: number
 }
 
-/** Pending → Approved — `POST /api/v1/stock-receipts/{id}/approve` — `frontend/docs/api/API_Task019_stock_receipts_approve.md`. RBAC BE: `can_approve` + role Admin hoặc Owner. */
+/** Pending → Approved — `POST /api/v1/stock-receipts/{id}/approve` — `docs/frontend/api/API_Task019_stock_receipts_approve.md`. RBAC BE: `can_approve` + role Admin hoặc Owner. */
 export function approveStockReceipt(id: number, body: StockReceiptApproveBody) {
   return apiJson<StockReceiptViewResponse>(`/api/v1/stock-receipts/${id}/approve`, {
     method: "POST",
@@ -295,7 +295,7 @@ export type StockReceiptRejectBody = {
   reason: string
 }
 
-/** Pending → Rejected — `POST /api/v1/stock-receipts/{id}/reject` — `frontend/docs/api/API_Task020_stock_receipts_reject.md`. RBAC BE: giống approve. */
+/** Pending → Rejected — `POST /api/v1/stock-receipts/{id}/reject` — `docs/frontend/api/API_Task020_stock_receipts_reject.md`. RBAC BE: giống approve. */
 export function rejectStockReceipt(id: number, body: StockReceiptRejectBody) {
   return apiJson<StockReceiptViewResponse>(`/api/v1/stock-receipts/${id}/reject`, {
     method: "POST",

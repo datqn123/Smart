@@ -2,9 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { OrderItem } from '../types'
 
-interface CartItem extends OrderItem {
-  // additional transient fields if needed
-}
+type CartItem = OrderItem
 
 interface OrderState {
   cart: CartItem[];

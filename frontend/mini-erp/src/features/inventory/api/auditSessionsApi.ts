@@ -2,7 +2,7 @@ import { apiJson } from "@/lib/api/http"
 import type { AuditItem, AuditSession, AuditStatus } from "../types"
 
 /**
- * Task021 — `GET /api/v1/inventory/audit-sessions` — `frontend/docs/api/API_Task021_inventory_audit_sessions_get_list.md` §5–6.
+ * Task021 — `GET /api/v1/inventory/audit-sessions` — `docs/frontend/api/API_Task021_inventory_audit_sessions_get_list.md` §5–6.
  */
 export type AuditSessionListItemResponse = {
   id: number
@@ -89,7 +89,7 @@ export function getAuditSessionList(params: GetAuditSessionListParams) {
 }
 
 /**
- * Task022 — `POST /api/v1/inventory/audit-sessions` — `frontend/docs/api/API_Task022_inventory_audit_sessions_post.md` §5–6.
+ * Task022 — `POST /api/v1/inventory/audit-sessions` — `docs/frontend/api/API_Task022_inventory_audit_sessions_post.md` §5–6.
  */
 export type AuditScopeCreateBody =
   | { mode: "by_location_ids"; locationIds: number[] }
@@ -104,7 +104,7 @@ export type AuditSessionCreateBody = {
 }
 
 /**
- * Task023 — `GET /api/v1/inventory/audit-sessions/{id}` — `frontend/docs/api/API_Task023_inventory_audit_sessions_get_by_id.md` §6.
+ * Task023 — `GET /api/v1/inventory/audit-sessions/{id}` — `docs/frontend/api/API_Task023_inventory_audit_sessions_get_by_id.md` §6.
  * Cũng là body `data` của `POST` Task022 (201).
  */
 export type AuditSessionLineItemResponse = {
@@ -211,7 +211,7 @@ export function getAuditSessionById(id: number) {
 }
 
 /**
- * Task024 — `PATCH /api/v1/inventory/audit-sessions/{id}` — `frontend/docs/api/API_Task024_inventory_audit_sessions_patch.md` §5–6.
+ * Task024 — `PATCH /api/v1/inventory/audit-sessions/{id}` — `docs/frontend/api/API_Task024_inventory_audit_sessions_patch.md` §5–6.
  * BE: `AuditSessionPatchRequest` — chỉ gửi field có cập nhật (ít nhất một).
  */
 export type AuditSessionPatchBody = Partial<{
@@ -235,7 +235,7 @@ export function patchAuditSession(id: number, body: AuditSessionPatchBody) {
 }
 
 /**
- * Task025 — `PATCH /api/v1/inventory/audit-sessions/{id}/lines` — `frontend/docs/api/API_Task025_inventory_audit_sessions_patch_lines.md` §5–6.
+ * Task025 — `PATCH /api/v1/inventory/audit-sessions/{id}/lines` — `docs/frontend/api/API_Task025_inventory_audit_sessions_patch_lines.md` §5–6.
  * BE: `AuditLinesPatchRequest` / `AuditLinePatchRow` (`lineId`, `actualQuantity`, `notes`).
  */
 export type AuditLinePatchRowBody = {
@@ -257,7 +257,7 @@ export function patchAuditSessionLines(sessionId: number, body: AuditLinesPatchB
 }
 
 /**
- * Task026 — `POST /api/v1/inventory/audit-sessions/{id}/complete` — `frontend/docs/api/API_Task026_inventory_audit_sessions_complete.md` §5–6.
+ * Task026 — `POST /api/v1/inventory/audit-sessions/{id}/complete` — `docs/frontend/api/API_Task026_inventory_audit_sessions_complete.md` §5–6.
  * BE: chỉ khi **In Progress** → chuyển **Pending Owner Approval** (gửi chờ Owner), không set Completed tại bước này.
  */
 export type AuditSessionCompleteBody = {
@@ -274,7 +274,7 @@ export function postAuditSessionComplete(sessionId: number, body: AuditSessionCo
 }
 
 /**
- * Task027 — `POST /api/v1/inventory/audit-sessions/{id}/cancel` — `frontend/docs/api/API_Task027_inventory_audit_sessions_cancel.md` §4.
+ * Task027 — `POST /api/v1/inventory/audit-sessions/{id}/cancel` — `docs/frontend/api/API_Task027_inventory_audit_sessions_cancel.md` §4.
  * BE: `AuditSessionCancelRequest` — `cancelReason` bắt buộc, max 1000 ký tự.
  */
 export type AuditSessionCancelBody = {

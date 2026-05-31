@@ -1,6 +1,6 @@
 import { apiJson } from "@/lib/api/http"
 
-/** Task059 — `GET /api/v1/pos/products` — `frontend/docs/api/API_Task059_pos_products_get_search.md` + BE `PosProductsController`. */
+/** Task059 — `GET /api/v1/pos/products` — `docs/frontend/api/API_Task059_pos_products_get_search.md` + BE `PosProductsController`. */
 export const POS_PRODUCTS_SEARCH_QUERY_KEY = ["orders", "pos-products", "v1", "search"] as const
 
 export type PosProductRowDto = {

@@ -4,7 +4,7 @@ import type { Customer } from "../types"
 /** Query key prefix — list (Task048) + `invalidateQueries` sau DELETE/mutations. */
 export const CUSTOMER_LIST_QUERY_KEY = ["product-management", "customers", "list"] as const
 
-/** Task048 — `GET /api/v1/customers` — `frontend/docs/api/API_Task048_customers_get_list.md` + BE `CustomerJdbcRepository.resolveListOrderBy`. */
+/** Task048 — `GET /api/v1/customers` — `docs/frontend/api/API_Task048_customers_get_list.md` + BE `CustomerJdbcRepository.resolveListOrderBy`. */
 export const CUSTOMER_LIST_SORT_WHITELIST = [
   "name:asc",
   "name:desc",
@@ -84,7 +84,7 @@ export function getCustomerList(params: GetCustomerListParams = {}) {
   return apiJson<CustomerListPageDto>(`/api/v1/customers?${q.toString()}`, { method: "GET", auth: true })
 }
 
-// --- Task050 — `GET /api/v1/customers/{id}` — `frontend/docs/api/API_Task050_customers_get_by_id.md`
+// --- Task050 — `GET /api/v1/customers/{id}` — `docs/frontend/api/API_Task050_customers_get_by_id.md`
 export type CustomerDetailDto = {
   id: number
   customerCode: string
@@ -124,7 +124,7 @@ export function getCustomerById(id: number) {
   return apiJson<CustomerDetailDto>(`/api/v1/customers/${id}`, { method: "GET", auth: true })
 }
 
-// --- Task049 — `POST /api/v1/customers` — `frontend/docs/api/API_Task049_customers_post.md`
+// --- Task049 — `POST /api/v1/customers` — `docs/frontend/api/API_Task049_customers_post.md`
 
 export type CustomerCreateBody = {
   customerCode: string
@@ -210,7 +210,7 @@ export function applyCustomerCreateApiError(
   return 0
 }
 
-// --- Task051 — `PATCH /api/v1/customers/{id}` — `frontend/docs/api/API_Task051_customers_patch.md`
+// --- Task051 — `PATCH /api/v1/customers/{id}` — `docs/frontend/api/API_Task051_customers_patch.md`
 
 export type CustomerEditSnapshot = {
   customerCode: string
@@ -301,7 +301,7 @@ export function patchCustomer(id: number, body: Record<string, unknown>) {
   })
 }
 
-// --- Task052 — `DELETE /api/v1/customers/{id}` — `frontend/docs/api/API_Task052_customers_delete.md`
+// --- Task052 — `DELETE /api/v1/customers/{id}` — `docs/frontend/api/API_Task052_customers_delete.md`
 
 export type CustomerDeleteDto = {
   id: number
@@ -312,7 +312,7 @@ export function deleteCustomer(id: number) {
   return apiJson<CustomerDeleteDto>(`/api/v1/customers/${id}`, { method: "DELETE", auth: true })
 }
 
-// --- Task053 — `POST /api/v1/customers/bulk-delete` — `frontend/docs/api/API_Task053_customers_bulk_delete.md`
+// --- Task053 — `POST /api/v1/customers/bulk-delete` — `docs/frontend/api/API_Task053_customers_bulk_delete.md`
 
 export type CustomerBulkDeleteDto = {
   deletedIds: number[]

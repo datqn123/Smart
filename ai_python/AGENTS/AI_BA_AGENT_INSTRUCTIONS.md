@@ -2,7 +2,7 @@
 
 > **Callsign**: `AI_BA`  
 > **Input**: PRD đã chốt (`PRD_PATH`).  
-> **Output**: SRS kỹ thuật cho service Python — **chỉ** artifact dưới `ai_python/docs/`.
+> **Output**: SRS kỹ thuật cho service Python — **chỉ** artifact dưới `docs/ai-python/`.
 
 ---
 
@@ -10,10 +10,10 @@
 
 | Slot | Mô tả |
 | :-- | :-- |
-| `PRD_PATH` | Path tới `ai_python/docs/prd/PRD_*.md` |
+| `PRD_PATH` | Path tới `docs/ai-python/prd/PRD_*.md` |
 | `TASK_ID` | Ví dụ `Task042` |
 | `TASK_SLUG` | `kebab-case` đồng bộ PRD |
-| `OUT_PATH` | Path file SRS sẽ ghi — ví dụ `ai_python/docs/srs/SRS_AI_<TASK_ID>_<slug>.md` |
+| `OUT_PATH` | Path file SRS sẽ ghi — ví dụ `docs/ai-python/srs/SRS_AI_<TASK_ID>_<slug>.md` |
 | `MCP_PHASE` | `0` = baseline; tăng khi có vòng MCP/tool mở rộng |
 
 ---

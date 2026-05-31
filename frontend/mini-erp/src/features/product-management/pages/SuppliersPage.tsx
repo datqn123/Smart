@@ -65,8 +65,6 @@ export function SuppliersPage() {
   const { setTitle } = usePageTitle()
   const queryClient = useQueryClient()
   const isOwner = useAuthStore((s) => s.user?.role === "Owner")
-  const selectedSupplierRef = useRef<Supplier | null>(null)
-  const editingSupplierRef = useRef<Supplier | undefined>(undefined)
   const scrollRootRef = useRef<HTMLDivElement>(null)
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
 
@@ -83,9 +81,6 @@ export function SuppliersPage() {
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingSupplier, setEditingSupplier] = useState<Supplier | undefined>()
-
-  selectedSupplierRef.current = selectedSupplier
-  editingSupplierRef.current = editingSupplier
 
   useEffect(() => {
     setTitle("Nhà cung cấp")
@@ -212,14 +207,20 @@ export function SuppliersPage() {
       void queryClient.invalidateQueries({ queryKey: ["product-management", "suppliers", "detail", deletedId] })
       setSelectedIds((prev) => prev.filter((i) => i !== deletedId))
       setDeleteTarget(null)
-      setSelectedSupplier((p) => (p?.id === deletedId ? null : p))
-      if (selectedSupplierRef.current?.id === deletedId) {
-        setIsDetailOpen(false)
-      }
-      setEditingSupplier((p) => (p?.id === deletedId ? undefined : p))
-      if (editingSupplierRef.current?.id === deletedId) {
-        setIsFormOpen(false)
-      }
+      setSelectedSupplier((p) => {
+        if (p?.id === deletedId) {
+          setIsDetailOpen(false)
+          return null
+        }
+        return p
+      })
+      setEditingSupplier((p) => {
+        if (p?.id === deletedId) {
+          setIsFormOpen(false)
+          return undefined
+        }
+        return p
+      })
       toast.success("Đã xóa nhà cung cấp")
     },
     onError: (e) => {
@@ -246,14 +247,20 @@ export function SuppliersPage() {
       }
       setSelectedIds([])
       setIsDeletingBulk(false)
-      setSelectedSupplier((p) => (p && data.deletedIds.includes(p.id) ? null : p))
-      if (selectedSupplierRef.current && data.deletedIds.includes(selectedSupplierRef.current.id)) {
-        setIsDetailOpen(false)
-      }
-      setEditingSupplier((p) => (p && data.deletedIds.includes(p.id) ? undefined : p))
-      if (editingSupplierRef.current && data.deletedIds.includes(editingSupplierRef.current.id)) {
-        setIsFormOpen(false)
-      }
+      setSelectedSupplier((p) => {
+        if (p && data.deletedIds.includes(p.id)) {
+          setIsDetailOpen(false)
+          return null
+        }
+        return p
+      })
+      setEditingSupplier((p) => {
+        if (p && data.deletedIds.includes(p.id)) {
+          setIsFormOpen(false)
+          return undefined
+        }
+        return p
+      })
       toast.success(
         data.deletedCount > 0 ? `Đã xóa ${data.deletedCount} nhà cung cấp` : "Đã xóa nhà cung cấp",
       )

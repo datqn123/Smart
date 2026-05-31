@@ -1,7 +1,7 @@
 import { apiJson } from "@/lib/api/http"
 import type { Category } from "../types"
 
-/** Task029 — `GET /api/v1/categories` — `frontend/docs/api/API_Task029_categories_get_list.md`. */
+/** Task029 — `GET /api/v1/categories` — `docs/frontend/api/API_Task029_categories_get_list.md`. */
 export type CategoryNodeDto = {
   id: number
   categoryCode: string
@@ -116,7 +116,7 @@ export type CategoryCreateBody = {
   status?: string
 }
 
-/** Task030 — `POST /api/v1/categories` — `frontend/docs/api/API_Task030_categories_post.md`. */
+/** Task030 — `POST /api/v1/categories` — `docs/frontend/api/API_Task030_categories_post.md`. */
 export function postCategory(body: CategoryCreateBody) {
   const payload = {
     categoryCode: body.categoryCode.trim(),
@@ -139,7 +139,7 @@ export function postCategory(body: CategoryCreateBody) {
 export const createCategory = postCategory
 
 /**
- * Task032 — `PATCH /api/v1/categories/{id}` partial body — `frontend/docs/api/API_Task032_categories_patch.md` §5.
+ * Task032 — `PATCH /api/v1/categories/{id}` partial body — `docs/frontend/api/API_Task032_categories_patch.md` §5.
  * Gửi **ít nhất một** field đổi. JSON `null` trên một key = không đổi (BE). Xóa mô tả: gửi `description: ""` (BE chuẩn hoá empty → NULL).
  * Không dùng PATCH để kéo về gốc: không gửi `parentId: null` khi đổi cha (v1 — `CategoriesPage.buildPatchBody`).
  */

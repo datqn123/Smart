@@ -17,11 +17,11 @@ function normExpiryDay(s: string | undefined): string | null {
 
 /**
  * Task005 — `GET /api/v1/inventory` (màn Tồn kho) — hợp đồng
- * `frontend/docs/api/API_Task005_inventory_get_list.md` §7.
- * Task006 — `GET /api/v1/inventory/{id}` — `frontend/docs/api/API_Task006_inventory_get_by_id.md`.
- * Task007 — `PATCH /api/v1/inventory/{id}` — `frontend/docs/api/API_Task007_inventory_patch.md`.
- * Task008 — `PATCH /api/v1/inventory/bulk` — `frontend/docs/api/API_Task008_inventory_bulk_patch.md`.
- * Task009 — `GET /api/v1/inventory/summary` — `frontend/docs/api/API_Task009_inventory_get_summary.md`.
+ * `docs/frontend/api/API_Task005_inventory_get_list.md` §7.
+ * Task006 — `GET /api/v1/inventory/{id}` — `docs/frontend/api/API_Task006_inventory_get_by_id.md`.
+ * Task007 — `PATCH /api/v1/inventory/{id}` — `docs/frontend/api/API_Task007_inventory_patch.md`.
+ * Task008 — `PATCH /api/v1/inventory/bulk` — `docs/frontend/api/API_Task008_inventory_bulk_patch.md`.
+ * Task009 — `GET /api/v1/inventory/summary` — `docs/frontend/api/API_Task009_inventory_get_summary.md`.
  */
 export type InventoryListSummary = {
   totalSkus: number

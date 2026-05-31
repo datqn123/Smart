@@ -1,5 +1,11 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { mockSuppliers } from './mockData';
+import type { Supplier } from './types';
+import {
+  PHONE_FORMAT_MESSAGE,
+  validateSupplierForm,
+  type SupplierFormData,
+} from './validation';
 
 // ==========================================
 // Supplier Tests (Task011)
@@ -11,7 +17,7 @@ describe('Supplier Filter Logic (Task011)', () => {
     status?: 'Active' | 'Inactive' | 'all';
   }
 
-  const applyFilters = (suppliers: any[], filters: SupplierFilters) => {
+  const applyFilters = (suppliers: Supplier[], filters: SupplierFilters) => {
     let result = [...suppliers];
     if (filters.search) {
       const q = filters.search.toLowerCase();
@@ -44,51 +50,38 @@ describe('Supplier Filter Logic (Task011)', () => {
 });
 
 describe('Supplier Validation (Task011)', () => {
-  interface SupplierForm {
-    name: string;
-    supplierCode?: string;
-    phone?: string;
-    email?: string;
-    address?: string;
-    taxCode?: string;
-    status: 'Active' | 'Inactive';
-  }
-
-  const validateSupplier = (data: SupplierForm): string[] => {
-    const errors: string[] = [];
-    if (!data.name || data.name.trim().length === 0) {
-      errors.push('Tên nhà cung cấp là bắt buộc');
-    }
-    if (data.phone && !/^0\d{9}$/.test(data.phone)) {
-      errors.push('Số điện thoại không đúng định dạng (10 số, bắt đầu bằng 0)');
-    }
-    if (data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
-      errors.push('Email không đúng định dạng');
-    }
-    if (data.taxCode && !/^\d{10}$/.test(data.taxCode)) {
-      errors.push('Mã số thuế phải là 10 số');
-    }
-    return errors;
+  const validSupplier: SupplierFormData = {
+    name: 'Vinamilk',
+    supplierCode: 'NCC0001',
+    contactPerson: 'Nguyễn Văn B',
+    phone: '0912345678',
+    email: 'test@email.com',
+    address: '',
+    taxCode: '1234567890',
+    status: 'Active',
   };
 
+  const validateSupplier = (data: Partial<SupplierFormData>): string[] =>
+    validateSupplierForm({ ...validSupplier, ...data });
+
   it('nên báo lỗi khi tên trống', () => {
-    expect(validateSupplier({ name: '', status: 'Active' })).toContain('Tên nhà cung cấp là bắt buộc');
+    expect(validateSupplier({ name: '' })).toContain('Vui lòng nhập tên nhà cung cấp');
   });
 
   it('nên báo lỗi khi phone không đúng', () => {
-    expect(validateSupplier({ name: 'Test', phone: '123', status: 'Active' })).toContain('Số điện thoại không đúng định dạng');
+    expect(validateSupplier({ phone: '123' })).toContain(PHONE_FORMAT_MESSAGE);
   });
 
   it('nên báo lỗi khi email không đúng', () => {
-    expect(validateSupplier({ name: 'Test', email: 'invalid', status: 'Active' })).toContain('Email không đúng định dạng');
+    expect(validateSupplier({ email: 'invalid' })).toContain('Email không hợp lệ');
   });
 
   it('nên báo lỗi khi taxCode không đúng', () => {
-    expect(validateSupplier({ name: 'Test', taxCode: '123', status: 'Active' })).toContain('Mã số thuế phải là 10 số');
+    expect(validateSupplier({ taxCode: '123' })).toContain('Mã số thuế phải là 10 số');
   });
 
   it('nên hợp lệ khi dữ liệu đúng', () => {
-    expect(validateSupplier({ name: 'Vinamilk', phone: '0912345678', email: 'test@email.com', taxCode: '1234567890', status: 'Active' }).length).toBe(0);
+    expect(validateSupplier({}).length).toBe(0);
   });
 });
 

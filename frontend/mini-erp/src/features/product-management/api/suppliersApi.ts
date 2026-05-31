@@ -1,7 +1,7 @@
 import { apiJson } from "@/lib/api/http"
 import type { Supplier } from "../types"
 
-/** Task042 — `GET /api/v1/suppliers` — `frontend/docs/api/API_Task042_suppliers_get_list.md` + SRS §8.2. */
+/** Task042 — `GET /api/v1/suppliers` — `docs/frontend/api/API_Task042_suppliers_get_list.md` + SRS §8.2. */
 export const SUPPLIER_LIST_SORT_WHITELIST = [
   "name:asc",
   "name:desc",
@@ -77,7 +77,7 @@ export function getSupplierList(params: GetSupplierListParams = {}) {
   return apiJson<SupplierListPageDto>(`/api/v1/suppliers?${q.toString()}`, { method: "GET", auth: true })
 }
 
-// --- Task043 — `POST /api/v1/suppliers` — `frontend/docs/api/API_Task043_suppliers_post.md`
+// --- Task043 — `POST /api/v1/suppliers` — `docs/frontend/api/API_Task043_suppliers_post.md`
 
 export type SupplierCreateBody = {
   supplierCode: string
@@ -156,13 +156,13 @@ export function postSupplier(body: SupplierCreateBody) {
   })
 }
 
-// --- Task044 — `GET /api/v1/suppliers/{id}` — `frontend/docs/api/API_Task044_suppliers_get_by_id.md`
+// --- Task044 — `GET /api/v1/suppliers/{id}` — `docs/frontend/api/API_Task044_suppliers_get_by_id.md`
 
 export function getSupplierById(id: number) {
   return apiJson<SupplierDetailDto>(`/api/v1/suppliers/${id}`, { method: "GET", auth: true })
 }
 
-// --- Task045 — `PATCH /api/v1/suppliers/{id}` — `frontend/docs/api/API_Task045_suppliers_patch.md`
+// --- Task045 — `PATCH /api/v1/suppliers/{id}` — `docs/frontend/api/API_Task045_suppliers_patch.md`
 
 /** Cùng shape với `SupplierFormData` (Zod) — tách để tránh vòng phụ thuộc với `SupplierForm`. */
 export type SupplierFormPatchInput = {
@@ -259,7 +259,7 @@ export function patchSupplier(id: number, body: Record<string, unknown>) {
   })
 }
 
-// --- Task046 — `DELETE /api/v1/suppliers/{id}` — `frontend/docs/api/API_Task046_suppliers_delete.md`
+// --- Task046 — `DELETE /api/v1/suppliers/{id}` — `docs/frontend/api/API_Task046_suppliers_delete.md`
 
 export type SupplierDeleteDto = {
   id: number
@@ -270,7 +270,7 @@ export function deleteSupplier(id: number) {
   return apiJson<SupplierDeleteDto>(`/api/v1/suppliers/${id}`, { method: "DELETE", auth: true })
 }
 
-// --- Task047 — `POST /api/v1/suppliers/bulk-delete` — `frontend/docs/api/API_Task047_suppliers_bulk_delete.md`
+// --- Task047 — `POST /api/v1/suppliers/bulk-delete` — `docs/frontend/api/API_Task047_suppliers_bulk_delete.md`
 
 export type SupplierBulkDeleteDto = {
   deletedIds: number[]

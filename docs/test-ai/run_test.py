@@ -181,7 +181,7 @@ def extract_question_from_md(filepath):
     return None
 
 def load_all_questions(test_dir):
-    """Load all 83 questions from TEST_AI folder structure."""
+    """Load all 83 questions from docs/test-ai folder structure."""
     questions = []
     groups = sorted([d for d in os.listdir(test_dir) if os.path.isdir(os.path.join(test_dir, d))])
 
@@ -490,7 +490,7 @@ def main():
             if r["status"] == "❌ Fail":
                 print(f"    - {r['question']}: {r['error']}")
 
-    print("\nResults saved to TEST_AI folder.")
+    print("\nResults saved to docs/test-ai folder.")
     print(f"Summary: {os.path.join(test_dir, 'SUMMARY.md')}")
 
 if __name__ == "__main__":

@@ -1,5 +1,11 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { mockCustomers } from './mockData';
+import type { Customer } from './types';
+import {
+  PHONE_FORMAT_MESSAGE,
+  validateCustomerForm,
+  type CustomerFormData,
+} from './validation';
 
 // ==========================================
 // Customer Tests (Task012)
@@ -11,7 +17,7 @@ describe('Customer Filter Logic (Task012)', () => {
     status?: 'Active' | 'Inactive' | 'all';
   }
 
-  const applyFilters = (customers: any[], filters: CustomerFilters) => {
+  const applyFilters = (customers: Customer[], filters: CustomerFilters) => {
     let result = [...customers];
     if (filters.search) {
       const q = filters.search.toLowerCase();
@@ -45,48 +51,36 @@ describe('Customer Filter Logic (Task012)', () => {
 });
 
 describe('Customer Validation (Task012)', () => {
-  interface CustomerForm {
-    name: string;
-    phone: string;
-    email?: string;
-    address?: string;
-    status: 'Active' | 'Inactive';
-  }
-
-  const validateCustomer = (data: CustomerForm): string[] => {
-    const errors: string[] = [];
-    if (!data.name || data.name.trim().length === 0) {
-      errors.push('Tên khách hàng là bắt buộc');
-    }
-    if (!data.phone || data.phone.trim().length === 0) {
-      errors.push('Số điện thoại là bắt buộc');
-    } else if (!/^0\d{9}$/.test(data.phone)) {
-      errors.push('Số điện thoại không đúng định dạng (10 số, bắt đầu bằng 0)');
-    }
-    if (data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
-      errors.push('Email không đúng định dạng');
-    }
-    return errors;
+  const validCustomer: CustomerFormData = {
+    name: 'Nguyễn Văn A',
+    customerCode: 'KH00001',
+    phone: '0912345678',
+    email: '',
+    address: '',
+    status: 'Active',
   };
 
+  const validateCustomer = (data: Partial<CustomerFormData>): string[] =>
+    validateCustomerForm({ ...validCustomer, ...data });
+
   it('nên báo lỗi khi tên trống', () => {
-    expect(validateCustomer({ name: '', phone: '0912345678', status: 'Active' })).toContain('Tên khách hàng là bắt buộc');
+    expect(validateCustomer({ name: '' })).toContain('Vui lòng nhập tên khách hàng');
   });
 
   it('nên báo lỗi khi phone trống', () => {
-    expect(validateCustomer({ name: 'Test', phone: '', status: 'Active' })).toContain('Số điện thoại là bắt buộc');
+    expect(validateCustomer({ phone: '' })).toContain('Vui lòng nhập số điện thoại');
   });
 
   it('nên báo lỗi khi phone không đúng định dạng', () => {
-    expect(validateCustomer({ name: 'Test', phone: '123', status: 'Active' })).toContain('Số điện thoại không đúng định dạng');
+    expect(validateCustomer({ phone: '123' })).toContain(PHONE_FORMAT_MESSAGE);
   });
 
   it('nên báo lỗi khi email không đúng', () => {
-    expect(validateCustomer({ name: 'Test', phone: '0912345678', email: 'invalid', status: 'Active' })).toContain('Email không đúng định dạng');
+    expect(validateCustomer({ email: 'invalid' })).toContain('Email không hợp lệ');
   });
 
   it('nên hợp lệ khi dữ liệu đúng', () => {
-    expect(validateCustomer({ name: 'Nguyễn Văn A', phone: '0912345678', status: 'Active' }).length).toBe(0);
+    expect(validateCustomer({}).length).toBe(0);
   });
 });
 

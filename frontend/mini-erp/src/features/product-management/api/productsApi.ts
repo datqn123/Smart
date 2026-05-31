@@ -1,7 +1,7 @@
 import { apiFormData, apiJson } from "@/lib/api/http"
 import type { Product } from "../types"
 
-/** Task034 — `GET /api/v1/products` — `frontend/docs/api/API_Task034_products_get_list.md` + SRS §8.2. */
+/** Task034 — `GET /api/v1/products` — `docs/frontend/api/API_Task034_products_get_list.md` + SRS §8.2. */
 export const PRODUCT_LIST_SORT_WHITELIST = [
   "name:asc",
   "name:desc",
@@ -172,7 +172,7 @@ export function patchProduct(id: number, body: Record<string, unknown>) {
   })
 }
 
-/** Task038 — `DELETE /api/v1/products/{id}` — `frontend/docs/api/API_Task038_products_delete.md`. */
+/** Task038 — `DELETE /api/v1/products/{id}` — `docs/frontend/api/API_Task038_products_delete.md`. */
 export type ProductDeleteDto = {
   id: number
   deleted: boolean
@@ -286,7 +286,7 @@ export function buildProductPatchBody(
   return body
 }
 
-// --- Task039 — `POST /api/v1/products/{id}/images` — `frontend/docs/api/API_Task039_products_post_image.md` + SRS §4.3
+// --- Task039 — `POST /api/v1/products/{id}/images` — `docs/frontend/api/API_Task039_products_post_image.md` + SRS §4.3
 
 /** Kích thước tối đa một ảnh phía client (khớp Spring multipart + Cloudinary mặc định 5MB). */
 export const PRODUCT_IMAGE_MAX_BYTES = 5 * 1024 * 1024
@@ -342,7 +342,7 @@ export function postProductImageMultipart(
   }, { method: "POST", auth: true })
 }
 
-// --- Task041 — `POST /api/v1/products/bulk-delete` — `frontend/docs/api/API_Task041_products_bulk_delete.md` + SRS §8.8 (Owner-only xóa).
+// --- Task041 — `POST /api/v1/products/bulk-delete` — `docs/frontend/api/API_Task041_products_bulk_delete.md` + SRS §8.8 (Owner-only xóa).
 
 export type ProductsBulkDeleteDto = {
   deletedIds: number[]
@@ -357,7 +357,7 @@ export function postProductsBulkDelete(ids: number[]) {
   })
 }
 
-/** Task035 — `POST /api/v1/products` — `frontend/docs/api/API_Task035_products_post.md`. */
+/** Task035 — `POST /api/v1/products` — `docs/frontend/api/API_Task035_products_post.md`. */
 export type ProductCreateBody = {
   skuCode: string
   name: string

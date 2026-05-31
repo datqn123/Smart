@@ -74,8 +74,6 @@ export function CustomersPage() {
   const isAdmin = useAuthStore((s) => s.user?.role === "Admin")
   const isStaff = useAuthStore((s) => s.user?.role === "Staff")
   const canEditLoyaltyPoints = !isStaff
-  const selectedCustomerRef = useRef<Customer | null>(null)
-  const editingCustomerRef = useRef<Customer | undefined>(undefined)
   const scrollRootRef = useRef<HTMLDivElement>(null)
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
 
@@ -91,9 +89,6 @@ export function CustomersPage() {
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState<Customer | undefined>()
-
-  selectedCustomerRef.current = selectedCustomer
-  editingCustomerRef.current = editingCustomer
 
   const selectedCustomerId = selectedCustomer?.id
   const {
@@ -236,14 +231,20 @@ export function CustomersPage() {
       void queryClient.invalidateQueries({ queryKey: ["product-management", "customers", "detail", deletedId] })
       setSelectedIds((prev) => prev.filter((i) => i !== deletedId))
       setDeleteTarget(null)
-      setSelectedCustomer((p) => (p?.id === deletedId ? null : p))
-      if (selectedCustomerRef.current?.id === deletedId) {
-        setIsDetailOpen(false)
-      }
-      setEditingCustomer((p) => (p?.id === deletedId ? undefined : p))
-      if (editingCustomerRef.current?.id === deletedId) {
-        setIsFormOpen(false)
-      }
+      setSelectedCustomer((p) => {
+        if (p?.id === deletedId) {
+          setIsDetailOpen(false)
+          return null
+        }
+        return p
+      })
+      setEditingCustomer((p) => {
+        if (p?.id === deletedId) {
+          setIsFormOpen(false)
+          return undefined
+        }
+        return p
+      })
       toast.success("Đã xóa khách hàng")
     },
     onError: (e) => {

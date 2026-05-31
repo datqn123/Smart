@@ -929,7 +929,7 @@ Browser (React) → Spring Boot (Java, port 8080) → Python FastAPI (port 9000)
 
 **Flow:** `START → domain_guard → classify_intent → chat_normal → END`
 
-`domain_guard` loads the ERP capability index (from `GUID_ERP.md`) and may return `clarify` (SSE + questions) or `reject` before any SQL/draft/chart branch runs.
+`domain_guard` loads the ERP capability index (from `docs/guides/GUID_ERP.md`) and may return `clarify` (SSE + questions) or `reject` before any SQL/draft/chart branch runs.
 
 ```
 Frontend: User types message → POST /api/v1/ai/chat/stream { message, conversationId } + Bearer token

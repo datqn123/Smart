@@ -98,7 +98,7 @@ Sửa `test_config.json` trước khi chạy:
   "python_base_url": "http://127.0.0.1:9000",
   "login_email": "admin@smartinventory.vn",
   "login_password": "admin123",
-  "test_ai_dir": "D:\\do_an_tot_nghiep\\project\\TEST_AI",
+  "test_ai_dir": "D:\\do_an_tot_nghiep\\project\\docs\\test-ai",
   "timeout_per_question_seconds": 120,
   "save_response_to_file": true
 }
@@ -137,9 +137,9 @@ Trên UI chat Mini ERP, chọn chip trước khi gửi câu hỏi:
 
 Ví dụ thủ công: chọn **Bảng kết quả**, gửi *"Hiển thị danh sách sản phẩm gần hết hạn"* — phải thấy bảng read-only dưới bubble assistant (không chỉ bullet text).
 
-API: `frontend/docs/api/API_Task111_ai_chat_interaction_mode.md`
+API: `docs/frontend/api/API_Task111_ai_chat_interaction_mode.md`
 
-**Domain guard (Task112):** Mọi câu qua `domain_guard` trước intent. Ví dụ: *"phiếu xuất khẩu"* → SSE `clarify` + gợi ý *phiếu xuất kho*. Doc: `frontend/docs/api/API_Task112_erp_domain_guard.md`
+**Domain guard (Task112):** Mọi câu qua `domain_guard` trước intent. Ví dụ: *"phiếu xuất khẩu"* → SSE `clarify` + gợi ý *phiếu xuất kho*. Doc: `docs/frontend/api/API_Task112_erp_domain_guard.md`
 
 ## Kết quả test
 

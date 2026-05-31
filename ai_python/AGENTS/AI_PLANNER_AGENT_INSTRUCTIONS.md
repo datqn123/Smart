@@ -19,7 +19,7 @@
 
 | Artifact | Path |
 | :-- | :-- |
-| PRD | `ai_python/docs/prd/PRD_<slug>.md` |
+| PRD | `docs/ai-python/prd/PRD_<slug>.md` |
 
 `<slug>`: `kebab-case` ngắn, duy nhất trong thư mục `prd/`.
 
@@ -29,7 +29,7 @@
 
 Trước khi khóa kiến trúc, được phép đọc có giới hạn:
 
-- `ai_python/README.md`
+- `docs/ai-python/README.md`
 - `ai_python/requirements.txt` hoặc `pyproject.toml` (nếu có)
 - Một file entry (`main.py` hoặc package app) — **không** full-tree grep không cần thiết.
 
@@ -49,7 +49,7 @@ Không mở `.venv/` hay dependency site-packages.
 
 | Điều kiện PASS |
 | :-- |
-| File `ai_python/docs/prd/PRD_<slug>.md` tồn tại, đủ mục Overview / Spec / NFR định lượng / Tech / Task checklist §4 canonical |
+| File `docs/ai-python/prd/PRD_<slug>.md` tồn tại, đủ mục Overview / Spec / NFR định lượng / Tech / Task checklist §4 canonical |
 | Option đã chọn được Owner hoặc agent (khi `pick optimal`) ghi rõ trong PRD |
 
 **STOP** (escalate Owner): PRD tràn sang sửa Spring/React cụ thể mà không có handoff task riêng — ghi **Out-of-scope** và artifact đề xuất.

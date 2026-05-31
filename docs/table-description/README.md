@@ -1,4 +1,4 @@
-# TABLE_DESCRIPTION
+# docs/table-description
 
 Consolidated database schema reference for AI context. Generated from Flyway migrations V1–V52.
 
