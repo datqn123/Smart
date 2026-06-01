@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "codegraph": {
+      "type": "stdio",
+      "command": "codegraph",
+      "args": [
+        "serve",
+        "--mcp",
+        "--path",
+        "D:\\do_an_tot_nghiep\\project"
+      ]
+    }
+  }
+}

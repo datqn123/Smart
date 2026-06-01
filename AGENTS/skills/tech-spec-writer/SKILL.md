@@ -25,6 +25,22 @@ Start from one or more of:
 
 If the SRS path is not provided, search for likely SRS files by task id or feature slug.
 
+## CodeGraph First
+
+Before broad manual scanning or deciding implementation blast radius, use [`../codegraph-context/SKILL.md`](../codegraph-context/SKILL.md).
+
+Required discovery:
+
+```powershell
+codegraph status --json
+codegraph context "<SRS feature or implementation task>" --format json
+codegraph impact "<main symbol or endpoint>" --json
+codegraph callers "<main symbol>" --json
+codegraph callees "<main symbol>" --json
+```
+
+If status reports pending changes, run `codegraph sync` before relying on results. Use CodeGraph to identify files to read/edit, dependency risks, and tests, then verify by reading source files.
+
 Useful commands:
 
 ```powershell
@@ -115,4 +131,3 @@ The Tech Spec is done when:
 - Horizontal analysis has been performed and documented.
 - Open questions and gaps are traceable.
 - Readiness is declared.
-

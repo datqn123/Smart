@@ -1,4 +1,5 @@
 import { Checkbox } from "@/components/ui/checkbox"
+import React from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -10,6 +11,7 @@ import {
   DATA_TABLE_ROOT_CLASS,
   DATA_TABLE_ACTION_SINGLE_HEAD_CLASS,
   DATA_TABLE_ACTION_SINGLE_CELL_CLASS,
+  DATA_TABLE_CHECKBOX_CLASS,
   STOCK_TABLE_COL,
   TABLE_HEAD_CLASS,
   TABLE_CELL_PRIMARY_CLASS,
@@ -20,6 +22,7 @@ import {
 
 interface StockTableProps {
   data: InventoryItem[]
+  visibleColumnKeys: string[]
   selectedIds: number[]
   onSelect: (id: number) => void
   onViewDetails: (item: InventoryItem) => void
@@ -30,6 +33,7 @@ interface StockTableProps {
 
 export function StockTable({
   data,
+  visibleColumnKeys,
   selectedIds,
   onSelect,
   onViewDetails,
@@ -37,6 +41,70 @@ export function StockTable({
   someSelected,
   onSelectAll,
 }: StockTableProps) {
+  const columnRenderers = {
+    skuCode: {
+      head: <TableHead className={cn(STOCK_TABLE_COL.skuCode, TABLE_HEAD_CLASS, "px-4 text-left")}>Mã SP</TableHead>,
+      cell: (item: InventoryItem) => <TableCell className={cn(STOCK_TABLE_COL.skuCode, TABLE_CELL_MONO_CLASS, "px-4 text-left")}>{item.skuCode}</TableCell>,
+    },
+    productName: {
+      head: <TableHead className={cn(STOCK_TABLE_COL.productName, TABLE_HEAD_CLASS, "px-4 text-left")}>Tên sản phẩm</TableHead>,
+      cell: (item: InventoryItem) => <TableCell className={cn(STOCK_TABLE_COL.productName, TABLE_CELL_PRIMARY_CLASS, "px-4 text-left truncate min-w-0")}>{item.productName}</TableCell>,
+    },
+    location: {
+      head: <TableHead className={cn(STOCK_TABLE_COL.location, TABLE_HEAD_CLASS, "px-4 text-left")}>Vị trí</TableHead>,
+      cell: (item: InventoryItem) => (
+        <TableCell className={cn(STOCK_TABLE_COL.location, TABLE_CELL_SECONDARY_CLASS, "px-4 text-left")}>
+          <Badge variant="outline" className="text-xs font-normal border-slate-200 h-6">
+            {item.warehouseCode}-{item.shelfCode}
+          </Badge>
+        </TableCell>
+      ),
+    },
+    quantity: {
+      head: <TableHead className={cn(STOCK_TABLE_COL.quantity, TABLE_HEAD_CLASS, "px-4 text-left")}>Tồn kho</TableHead>,
+      cell: (item: InventoryItem) => (
+        <TableCell className={cn(STOCK_TABLE_COL.quantity, TABLE_CELL_NUMBER_CLASS, "px-4 text-left min-w-0")}>
+          <div className="flex w-full min-w-0 justify-start">
+            <div className="inline-grid max-w-full grid-cols-[0.875rem_minmax(1.25rem,1fr)_2.75rem] items-center gap-x-1.5 text-sm">
+              <span className="flex w-3.5 shrink-0 justify-start" aria-hidden>
+                <Package className="h-3 w-3 text-slate-400" />
+              </span>
+              <span className="tabular-nums text-left font-medium text-slate-900">{item.quantity}</span>
+              <span className="truncate text-left text-xs font-normal text-slate-500" title={item.unitName}>
+                {item.unitName}
+              </span>
+            </div>
+          </div>
+        </TableCell>
+      ),
+    },
+    expiryDate: {
+      head: <TableHead className={cn(STOCK_TABLE_COL.expiryDate, TABLE_HEAD_CLASS, "px-4 text-left")}>Hạn SD</TableHead>,
+      cell: (item: InventoryItem) => (
+        <TableCell className={cn(STOCK_TABLE_COL.expiryDate, TABLE_CELL_SECONDARY_CLASS, "px-4 text-left")}>
+          {item.expiryDate ? new Date(item.expiryDate).toLocaleDateString("vi-VN") : "—"}
+        </TableCell>
+      ),
+    },
+    status: {
+      head: <TableHead className={cn(STOCK_TABLE_COL.status, TABLE_HEAD_CLASS, "px-4 text-left")}>Trạng thái</TableHead>,
+      cell: (item: InventoryItem) => {
+        const status = getInventoryRowStatusDisplay(item)
+        return (
+          <TableCell className={cn(STOCK_TABLE_COL.status, "px-4 text-left")}>
+            <Badge variant="secondary" className={`${status.badgeClass} text-xs font-normal border-none`}>
+              {status.label}
+            </Badge>
+          </TableCell>
+        )
+      },
+    },
+  } satisfies Record<string, { head: React.ReactNode; cell: (item: InventoryItem) => React.ReactNode }>
+  const orderedColumns = visibleColumnKeys
+    .map((key) => ({ key, renderer: columnRenderers[key as keyof typeof columnRenderers] }))
+    .filter((entry): entry is { key: string; renderer: (typeof columnRenderers)[keyof typeof columnRenderers] } => entry.renderer != null)
+  const emptyColSpan = orderedColumns.length + 2
+
   return (
     <Table data-testid="stock-table" className={DATA_TABLE_ROOT_CLASS}>
       <TableHeader className="sticky top-0 z-20 bg-slate-50 shadow-sm border-b">
@@ -46,46 +114,24 @@ export function StockTable({
               checked={allSelected ? true : someSelected ? "indeterminate" : false}
               onCheckedChange={(checked) => onSelectAll(checked as boolean)}
               aria-label="Select all"
-              className="border-slate-300 data-[state=checked]:bg-white data-[state=checked]:text-blue-600 data-[state=checked]:border-blue-600"
+              className={DATA_TABLE_CHECKBOX_CLASS}
             />
           </TableHead>
-          <TableHead className={cn(STOCK_TABLE_COL.skuCode, TABLE_HEAD_CLASS, "px-4 text-left")}>
-            Mã SP
-          </TableHead>
-          <TableHead
-            className={cn(STOCK_TABLE_COL.productName, TABLE_HEAD_CLASS, "px-4 text-left")}
-          >
-            Tên sản phẩm
-          </TableHead>
-          <TableHead className={cn(STOCK_TABLE_COL.location, TABLE_HEAD_CLASS, "px-4 text-left")}>
-            Vị trí
-          </TableHead>
-          <TableHead
-            className={cn(STOCK_TABLE_COL.quantity, TABLE_HEAD_CLASS, "px-4 text-left")}
-          >
-            Tồn kho
-          </TableHead>
-          <TableHead className={cn(STOCK_TABLE_COL.expiryDate, TABLE_HEAD_CLASS, "px-4 text-left")}>
-            Hạn SD
-          </TableHead>
-          <TableHead className={cn(STOCK_TABLE_COL.status, TABLE_HEAD_CLASS, "px-4 text-left")}>
-            Trạng thái
-          </TableHead>
+          {orderedColumns.map((column) => <React.Fragment key={column.key}>{column.renderer.head}</React.Fragment>)}
           <TableHead className={cn(DATA_TABLE_ACTION_SINGLE_HEAD_CLASS, TABLE_HEAD_CLASS, "text-center")}>
-            NV
+            Thao tác
           </TableHead>
         </TableRow>
       </TableHeader>
       <TableBody className="divide-y divide-slate-100 bg-white">
         {data.length === 0 ? (
           <TableRow>
-            <TableCell colSpan={8} className="h-24 text-center text-slate-500 text-sm">
+            <TableCell colSpan={emptyColSpan} className="h-24 text-center text-slate-500 text-sm">
               Không tìm thấy sản phẩm nào.
             </TableCell>
           </TableRow>
         ) : (
           data.map((item) => {
-            const status = getInventoryRowStatusDisplay(item)
             const isSelected = selectedIds.includes(item.id)
             return (
               <TableRow
@@ -98,43 +144,10 @@ export function StockTable({
                     checked={isSelected}
                     onCheckedChange={() => onSelect(item.id)}
                     aria-label={`Select ${item.productName}`}
-                    className="border-slate-300 data-[state=checked]:bg-white data-[state=checked]:text-blue-600 data-[state=checked]:border-blue-600"
+                    className={DATA_TABLE_CHECKBOX_CLASS}
                   />
                 </TableCell>
-                <TableCell
-                  className={cn(STOCK_TABLE_COL.skuCode, TABLE_CELL_MONO_CLASS, "px-4 text-left")}
-                >
-                  {item.skuCode}
-                </TableCell>
-                <TableCell className={cn(STOCK_TABLE_COL.productName, TABLE_CELL_PRIMARY_CLASS, "px-4 text-left truncate min-w-0")}>
-                  {item.productName}
-                </TableCell>
-                <TableCell className={cn(STOCK_TABLE_COL.location, TABLE_CELL_SECONDARY_CLASS, "px-4 text-left")}>
-                  <Badge variant="outline" className="text-xs font-normal border-slate-200 h-6">
-                    {item.warehouseCode}-{item.shelfCode}
-                  </Badge>
-                </TableCell>
-                <TableCell className={cn(STOCK_TABLE_COL.quantity, TABLE_CELL_NUMBER_CLASS, "px-4 text-left min-w-0")}>
-                  <div className="flex w-full min-w-0 justify-start">
-                    <div className="inline-grid max-w-full grid-cols-[0.875rem_minmax(1.25rem,1fr)_2.75rem] items-center gap-x-1.5 text-sm">
-                      <span className="flex w-3.5 shrink-0 justify-start" aria-hidden>
-                        <Package className="h-3 w-3 text-slate-400" />
-                      </span>
-                      <span className="tabular-nums text-left font-medium text-slate-900">{item.quantity}</span>
-                      <span className="truncate text-left text-xs font-normal text-slate-500" title={item.unitName}>
-                        {item.unitName}
-                      </span>
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell className={cn(STOCK_TABLE_COL.expiryDate, TABLE_CELL_SECONDARY_CLASS, "px-4 text-left")}>
-                  {item.expiryDate ? new Date(item.expiryDate).toLocaleDateString("vi-VN") : "—"}
-                </TableCell>
-                <TableCell className={cn(STOCK_TABLE_COL.status, "px-4 text-left")}>
-                  <Badge variant="secondary" className={`${status.badgeClass} text-xs font-normal border-none`}>
-                    {status.label}
-                  </Badge>
-                </TableCell>
+                {orderedColumns.map((column) => <React.Fragment key={column.key}>{column.renderer.cell(item)}</React.Fragment>)}
                 <TableCell className={cn(DATA_TABLE_ACTION_SINGLE_CELL_CLASS, "px-2 text-center")}>
                   <div className="flex items-center justify-center">
                     <Button

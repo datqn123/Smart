@@ -27,6 +27,32 @@ import type { StockDispatchDetailResponse } from "@/features/inventory/api/dispa
 import { ApiRequestError } from "@/lib/api/http"
 import { toast } from "sonner"
 
+const PAGE_TITLE_VI: Record<string, string> = {
+  dashboard: "Bảng điều khiển",
+  "ai-insights": "Phân tích AI",
+  stock: "Tồn kho",
+  inbound: "Phiếu nhập kho",
+  dispatch: "Phiếu xuất kho",
+  locations: "Vị trí kho",
+  categories: "Danh mục sản phẩm",
+  list: "Quản lý sản phẩm",
+  suppliers: "Nhà cung cấp",
+  customers: "Khách hàng",
+  retail: "Đơn bán lẻ",
+  wholesale: "Lịch sử hóa đơn",
+  returns: "Đơn trả hàng",
+  transactions: "Giao dịch thu chi",
+  debt: "Sổ nợ",
+  ledger: "Sổ cái tài chính",
+  revenue: "Doanh thu",
+  "top-products": "Top sản phẩm",
+  chat: "Trợ lý ảo AI",
+  "store-info": "Thông tin cửa hàng",
+  employees: "Quản lý nhân viên",
+  alerts: "Cấu hình cảnh báo",
+  "system-logs": "Nhật ký hệ thống",
+}
+
 function initialsFromName(name: string): string {
   const p = name.trim().split(/\s+/).filter(Boolean)
   if (p.length === 0) return "?"
@@ -128,11 +154,10 @@ export function Header() {
   }, [isNotificationsOpen, isAuthenticated, queryClient])
 
   const pathSegments = location.pathname.split("/").filter(Boolean)
-  const currentPage =
-    pathSegments.length > 0
-      ? pathSegments[pathSegments.length - 1].charAt(0).toUpperCase() +
-        pathSegments[pathSegments.length - 1].slice(1)
-      : "Dashboard"
+  const lastSegment = pathSegments.length > 0 ? pathSegments[pathSegments.length - 1] : undefined
+  const currentPage = lastSegment
+    ? (PAGE_TITLE_VI[lastSegment] ?? lastSegment.charAt(0).toUpperCase() + lastSegment.slice(1))
+    : "Bảng điều khiển"
 
   const notifData = notificationsQuery.data
   const items = notifData?.items ?? []
@@ -204,7 +229,7 @@ export function Header() {
 
           <Link to="/" className="flex items-center hover:text-slate-900 transition-colors">
             <Home className="w-4 h-4 md:mr-2" />
-            <span className="hidden md:inline">Home</span>
+            <span className="hidden md:inline">Trang chủ</span>
           </Link>
           <span className="text-slate-300">/</span>
           <span className="font-medium text-slate-900">{currentPage}</span>

@@ -14,6 +14,20 @@ Do not edit source files under `ai_python/` while using this skill unless the us
 
 Read only the slices needed for the requested feature, but cover every affected layer.
 
+### CodeGraph First
+
+Before broad manual scanning, use [`../codegraph-context/SKILL.md`](../codegraph-context/SKILL.md).
+
+Required discovery:
+
+```powershell
+codegraph status --json
+codegraph context "<feature or bug request>" --format json
+codegraph query "<domain symbol, route, page, service, table>" --json
+```
+
+If status reports pending changes, run `codegraph sync` before relying on results. Use CodeGraph `relatedFiles`, symbols, routes, and relationships as traceability candidates, then read the actual source files before writing requirements.
+
 ### Always Read
 
 - `docs/frontend/mini-erp/features/FEATURES_UI_INDEX.md`
@@ -178,4 +192,3 @@ An SRS is done when:
 - SQL/data impact is tied to real migrations or marked as OQ/GAP.
 - AI flow names orchestrator, executor, tools, state keys, and guardrails.
 - Open questions are explicit and not hidden inside prose.
-

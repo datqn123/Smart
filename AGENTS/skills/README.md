@@ -13,6 +13,7 @@ AGENTS/skills/<skill-name>/
 
 Available skills:
 
+- [`codegraph-context`](codegraph-context/SKILL.md)
 - [`srs-writer`](srs-writer/SKILL.md)
 - [`tech-spec-writer`](tech-spec-writer/SKILL.md)
 - [`qa-spec-writer`](qa-spec-writer/SKILL.md)

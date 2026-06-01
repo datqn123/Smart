@@ -258,11 +258,11 @@ export function StockActionDialog({
           <DialogTitle className="text-xl flex h-11 shrink-0 items-center gap-2 leading-none">
             {type === "import" ? (
               <>
-                <ArrowDownToLine className="h-5 w-5 shrink-0 text-blue-600" aria-hidden /> Nhập kho hàng loạt
+                <ArrowDownToLine className="h-5 w-5 shrink-0 text-slate-700" aria-hidden /> Nhập kho hàng loạt
               </>
             ) : (
               <>
-                <ArrowUpFromLine className="h-5 w-5 shrink-0 text-orange-600" aria-hidden /> Xuất kho hàng loạt
+                <ArrowUpFromLine className="h-5 w-5 shrink-0 text-slate-700" aria-hidden /> Xuất kho hàng loạt
               </>
             )}
           </DialogTitle>

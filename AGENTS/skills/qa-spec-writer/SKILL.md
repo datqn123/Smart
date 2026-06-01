@@ -24,6 +24,20 @@ Prefer inputs in this order:
 3. Existing tests in backend, frontend, or `ai_python` when applicable.
 4. Existing API docs and task folders.
 
+## CodeGraph First
+
+Before broad manual test discovery, use [`../codegraph-context/SKILL.md`](../codegraph-context/SKILL.md).
+
+Required discovery:
+
+```powershell
+codegraph status --json
+codegraph context "<feature test scope>" --format json
+codegraph affected <expected-or-changed-source-files> --json
+```
+
+If status reports pending changes, run `codegraph sync` before relying on results. Use CodeGraph to seed affected tests and regression scope, then verify by reading existing tests and source.
+
 Useful commands:
 
 ```powershell
@@ -83,4 +97,3 @@ The QA Spec is done when:
 - AI cases classify failures across LangGraph logic, Harness guardrails, tool integration, and contract drift.
 - Required test data and mocks are named.
 - Readiness is declared.
-

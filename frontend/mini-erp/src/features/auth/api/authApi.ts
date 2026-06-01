@@ -1,4 +1,5 @@
 import { apiJson } from "@/lib/api/http"
+import { buildClientSessionHeaders } from "@/features/auth/lib/clientSessionId"
 
 export type LoginUserDto = {
   id: number
@@ -23,6 +24,7 @@ export type RefreshResponseData = {
 export function postLogin(body: { email: string; password: string }) {
   return apiJson<LoginResponseData>("/api/v1/auth/login", {
     method: "POST",
+    headers: buildClientSessionHeaders(),
     body: JSON.stringify(body),
   })
 }
@@ -39,6 +41,7 @@ export function postPasswordResetRequest(body: { username: string; message?: str
 export function postRefresh(body: { refreshToken: string }) {
   return apiJson<RefreshResponseData>("/api/v1/auth/refresh", {
     method: "POST",
+    headers: buildClientSessionHeaders(),
     body: JSON.stringify(body),
   })
 }

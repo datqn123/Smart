@@ -1,5 +1,6 @@
 import { getApiUrl } from "@/lib/api/config"
 import { syncMenuPermissionsFromSessionStorage } from "@/features/auth/lib/syncMenuPermissionsFromSessionStorage"
+import { buildClientSessionHeaders } from "@/features/auth/lib/clientSessionId"
 
 /**
  * Task003 — POST /api/v1/auth/refresh (public, no Bearer).
@@ -15,7 +16,7 @@ export async function tryRefreshAccessToken(): Promise<boolean> {
   const url = getApiUrl("/api/v1/auth/refresh")
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: buildClientSessionHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ refreshToken }),
   })
   let json: unknown

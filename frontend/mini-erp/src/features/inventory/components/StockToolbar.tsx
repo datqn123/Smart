@@ -56,7 +56,8 @@ export function StockToolbar({ searchStr, onSearch, status, onStatusChange, sele
           <Button 
             variant="outline" 
             size="sm" 
-            onClick={() => hasSelection ? onAction("import") : null}
+            onClick={() => onAction("import")}
+            disabled={!hasSelection}
             className="min-h-[44px] xl:min-h-[36px]"
           >
             <ArrowDownToLine className="mr-1.5 h-4 w-4" />Nhập
@@ -64,7 +65,8 @@ export function StockToolbar({ searchStr, onSearch, status, onStatusChange, sele
           <Button 
             variant="outline" 
             size="sm" 
-            onClick={() => hasSelection ? onAction("export") : null}
+            onClick={() => onAction("export")}
+            disabled={!hasSelection}
             className="min-h-[44px] xl:min-h-[36px]"
           >
             <ArrowUpFromLine className="mr-1.5 h-4 w-4" />Xuất
@@ -72,7 +74,8 @@ export function StockToolbar({ searchStr, onSearch, status, onStatusChange, sele
           <Button 
             variant="outline" 
             size="sm" 
-            onClick={() => hasSelection ? onAction("edit") : null}
+            onClick={() => onAction("edit")}
+            disabled={!hasSelection}
             className="min-h-[44px] xl:min-h-[36px]"
           >
             <Edit2 className="mr-1.5 h-4 w-4" />Sửa

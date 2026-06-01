@@ -58,7 +58,7 @@ public class AuthService {
 	}
 
 	@Transactional
-	public LoginResult login(String email, String password) {
+	public LoginResult login(String email, String password, String clientSessionId) {
 		String emailNorm = email.strip();
 
 		userRepository.findByEmailIgnoreCase(emailNorm).ifPresent(u -> {
@@ -74,12 +74,12 @@ public class AuthService {
 		User user = userRepository.findActiveByEmailIgnoreCase(emailNorm)
 				.orElseThrow(() -> new BusinessException(ApiErrorCode.UNAUTHORIZED, UNAUTHORIZED_LOGIN));
 
-		loginSessionRegistry.assertNoConcurrentSession(user.getId());
-
 		if (!passwordEncoder.matches(password, user.getPasswordHash())) {
 			loginBruteForceProtection.onFailure(user.getId(), userRepository);
 			throw new BusinessException(ApiErrorCode.UNAUTHORIZED, UNAUTHORIZED_LOGIN);
 		}
+
+		loginSessionRegistry.assertNoConcurrentSession(user.getId(), clientSessionId);
 
 		loginBruteForceProtection.onSuccess(user.getId());
 
@@ -98,7 +98,7 @@ public class AuthService {
 		userRepository.save(user);
 
 		systemLogJdbcRepository.insertAuthLoginSuccess(user.getId());
-		loginSessionRegistry.register(user.getId(), accessToken);
+		loginSessionRegistry.register(user.getId(), accessToken, clientSessionId);
 
 		LoginResult.LoginUserDto dto = new LoginResult.LoginUserDto(user.getId(), user.getUsername(), user.getFullName(),
 				user.getEmail(), roleName);

@@ -22,12 +22,14 @@ import {
 import { ApiRequestError } from "@/lib/api/http"
 import { postStockReceipt, type StockReceiptCreateBody } from "../api/stockReceiptsApi"
 import { postStockDispatch, type StockDispatchCreateBody } from "../api/dispatchApi"
+import { DATA_TABLE_SHELL_CLASS, DATA_TABLE_SCROLL_CLASS } from "@/lib/data-table-layout"
 
 import { StockToolbar } from "../components/StockToolbar"
 import { StockTable } from "../components/StockTable"
 import { StockBatchDetailsDialog } from "../components/StockBatchDetailsDialog"
 import { StockActionDialog } from "../components/StockActionDialog"
 import { StockEditDialog } from "../components/StockEditDialog"
+import { useTableColumnOrder } from "../hooks/useTableVisibleColumns"
 
 const EMPTY_KPIS: InventoryKPIs = {
   totalSKUs: 0,
@@ -74,6 +76,14 @@ export function StockPage() {
   const navigate = useNavigate()
   const { setTitle } = usePageTitle()
   const [filters, setFilters] = useState<InventoryFilters>({ search: "", status: "all" })
+  const visibleColumnKeys = useTableColumnOrder("inventory_stock", [
+    "skuCode",
+    "productName",
+    "location",
+    "quantity",
+    "expiryDate",
+    "status",
+  ])
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [selectedIds, setSelectedIds] = useState<number[]>([])
 
@@ -420,7 +430,7 @@ export function StockPage() {
         />
       </div>
 
-      <div className="flex-1 min-h-0 bg-white border border-slate-200/60 rounded-xl shadow-md overflow-hidden flex flex-col">
+      <div className={DATA_TABLE_SHELL_CLASS}>
         {isPending && !data ? (
           <div className="p-8 text-center text-slate-500 flex-1">Đang tải từ server…</div>
         ) : isError && !data ? (
@@ -428,10 +438,11 @@ export function StockPage() {
         ) : (
           <div
             ref={scrollRootRef}
-            className="flex-1 overflow-y-auto relative scroll-smooth [scrollbar-gutter:stable] min-h-0"
+            className={DATA_TABLE_SCROLL_CLASS}
           >
             <StockTable
               data={listItems}
+              visibleColumnKeys={visibleColumnKeys}
               selectedIds={selectedIds}
               onSelect={handleSelect}
               onViewDetails={handleViewDetails}

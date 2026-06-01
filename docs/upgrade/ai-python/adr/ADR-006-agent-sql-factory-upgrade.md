@@ -1,7 +1,7 @@
 # ADR-006 — Agent SQL Factory (SQL-Factory–Lite, Option B)
+**SRS_PATH:** `docs/upgrade/ai-python/srs/SRS_AI_Task007_agent-sql-factory-upgrade.md`  
 
-**SRS_PATH:** `d:\do_an_tot_nghiep\project\docs\ai-python\srs\SRS_AI_Task007_agent-sql-factory-upgrade.md`  
-**TASK_FILE:** `d:\do_an_tot_nghiep\project\docs\ai-python\tasks\Task007.md`  
+**TASK_FILE:** `docs/upgrade/ai-python/tasks/Task007.md`  
 **Date:** 2026-05-11
 
 ## 1. Bối cảnh & quyết định

@@ -22,6 +22,21 @@ Prefer inputs in this order:
 2. Approved SRS if no handoff exists.
 3. Direct user implementation request.
 
+## CodeGraph First
+
+Before editing files, use [`../codegraph-context/SKILL.md`](../codegraph-context/SKILL.md).
+
+Required discovery:
+
+```powershell
+codegraph status --json
+codegraph context "<implementation task>" --format json
+codegraph query "<main symbol, route, component, service, or table>" --json
+codegraph impact "<main symbol>" --json
+```
+
+If status reports pending changes, run `codegraph sync` before relying on results. Before running tests, use `codegraph affected <changed-files> --json` to help choose focused tests. Always verify CodeGraph results by reading source files directly before editing.
+
 Useful search commands:
 
 ```powershell
@@ -82,4 +97,3 @@ Coding is done when:
 - Relevant tests pass or skipped verification is clearly explained.
 - No unrelated user changes were reverted.
 - The final response gives the user enough information to continue confidently.
-

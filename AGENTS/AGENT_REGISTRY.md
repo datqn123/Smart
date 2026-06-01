@@ -6,6 +6,8 @@ This registry maps user-invoked agent names to project skills and handoff behavi
 
 When the user message contains `Agent <name>` or clearly calls one of the aliases below, activate the matching agent and perform the work. Do not only describe what the agent would do.
 
+For any request that would change production code, tests, migrations, runtime config, API contracts, UI behavior, or AI runtime behavior, activate automatic workflow mode even if the user does not mention an agent name.
+
 If the user calls `Agent AUTO`, `AUTO_RUN`, `chạy tự động`, `tự làm hết workflow`, or equivalent, enter automatic mode and choose the first missing stage in the workflow:
 
 1. `SRS_WRITER`
@@ -15,6 +17,8 @@ If the user calls `Agent AUTO`, `AUTO_RUN`, `chạy tự động`, `tự làm h�
 5. `CODE_REVIEW_AGENT`
 
 In automatic mode, do not wait for the user to call each next agent. Stop only when a stage is blocked, requires owner approval, has an unsafe unresolved risk, or reaches the final `CODE_REVIEW_AGENT` result.
+
+The only allowed bypass is an explicit user instruction such as `bỏ qua workflow`, `skip workflow`, or `chỉ sửa nhanh không tạo tài liệu`. If bypassed, the agent must say the bypass was explicit.
 
 ## Registry
 
@@ -30,6 +34,7 @@ In automatic mode, do not wait for the user to call each next agent. Stop only w
 ## Resolution Rules
 
 - Prefer exact agent names over aliases.
+- For implementation requests without an agent name, treat the request as `AUTO_RUN`.
 - If two aliases could match, choose the stage that matches the artifact the user provided.
 - If the user provides raw feature requirements, start with `SRS_WRITER`.
 - If the user provides an SRS path, start with `TECH_SPEC_WRITER`.

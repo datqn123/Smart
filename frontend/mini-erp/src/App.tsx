@@ -36,6 +36,7 @@ import { StoreInfoPage } from "./features/settings/pages/StoreInfoPage"
 import { EmployeesPage } from "./features/settings/pages/EmployeesPage"
 import { AlertSettingsPage } from "./features/settings/pages/AlertSettingsPage"
 import { LogsPage } from "./features/settings/pages/LogsPage"
+import { InterfaceSettingsPage } from "./features/settings/pages/InterfaceSettingsPage"
 import { WarehouseLocationsPage } from "./features/inventory/pages/WarehouseLocationsPage"
 import { ChatBotPage } from "./features/ai/pages/ChatBotPage"
 
@@ -118,6 +119,7 @@ function App() {
           <Route path="/settings/store-info" element={<StoreInfoPage />} />
           <Route path="/settings/employees" element={<EmployeesPage />} />
           <Route path="/settings/alerts" element={<AlertSettingsPage />} />
+          <Route path="/settings/interface" element={<InterfaceSettingsPage />} />
           <Route path="/settings/system-logs" element={<LogsPage />} />
         </Route>
 

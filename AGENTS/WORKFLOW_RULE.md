@@ -1,6 +1,10 @@
 # Smart ERP Agent Workflow Rule
 
-Use this workflow when the user wants agents to call each other or invokes `Agent AUTO`, `AUTO_RUN`, `chạy tự động`, or `tự làm hết workflow`.
+Use this workflow for every implementation request in this repository.
+
+This workflow is mandatory when the user asks to write, modify, implement, fix, refactor, wire, migrate, configure, or test production code. Treat those requests as `AUTO_RUN` even when the user does not type an agent name.
+
+The workflow is also used when the user explicitly invokes `Agent AUTO`, `AUTO_RUN`, `chạy tự động`, or `tự làm hết workflow`.
 
 ## Default Chain
 
@@ -102,7 +106,18 @@ Next step:
 
 ### Automatic Mode Trigger
 
-Enter automatic mode when the user says any of:
+Enter automatic mode when the user asks for any code-affecting work:
+
+- implement a feature
+- fix a bug
+- refactor code
+- add or update tests
+- add or update migrations
+- change runtime config
+- wire frontend/backend/API/AI behavior
+- modify production source files
+
+Also enter automatic mode when the user says any of:
 
 - `Agent AUTO`
 - `AUTO_RUN`
@@ -110,6 +125,16 @@ Enter automatic mode when the user says any of:
 - `tự làm hết workflow`
 - `các Agent tự gọi nhau`
 - an equivalent instruction that the workflow should continue without separate agent calls
+
+### Explicit Bypass
+
+The workflow can be bypassed only when the user explicitly says one of:
+
+- `bỏ qua workflow`
+- `skip workflow`
+- `chỉ sửa nhanh không tạo tài liệu`
+
+If bypassed, state that the user explicitly requested the bypass and still preserve core safety rules.
 
 ### Automatic Mode Loop
 
@@ -140,9 +165,48 @@ Stop automatic mode when:
 
 When stopping, report the current stage, reason, last artifact path, and the exact decision or action needed next.
 
+## CodeGraph Discovery Rule
+
+Before a workflow stage performs broad manual scanning or makes scope, impact, test, coding, or review decisions:
+
+1. Load `AGENTS/skills/codegraph-context/SKILL.md`.
+2. Check CodeGraph freshness with MCP status or `codegraph status --json`.
+3. If `pendingChanges` is non-zero, run `codegraph sync` and re-check status.
+4. Use CodeGraph to guide discovery:
+   - SRS: `context` and `query`.
+   - Tech Spec: `impact`, `callers`, and `callees`.
+   - QA Spec: `affected` and `context`.
+   - Coding: `context`, `query`, `impact`, then `affected` for tests.
+   - Code Review: `impact`, `callers`, `callees`, and `affected`.
+5. Verify CodeGraph results by reading the relevant source files directly.
+
+If CodeGraph is unavailable, continue with `rg`, direct file reads, and project docs; record the fallback in the handoff or final response when relevant.
+
+### Visible CodeGraph Preflight
+
+For every code-affecting prompt:
+
+1. The first user-facing progress update must say `CodeGraph preflight` and name the intended CodeGraph operation for the active stage.
+2. The first tool batch must run CodeGraph MCP or CLI fallback before broad manual scanning with `rg`, `Get-Content`, `ls`, or file reads.
+3. If CodeGraph cannot run, say `CodeGraph unavailable` and name the fallback before manual scanning.
+4. The final response must include a concise `CodeGraph:` line with the actual operation used.
+5. If a transcript shows only manual file reads/searches and no CodeGraph preflight, treat that run as workflow non-compliance and restart discovery with CodeGraph before continuing.
+
 ## Safety Boundaries
 
 - Do not edit `ai_python` runtime for workflow documentation tasks.
 - For AI agentic coding tasks, keep LangGraph as orchestrator, Harness as executor/validation boundary, and tools as scoped integrations.
 - For any error or bug, perform horizontal analysis across similar scopes before choosing the fix.
 - Do not broaden implementation beyond the active handoff unless it is necessary to keep contracts consistent.
+
+## Documentation Naming Rule
+
+Before creating any new documentation file under `docs/**` or `AGENTS/**`:
+
+1. Choose the exact destination folder.
+2. Count only files directly inside that folder, non-recursive.
+3. Set the new sequence number to `count + 1`.
+4. Name the file `<NNN>_<descriptive-slug>.md` by default.
+5. Preserve a different numeric width only when the destination folder already consistently uses that width.
+
+Never derive the next number from sibling folders, parent folders, another task folder, global task ids, or files with similar names elsewhere.

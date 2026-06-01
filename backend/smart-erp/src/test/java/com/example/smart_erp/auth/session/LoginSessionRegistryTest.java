@@ -56,6 +56,14 @@ class LoginSessionRegistryTest {
 	}
 
 	@Test
+	void register_storesClientSessionIdWhenProvided() {
+		registry.register(2, "access.jwt.here", "client-A");
+		verify(values).set(eq("auth:session:2"),
+				eq("{\"accessToken\":\"access.jwt.here\",\"clientSessionId\":\"client-A\"}"),
+				eq(Duration.ofSeconds(120L)));
+	}
+
+	@Test
 	void clear_removesSessionKey() {
 		registry.clear(9);
 		verify(redis).delete("auth:session:9");
@@ -72,12 +80,13 @@ class LoginSessionRegistryTest {
 
 	@Test
 	void assertNoConcurrentSession_deletesWhenExistingTokenIsStale() {
-		when(values.get("auth:session:5")).thenReturn("expired.jwt");
+		when(values.get("auth:session:5")).thenReturn("{\"accessToken\":\"expired.jwt\",\"clientSessionId\":\"client-A\"}");
 		when(jwtTokenService.isAccessTokenActiveForSessionMap("expired.jwt")).thenReturn(false);
 
-		registry.assertNoConcurrentSession(5);
+		registry.assertNoConcurrentSession(5, "client-A");
 
-		verify(redis).execute(any(), eq(java.util.List.of("auth:session:5")), eq("expired.jwt"));
+		verify(redis).execute(any(), eq(java.util.List.of("auth:session:5")),
+				eq("{\"accessToken\":\"expired.jwt\",\"clientSessionId\":\"client-A\"}"));
 	}
 
 	@Test
@@ -86,6 +95,26 @@ class LoginSessionRegistryTest {
 		when(jwtTokenService.isAccessTokenActiveForSessionMap("active.jwt")).thenReturn(true);
 
 		org.assertj.core.api.Assertions.assertThatThrownBy(() -> registry.assertNoConcurrentSession(5))
+				.isInstanceOfSatisfying(BusinessException.class,
+						ex -> org.assertj.core.api.Assertions.assertThat(ex.getCode()).isEqualTo(ApiErrorCode.FORBIDDEN));
+	}
+
+	@Test
+	void assertNoConcurrentSession_allowsWhenActiveTokenSameClientSessionId() {
+		when(values.get("auth:session:5")).thenReturn("{\"accessToken\":\"active.jwt\",\"clientSessionId\":\"client-A\"}");
+		when(jwtTokenService.isAccessTokenActiveForSessionMap("active.jwt")).thenReturn(true);
+
+		registry.assertNoConcurrentSession(5, "client-A");
+
+		verify(redis, never()).execute(any(), any(), any());
+	}
+
+	@Test
+	void assertNoConcurrentSession_throwsForbiddenWhenActiveTokenDifferentClientSessionId() {
+		when(values.get("auth:session:5")).thenReturn("{\"accessToken\":\"active.jwt\",\"clientSessionId\":\"client-A\"}");
+		when(jwtTokenService.isAccessTokenActiveForSessionMap("active.jwt")).thenReturn(true);
+
+		org.assertj.core.api.Assertions.assertThatThrownBy(() -> registry.assertNoConcurrentSession(5, "client-B"))
 				.isInstanceOfSatisfying(BusinessException.class,
 						ex -> org.assertj.core.api.Assertions.assertThat(ex.getCode()).isEqualTo(ApiErrorCode.FORBIDDEN));
 	}

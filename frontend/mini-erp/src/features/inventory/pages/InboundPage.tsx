@@ -24,6 +24,8 @@ import {
 import { ApiRequestError } from "@/lib/api/http"
 import { toast } from "sonner"
 import { useAuthStore } from "@/features/auth/store/useAuthStore"
+import { DATA_TABLE_SHELL_CLASS, DATA_TABLE_SCROLL_CLASS } from "@/lib/data-table-layout"
+import { useTableColumnOrder } from "../hooks/useTableVisibleColumns"
 
 const PAGE_SIZE = 20
 const SEARCH_DEBOUNCE_MS = 400
@@ -63,6 +65,16 @@ export function InboundPage() {
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
 
   const [search, setSearch] = useState("")
+  const visibleColumnKeys = useTableColumnOrder("inventory_receipts", [
+    "receiptCode",
+    "supplierName",
+    "receiptDate",
+    "staffName",
+    "invoiceNumber",
+    "lineCount",
+    "totalAmount",
+    "status",
+  ])
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [dateFrom, setDateFrom] = useState("")
@@ -395,11 +407,11 @@ export function InboundPage() {
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col min-h-0 bg-white border border-slate-200/60 rounded-xl overflow-hidden shadow-md">
+      <div className={DATA_TABLE_SHELL_CLASS}>
         <div
           ref={scrollRootRef}
           data-testid="receipt-list-container"
-          className="flex-1 overflow-y-auto relative scroll-smooth [scrollbar-gutter:stable] min-h-0"
+          className={DATA_TABLE_SCROLL_CLASS}
         >
           {isPending && (
             <div className="flex justify-center py-20">
@@ -417,6 +429,7 @@ export function InboundPage() {
             <>
               <ReceiptTable
                 receipts={displayRows}
+                visibleColumnKeys={visibleColumnKeys}
                 onAction={(r) => {
                   setSelectedReceipt(r);
                   setIsPanelOpen(true);

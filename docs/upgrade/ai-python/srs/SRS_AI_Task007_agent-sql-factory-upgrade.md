@@ -3,7 +3,7 @@
 **Status:** Approved for PM  
 **Date:** 2026-05-11  
 **MCP_PHASE:** 0  
-**PRD:** `d:\do_an_tot_nghiep\project\docs\ai-python\prd\PRD_task007-agent-sql-factory-upgrade.md`  
+**PRD:** `docs/upgrade/ai-python/prd/PRD_Task007_agent-sql-factory-upgrade.md`  
 **Task ID:** `Task007`  
 **Slug:** `agent-sql-factory-upgrade`
 

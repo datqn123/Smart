@@ -35,9 +35,9 @@ export const DATA_TABLE_ACTION_SINGLE_CELL_CLASS = `${DATA_TABLE_ACTION_SINGLE_C
 /** Phiếu nhập kho — width khớp thead/tbody */
 export const RECEIPT_TABLE_COL = {
   receiptCode: "w-[116px]",
-  supplierName: "min-w-[200px]",
+  supplierName: "w-[168px] min-w-0",
   receiptDate: "w-[100px]",
-  staffName: "w-[152px]",
+  staffName: "w-[140px]",
   invoiceNumber: "w-[92px]",
   lineCount: "w-[72px]",
   totalAmount: "w-[124px]",
@@ -197,3 +197,7 @@ export const TABLE_CELL_NUMBER_CLASS = "text-sm font-medium text-slate-900 tabul
 export const FORM_LABEL_CLASS = "text-sm font-semibold text-slate-700 block mb-1.5"
 export const FORM_INPUT_CLASS = "h-11 border-slate-200 focus:ring-slate-100 focus:border-slate-900"
 export const FORM_HELPER_CLASS = "text-xs text-slate-500 mt-1"
+
+/** Checkbox chuẩn cho các bảng records. */
+export const DATA_TABLE_CHECKBOX_CLASS =
+  "border-slate-300 data-[state=checked]:bg-slate-800 data-[state=checked]:text-white data-[state=checked]:border-slate-800"

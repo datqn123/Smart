@@ -67,7 +67,7 @@ const navConfig: NavItemConfig[] = [
     subItems: [
       { label: "Tồn kho", path: "/inventory/stock" },
       { label: "Phiếu nhập kho", path: "/inventory/inbound" },
-      { label: "Xuất kho & Điều phối", path: "/inventory/dispatch" },
+      { label: "Phiếu xuất kho", path: "/inventory/dispatch" },
     ],
   },
   {
@@ -117,6 +117,7 @@ const navConfig: NavItemConfig[] = [
     icon: <Settings className="h-[18px] w-[18px]" />,
     subItems: [
       { label: "Thông tin cửa hàng", path: "/settings/store-info", always: true },
+      { label: "Cấu hình giao diện", path: "/settings/interface", always: true },
       { label: "Quản lý nhân viên", path: "/settings/employees", perm: "can_manage_staff" },
       { label: "Cấu hình cảnh báo", path: "/settings/alerts", perm: "can_configure_alerts" },
       { label: "Nhật ký hệ thống", path: "/settings/system-logs", always: true },

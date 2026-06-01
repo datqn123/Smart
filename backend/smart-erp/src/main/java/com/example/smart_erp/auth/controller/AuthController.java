@@ -39,6 +39,7 @@ public class AuthController {
 	private static final String UNAUTHORIZED_TOKEN_MESSAGE = "Phiên đăng nhập không hợp lệ hoặc đã hết hạn";
 
 	private static final String REFRESH_SUCCESS_MESSAGE = "Token đã được làm mới";
+	private static final String CLIENT_SESSION_ID_HEADER = "X-Client-Session-Id";
 
 	private final AuthService authService;
 
@@ -57,16 +58,19 @@ public class AuthController {
 	}
 
 	@PostMapping("/refresh")
-	public ResponseEntity<ApiSuccessResponse<RefreshResponseData>> refresh(@Valid @RequestBody RefreshRequest request) {
+	public ResponseEntity<ApiSuccessResponse<RefreshResponseData>> refresh(@Valid @RequestBody RefreshRequest request,
+			@RequestHeader(value = CLIENT_SESSION_ID_HEADER, required = false) String clientSessionId) {
 		RefreshResult result = authService.refresh(request.refreshToken());
-		loginSessionRegistry.register(result.userId(), result.accessToken());
+		loginSessionRegistry.register(result.userId(), result.accessToken(), normalizeClientSessionId(clientSessionId));
 		RefreshResponseData data = new RefreshResponseData(result.accessToken(), result.refreshTokenPlain());
 		return ResponseEntity.ok(ApiSuccessResponse.of(data, REFRESH_SUCCESS_MESSAGE));
 	}
 
 	@PostMapping("/login")
-	public ResponseEntity<ApiSuccessResponse<LoginResponseData>> login(@Valid @RequestBody LoginRequest request) {
-		LoginResult result = authService.login(request.email(), request.password());
+	public ResponseEntity<ApiSuccessResponse<LoginResponseData>> login(@Valid @RequestBody LoginRequest request,
+			@RequestHeader(value = CLIENT_SESSION_ID_HEADER, required = false) String clientSessionId) {
+		LoginResult result = authService.login(request.email(), request.password(),
+				normalizeClientSessionId(clientSessionId));
 		LoginResponseData data = new LoginResponseData(result.accessToken(), result.refreshToken(), result.user());
 		return ResponseEntity.ok(ApiSuccessResponse.of(data, "Đăng nhập thành công"));
 	}
@@ -104,5 +108,12 @@ public class AuthController {
 			throw new BusinessException(ApiErrorCode.UNAUTHORIZED, UNAUTHORIZED_TOKEN_MESSAGE);
 		}
 		return token;
+	}
+
+	private static String normalizeClientSessionId(String value) {
+		if (!StringUtils.hasText(value)) {
+			return null;
+		}
+		return value.strip();
 	}
 }

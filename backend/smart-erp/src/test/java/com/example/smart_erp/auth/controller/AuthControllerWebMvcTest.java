@@ -3,6 +3,7 @@ package com.example.smart_erp.auth.controller;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -72,14 +73,15 @@ class AuthControllerWebMvcTest {
 		when(authService.refresh("my-refresh")).thenReturn(new RefreshResult("new.access", "my-refresh", 1));
 		String bodyJson = Objects.requireNonNull(objectMapper.writeValueAsString(new RefreshRequest("my-refresh")));
 
-		mockMvc.perform(post("/api/v1/auth/refresh").contentType(MediaType.APPLICATION_JSON_VALUE).content(bodyJson))
+		mockMvc.perform(post("/api/v1/auth/refresh").header("X-Client-Session-Id", "client-A")
+				.contentType(MediaType.APPLICATION_JSON_VALUE).content(bodyJson))
 				.andExpect(status().isOk()).andExpect(jsonPath("$.success").value(true))
 				.andExpect(jsonPath("$.data.accessToken").value("new.access"))
 				.andExpect(jsonPath("$.data.refreshToken").value("my-refresh"))
 				.andExpect(jsonPath("$.message").value("Token đã được làm mới"));
 
 		verify(authService).refresh("my-refresh");
-		verify(loginSessionRegistry).register(1, "new.access");
+		verify(loginSessionRegistry).register(1, "new.access", "client-A");
 	}
 
 	@Test
@@ -100,7 +102,7 @@ class AuthControllerWebMvcTest {
 		mockMvc.perform(post("/api/v1/auth/refresh").contentType(MediaType.APPLICATION_JSON_VALUE).content(bodyJson))
 				.andExpect(status().isUnauthorized()).andExpect(jsonPath("$.error").value("UNAUTHORIZED"));
 
-		verify(loginSessionRegistry, never()).register(anyInt(), any());
+		verify(loginSessionRegistry, never()).register(anyInt(), anyString(), any());
 	}
 
 	@Test
@@ -111,37 +113,41 @@ class AuthControllerWebMvcTest {
 		mockMvc.perform(post("/api/v1/auth/refresh").contentType(MediaType.APPLICATION_JSON_VALUE).content(bodyJson))
 				.andExpect(status().isTooManyRequests()).andExpect(jsonPath("$.error").value("TOO_MANY_REQUESTS"));
 
-		verify(loginSessionRegistry, never()).register(anyInt(), any());
+		verify(loginSessionRegistry, never()).register(anyInt(), anyString(), any());
 	}
 
 	@Test
 	void login_trimsPaddedEmailBeforeAuthService() throws Exception {
 		LoginResult.LoginUserDto user = new LoginResult.LoginUserDto(1, "admin", "System Administrator",
 				AuthTask001Fixtures.DEV_OWNER_EMAIL, "Owner");
-		when(authService.login(eq(AuthTask001Fixtures.DEV_OWNER_EMAIL), eq(AuthTask001Fixtures.DEV_OWNER_PASSWORD)))
+		when(authService.login(eq(AuthTask001Fixtures.DEV_OWNER_EMAIL), eq(AuthTask001Fixtures.DEV_OWNER_PASSWORD),
+				eq("client-A")))
 				.thenReturn(new LoginResult("access.jwt", "refreshuuid", user));
 
 		String bodyJson = """
 				{"email":"  %s  ","password":"%s"}
 				""".formatted(AuthTask001Fixtures.DEV_OWNER_EMAIL, AuthTask001Fixtures.DEV_OWNER_PASSWORD);
 
-		mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON_VALUE)
+		mockMvc.perform(post("/api/v1/auth/login").header("X-Client-Session-Id", "client-A")
+				.contentType(MediaType.APPLICATION_JSON_VALUE)
 				.content(Objects.requireNonNull(bodyJson.strip())))
 				.andExpect(status().isOk());
 
-		verify(authService).login(AuthTask001Fixtures.DEV_OWNER_EMAIL, AuthTask001Fixtures.DEV_OWNER_PASSWORD);
+		verify(authService).login(AuthTask001Fixtures.DEV_OWNER_EMAIL, AuthTask001Fixtures.DEV_OWNER_PASSWORD, "client-A");
 	}
 
 	@Test
 	void login_returnsEnvelope() throws Exception {
 		LoginResult.LoginUserDto user = new LoginResult.LoginUserDto(1, "admin", "System Administrator",
 				AuthTask001Fixtures.DEV_OWNER_EMAIL, "Owner");
-		when(authService.login(eq(AuthTask001Fixtures.DEV_OWNER_EMAIL), eq(AuthTask001Fixtures.DEV_OWNER_PASSWORD)))
+		when(authService.login(eq(AuthTask001Fixtures.DEV_OWNER_EMAIL), eq(AuthTask001Fixtures.DEV_OWNER_PASSWORD),
+				eq("client-A")))
 				.thenReturn(new LoginResult("access.jwt", "refreshuuid", user));
 
 		String bodyJson = Objects.requireNonNull(objectMapper.writeValueAsString(
 				new LoginRequest(AuthTask001Fixtures.DEV_OWNER_EMAIL, AuthTask001Fixtures.DEV_OWNER_PASSWORD)));
-		mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON_VALUE).content(bodyJson))
+		mockMvc.perform(post("/api/v1/auth/login").header("X-Client-Session-Id", "client-A")
+				.contentType(MediaType.APPLICATION_JSON_VALUE).content(bodyJson))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.success").value(true))
 				.andExpect(jsonPath("$.data.accessToken").value("access.jwt"))

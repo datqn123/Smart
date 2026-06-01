@@ -74,13 +74,14 @@ class AuthServiceLoginTest {
 		when(userRepository.findByEmailIgnoreCase("admin@example.com")).thenReturn(Optional.of(user));
 		org.mockito.Mockito.doThrow(new BusinessException(ApiErrorCode.FORBIDDEN,
 				"Tài khoản đang được đăng nhập ở một thiết bị khác. Vui lòng đăng xuất ở thiết bị đó hoặc liên hệ Admin."))
-				.when(loginSessionRegistry).assertNoConcurrentSession(7);
+				.when(loginSessionRegistry).assertNoConcurrentSession(7, "client-A");
 
-		assertThatThrownBy(() -> authService.login("admin@example.com", "secret123"))
+		when(passwordEncoder.matches("secret123", "hashed")).thenReturn(true);
+
+		assertThatThrownBy(() -> authService.login("admin@example.com", "secret123", "client-A"))
 				.isInstanceOfSatisfying(BusinessException.class,
 						ex -> assertThat(ex.getCode()).isEqualTo(ApiErrorCode.FORBIDDEN));
 
-		verify(passwordEncoder, never()).matches(anyString(), anyString());
 		verify(refreshTokenRepository, never()).save(any());
 		verify(systemLogJdbcRepository, never()).insertAuthLoginSuccess(7);
 	}
@@ -95,11 +96,11 @@ class AuthServiceLoginTest {
 		when(jwtTokenService.createAccessToken(eq(7), eq("admin"), eq("Owner"), anyString())).thenReturn("new.jwt");
 		when(userRepository.save(any(User.class))).thenReturn(user);
 
-		LoginResult result = authService.login("admin@example.com", "secret123");
+		LoginResult result = authService.login("admin@example.com", "secret123", "client-A");
 
 		assertThat(result.accessToken()).isEqualTo("new.jwt");
-		verify(loginSessionRegistry).assertNoConcurrentSession(7);
-		verify(loginSessionRegistry).register(7, "new.jwt");
+		verify(loginSessionRegistry).assertNoConcurrentSession(7, "client-A");
+		verify(loginSessionRegistry).register(7, "new.jwt", "client-A");
 	}
 
 	private static User activeUser(int id) {

@@ -70,7 +70,7 @@ export function ReceiptDetailPanel({ receipt, isOpen, onClose, canApprove = fals
                 <div key={step} className="flex items-center">
                   <div className={`px-2.5 py-1 rounded text-[10px] sm:text-xs font-medium
                     ${isCompleted || isPast ? "bg-green-50 text-green-700" : ""}
-                    ${isCurrent && receipt.status !== "Approved" && receipt.status !== "Rejected" ? "bg-blue-50 text-blue-700" : ""}
+                    ${isCurrent && receipt.status !== "Approved" && receipt.status !== "Rejected" ? "bg-slate-100 text-slate-800" : ""}
                     ${isCurrent && receipt.status === "Rejected" ? "bg-red-50 text-red-700" : ""}
                     ${!isCompleted && !isCurrent && !isPast ? "bg-slate-50 text-slate-400" : ""}
                   `}>

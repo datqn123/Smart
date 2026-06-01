@@ -25,6 +25,22 @@ Prefer inputs in this order:
 4. Source SRS.
 5. Verification output from Coding Agent.
 
+## CodeGraph First
+
+Before broad manual review, use [`../codegraph-context/SKILL.md`](../codegraph-context/SKILL.md).
+
+Required discovery:
+
+```powershell
+codegraph status --json
+codegraph impact "<changed symbol>" --json
+codegraph callers "<changed symbol>" --json
+codegraph callees "<changed symbol>" --json
+codegraph affected <changed-files> --json
+```
+
+If status reports pending changes, run `codegraph sync` before relying on results. Use CodeGraph to identify cross-scope impact and missing tests, then ground every finding in source or diff line references.
+
 Useful commands:
 
 ```powershell
@@ -92,4 +108,3 @@ The review is done when:
 - Similar scopes are considered.
 - AI boundaries are checked when applicable.
 - Final status is declared.
-
