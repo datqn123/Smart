@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, RotateCcw, Save } from "lucide-react"
 import { usePageTitle } from "@/context/PageTitleContext"
+import { ApiRequestError } from "@/lib/api/http"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -11,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
 import {
   getDefaultTableColumnSettings,
   getTableColumnSettings,
@@ -98,10 +100,17 @@ export function InterfaceSettingsPage() {
   useEffect(() => {
     setTitle("Cấu hình giao diện")
     const load = async () => {
-      const settings = await getTableColumnSettings()
-      setSourceSettings(cloneSettings(settings))
-      setDraftSettings(cloneSettings(settings))
-      setSelectedTableKey(settings[0]?.tableKey ?? "inventory_stock")
+      try {
+        const settings = await getTableColumnSettings()
+        setSourceSettings(cloneSettings(settings))
+        setDraftSettings(cloneSettings(settings))
+        setSelectedTableKey(settings[0]?.tableKey ?? "inventory_stock")
+      } catch {
+        const fallback = getDefaultTableColumnSettings()
+        setSourceSettings(cloneSettings(fallback))
+        setDraftSettings(cloneSettings(fallback))
+        setSelectedTableKey(fallback[0]?.tableKey ?? "inventory_stock")
+      }
     }
     void load()
   }, [setTitle])
@@ -215,6 +224,15 @@ export function InterfaceSettingsPage() {
       const reloaded = await getTableColumnSettings()
       setSourceSettings(cloneSettings(reloaded))
       setDraftSettings(cloneSettings(reloaded))
+      toast.success("Đã lưu cấu hình hiển thị cho toàn hệ thống")
+    } catch (error) {
+      if (error instanceof ApiRequestError && error.status === 403) {
+        toast.error("Bạn không có quyền cấu hình giao diện toàn hệ thống.")
+      } else if (error instanceof ApiRequestError) {
+        toast.error(error.body?.message ?? "Không lưu được cấu hình cột.")
+      } else {
+        toast.error("Không lưu được cấu hình cột.")
+      }
     } finally {
       setSaving(false)
     }
@@ -227,7 +245,7 @@ export function InterfaceSettingsPage() {
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">Cấu hình giao diện</h1>
             <p className="mt-1 text-sm text-slate-500">
-              Tùy chỉnh cột hiển thị và thứ tự cột trong bảng dữ liệu Kho hàng.
+              Tùy chỉnh cột hiển thị và thứ tự cột cho toàn bộ người dùng có quyền Kho hàng.
             </p>
           </div>
           <div className="w-full md:w-[320px]">

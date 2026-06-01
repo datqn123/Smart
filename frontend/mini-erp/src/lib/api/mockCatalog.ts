@@ -338,7 +338,7 @@ export const frontendApiMockCatalog: MockCatalogEntry[] = [
   { method: "DELETE", path: "/api/v1/system-logs/{id}", auth: true, kind: "json", description: "Xoa system log", sampleData: null },
   { method: "POST", path: "/api/v1/system-logs/bulk-delete", auth: true, kind: "json", description: "Xoa nhieu system log", sampleData: { deletedCount: 1 } },
   { method: "GET", path: "/api/v1/interface-settings/table-columns", auth: true, kind: "json", permission: "can_manage_inventory", description: "Cau hinh cot table Kho hang", sampleData: tableColumnSettings },
-  { method: "PUT", path: "/api/v1/interface-settings/table-columns", auth: true, kind: "json", permission: "can_manage_inventory", description: "Luu cau hinh cot table Kho hang", sampleData: tableColumnSettings },
+  { method: "PUT", path: "/api/v1/interface-settings/table-columns", auth: true, kind: "json", permission: ["can_manage_inventory", "can_manage_staff"], description: "Luu cau hinh cot table Kho hang", sampleData: tableColumnSettings },
 
   { method: "POST", path: "/api/v1/ai/chat/stream", auth: true, kind: "sse", permission: "can_use_ai", description: "SSE tro ly AI", sampleData: [{ event: "message", data: { text: "Xin chao" } }, { event: "done", data: {} }] },
   { method: "POST", path: "/api/v1/ai/chat/transcribe", auth: true, kind: "multipart", permission: "can_use_ai", description: "Chuyen giong noi thanh text", sampleData: { text: "Ton kho sua tuoi con bao nhieu?" } },
@@ -359,4 +359,3 @@ export function getMockCatalogEntry(method: MockHttpMethod, path: string) {
   const cleanPath = path.split("?")[0]
   return frontendApiMockCatalog.find((entry) => entry.method === method && entry.path === cleanPath)
 }
-

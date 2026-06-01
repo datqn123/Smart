@@ -23,23 +23,15 @@ export function useTableColumnOrder(tableKey: TableKey, defaultColumnKeys: strin
       setVisibleKeys(keys.length > 0 ? keys : defaultColumnKeys)
     }
     void load()
-    const onStorage = (event: StorageEvent) => {
-      if (event.key == null || event.key.includes("table_column_settings")) {
-        void load()
-      }
-    }
     const onUpdated = () => {
       void load()
     }
-    window.addEventListener("storage", onStorage)
     window.addEventListener(TABLE_COLUMN_SETTINGS_UPDATED_EVENT, onUpdated)
     return () => {
       mounted = false
-      window.removeEventListener("storage", onStorage)
       window.removeEventListener(TABLE_COLUMN_SETTINGS_UPDATED_EVENT, onUpdated)
     }
   }, [tableKey, defaultColumnKeys])
 
   return visibleKeys
 }
-

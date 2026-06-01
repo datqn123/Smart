@@ -20,7 +20,7 @@ import com.example.smart_erp.settings.tablecolumns.dto.SaveTableColumnSettingsRe
 import com.example.smart_erp.settings.tablecolumns.model.TableColumnCatalog;
 import com.example.smart_erp.settings.tablecolumns.model.TableColumnCatalog.ColumnMeta;
 import com.example.smart_erp.settings.tablecolumns.model.TableColumnCatalog.TableKey;
-import com.example.smart_erp.settings.tablecolumns.repository.UserTableColumnSettingsJdbcRepository;
+import com.example.smart_erp.settings.tablecolumns.repository.GlobalTableColumnSettingsJdbcRepository;
 import com.example.smart_erp.settings.tablecolumns.response.TableColumnSettingsData;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -32,12 +32,13 @@ public class TableColumnSettingsService {
 	private static final TypeReference<List<String>> LIST_OF_STRING = new TypeReference<>() {
 	};
 	private static final String BAD_PAYLOAD_MESSAGE = "Dữ liệu cấu hình cột không hợp lệ. Vui lòng kiểm tra lại.";
+	private static final String FORBIDDEN_GLOBAL_SAVE_MESSAGE = "Bạn không có quyền cấu hình giao diện toàn hệ thống.";
 
-	private final UserTableColumnSettingsJdbcRepository repo;
+	private final GlobalTableColumnSettingsJdbcRepository repo;
 	private final ObjectMapper objectMapper;
 	private final SystemLogJdbcRepository systemLogJdbcRepository;
 
-	public TableColumnSettingsService(UserTableColumnSettingsJdbcRepository repo, ObjectMapper objectMapper,
+	public TableColumnSettingsService(GlobalTableColumnSettingsJdbcRepository repo, ObjectMapper objectMapper,
 			SystemLogJdbcRepository systemLogJdbcRepository) {
 		this.repo = repo;
 		this.objectMapper = objectMapper;
@@ -46,9 +47,8 @@ public class TableColumnSettingsService {
 
 	@Transactional(readOnly = true)
 	public TableColumnSettingsData getInventoryScope(Jwt jwt) {
-		int userId = StockReceiptAccessPolicy.parseUserId(jwt);
-		Map<String, UserTableColumnSettingsJdbcRepository.Row> byKey = new LinkedHashMap<>();
-		for (UserTableColumnSettingsJdbcRepository.Row row : repo.findByUserId(userId)) {
+		Map<String, GlobalTableColumnSettingsJdbcRepository.Row> byKey = new LinkedHashMap<>();
+		for (GlobalTableColumnSettingsJdbcRepository.Row row : repo.findAll()) {
 			byKey.put(row.tableKey(), row);
 		}
 		List<TableColumnSettingsData.ItemData> out = new ArrayList<>();
@@ -61,6 +61,7 @@ public class TableColumnSettingsService {
 	@Transactional
 	public TableColumnSettingsData saveInventoryScope(Jwt jwt, SaveTableColumnSettingsRequest request) {
 		int userId = StockReceiptAccessPolicy.parseUserId(jwt);
+		assertCanManageGlobalScope(jwt);
 		if (request == null || request.items() == null || request.items().isEmpty() || request.items().size() > 3) {
 			throw new BusinessException(ApiErrorCode.BAD_REQUEST, BAD_PAYLOAD_MESSAGE, Map.of("items", "Danh sách items phải có từ 1 đến 3 phần tử"));
 		}
@@ -73,9 +74,9 @@ public class TableColumnSettingsService {
 						Map.of("items[" + i + "].tableKey", "tableKey bị trùng"));
 			}
 			Normalized normalized = normalizePayload(item, tableKey, i);
-			repo.upsert(userId, tableKey.key(), asJson(normalized.hiddenColumns()), asJson(normalized.columnOrder()), userId);
+			repo.upsert(tableKey.key(), asJson(normalized.hiddenColumns()), asJson(normalized.columnOrder()), userId);
 		}
-		systemLogJdbcRepository.insertInventoryPatch(userId, "{\"entity\":\"UserTableColumnSettings\",\"scope\":\"inventory\"}");
+		systemLogJdbcRepository.insertInventoryPatch(userId, "{\"entity\":\"GlobalTableColumnSettings\",\"scope\":\"inventory\"}");
 		return getInventoryScope(jwt);
 	}
 
@@ -132,7 +133,7 @@ public class TableColumnSettingsService {
 		return new Normalized(List.copyOf(hiddenNorm), List.copyOf(orderNorm));
 	}
 
-	private TableColumnSettingsData.ItemData toItemData(TableKey tableKey, UserTableColumnSettingsJdbcRepository.Row row) {
+	private TableColumnSettingsData.ItemData toItemData(TableKey tableKey, GlobalTableColumnSettingsJdbcRepository.Row row) {
 		List<ColumnMeta> defaults = TableColumnCatalog.columns(tableKey);
 		Set<String> known = defaults.stream().map(ColumnMeta::key).collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
 		Set<String> required = defaults.stream().filter(ColumnMeta::required).map(ColumnMeta::key)
@@ -221,6 +222,17 @@ public class TableColumnSettingsService {
 		}
 		catch (Exception ex) {
 			throw new BusinessException(ApiErrorCode.BAD_REQUEST, BAD_PAYLOAD_MESSAGE);
+		}
+	}
+
+	private static void assertCanManageGlobalScope(Jwt jwt) {
+		String role = jwt.getClaimAsString("role");
+		if (!StringUtils.hasText(role)) {
+			throw new BusinessException(ApiErrorCode.FORBIDDEN, FORBIDDEN_GLOBAL_SAVE_MESSAGE);
+		}
+		String normalized = role.trim();
+		if (!"Owner".equalsIgnoreCase(normalized) && !"Admin".equalsIgnoreCase(normalized)) {
+			throw new BusinessException(ApiErrorCode.FORBIDDEN, FORBIDDEN_GLOBAL_SAVE_MESSAGE);
 		}
 	}
 

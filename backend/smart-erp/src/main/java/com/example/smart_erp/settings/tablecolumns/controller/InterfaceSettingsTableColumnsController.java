@@ -51,7 +51,7 @@ public class InterfaceSettingsTableColumnsController {
 	}
 
 	@PutMapping
-	@PreAuthorize("hasAuthority('can_manage_inventory')")
+	@PreAuthorize("hasAuthority('can_manage_inventory') and hasAuthority('can_manage_staff')")
 	public ResponseEntity<ApiSuccessResponse<TableColumnSettingsData>> saveInventoryScope(Authentication authentication,
 			@RequestBody SaveTableColumnSettingsRequest request) {
 		Jwt jwt = requireJwt(authentication);
@@ -69,4 +69,3 @@ public class InterfaceSettingsTableColumnsController {
 		return jwt;
 	}
 }
-
