@@ -18,6 +18,7 @@ import {
   buildCustomerCreateBody,
   buildCustomerPatchBody,
   CUSTOMER_LIST_QUERY_KEY,
+  CUSTOMER_LIST_SORT_LABEL_VI,
   CUSTOMER_LIST_SORT_WHITELIST,
   customerEditSnapshotFromDetail,
   customerEditSnapshotFromListRow,
@@ -31,6 +32,7 @@ import {
   type CustomerListSort,
   type GetCustomerListParams,
 } from "../api/customersApi"
+import { useTableColumnOrder } from "@/features/inventory/hooks/useTableVisibleColumns"
 
 const SEARCH_DEBOUNCE_MS = 400
 const PAGE_SIZE = 20
@@ -78,6 +80,14 @@ export function CustomersPage() {
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
 
   const [search, setSearch] = useState("")
+  const visibleColumnKeys = useTableColumnOrder("product_customers", [
+    "customerCode",
+    "customerName",
+    "phone",
+    "email",
+    "orderCount",
+    "status",
+  ])
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [sort, setSort] = useState<CustomerListSort>("updatedAt:desc")
@@ -143,7 +153,6 @@ export function CustomersPage() {
     isPending: isListPending,
     isError: isListError,
     error: listError,
-    isFetching: isListFetching,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
@@ -332,7 +341,7 @@ export function CustomersPage() {
     <div className="p-4 md:p-6 lg:p-8 flex flex-col h-full min-h-0 gap-4 md:gap-5 overflow-hidden">
       <div className="shrink-0">
         <h1 className="text-xl md:text-2xl font-semibold text-slate-900 tracking-tight">Khách hàng</h1>
-        <p className="text-sm text-slate-500 mt-1">Quản lý thông tin khách hàng, điểm tích lũy (Task048: danh sách API)</p>
+        <p className="text-sm text-slate-500 mt-1">Quản lý thông tin khách hàng và điểm tích lũy</p>
       </div>
 
       <CustomerToolbar
@@ -357,18 +366,12 @@ export function CustomersPage() {
           >
             {CUSTOMER_LIST_SORT_WHITELIST.map((s) => (
               <option key={s} value={s}>
-                {s}
+                {CUSTOMER_LIST_SORT_LABEL_VI[s]}
               </option>
             ))}
           </select>
         </div>
       </div>
-
-      {isListFetching && !isListPending && !isFetchingNextPage && (
-        <p className="text-sm text-slate-500 shrink-0" role="status">
-          Đang cập nhật…
-        </p>
-      )}
       <div className="flex-1 flex flex-col min-h-0 bg-white border border-slate-200/60 rounded-xl overflow-hidden shadow-md">
         {isListPending && !listInfinite ? (
           <div className="p-8 text-center text-slate-500 flex-1" role="status">
@@ -386,6 +389,7 @@ export function CustomersPage() {
             >
               <CustomerTable
                 data={customers}
+                visibleColumnKeys={visibleColumnKeys}
                 selectedIds={selectedIds}
                 onSelect={handleSelect}
                 onSelectAll={handleSelectAll}
@@ -398,11 +402,11 @@ export function CustomersPage() {
             </div>
             {!isListError && (
               <div className="flex items-center justify-between flex-wrap gap-2 px-3 py-2 border-t border-slate-200 bg-slate-50/80 text-sm text-slate-600 min-h-11 shrink-0">
-                <span className="tabular-nums">
-                  Đang hiển thị {customers.length} / {total} khách hàng
-                  {hasNextPage ? " — cuộn xuống cuối để tải thêm 20" : ""}
-                </span>
+                <span className="tabular-nums">Đang hiển thị {customers.length} / {total} khách hàng</span>
                 {isFetchingNextPage && <span className="text-slate-500">Đang tải thêm…</span>}
+                {hasNextPage && !isFetchingNextPage && (
+                  <span className="text-slate-400 text-xs hidden sm:inline">Cuộn xuống để tải thêm</span>
+                )}
               </div>
             )}
           </div>

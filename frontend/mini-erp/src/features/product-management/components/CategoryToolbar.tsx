@@ -29,13 +29,13 @@ export function CategoryToolbar({
               placeholder="Tìm theo tên hoặc mã danh mục..." 
               value={searchStr}
               onChange={(e) => onSearch(e.target.value)}
-              className="pl-10 h-10 border-slate-200 focus:border-blue-400 focus:ring-blue-100 transition-all rounded-md"
+              className="pl-10 h-10 border-slate-200 focus:border-slate-400 focus:ring-slate-100 transition-all rounded-md"
             />
           </div>
           <select 
             value={statusFilter} 
             onChange={(e) => onStatusChange(e.target.value)}
-            className="h-10 px-3 border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-100 w-full sm:min-w-[160px] rounded-md"
+            className="h-10 px-3 border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-100 w-full sm:min-w-[160px] rounded-md"
           >
             <option value="all">Tất cả trạng thái</option>
             <option value="Active">Hoạt động</option>

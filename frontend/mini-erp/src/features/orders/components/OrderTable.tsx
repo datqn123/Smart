@@ -8,6 +8,9 @@ import {
   DATA_TABLE_ROOT_CLASS, 
   DATA_TABLE_ACTION_HEAD_CLASS, 
   DATA_TABLE_ACTION_CELL_CLASS,
+  DATA_TABLE_ACTION_SINGLE_HEAD_CLASS,
+  DATA_TABLE_ACTION_SINGLE_CELL_CLASS,
+  DATA_TABLE_CHECKBOX_CLASS,
   ORDER_TABLE_COL,
   TABLE_HEAD_CLASS,
   TABLE_CELL_PRIMARY_CLASS,
@@ -53,9 +56,9 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function TypeBadge({ type }: { type: string }) {
-  if (type === 'Wholesale') return <Badge className="bg-blue-50 text-blue-700 text-[10px] font-bold border-blue-200 h-5 px-1.5 uppercase tracking-tight">Bán buôn</Badge>;
-  if (type === 'Retail') return <Badge className="bg-purple-50 text-purple-700 text-[10px] font-bold border-purple-200 h-5 px-1.5 uppercase tracking-tight">Bán lẻ</Badge>;
-  return <Badge className="bg-slate-50 text-slate-700 text-[10px] font-bold border-slate-200 h-5 px-1.5 uppercase tracking-tight">Trả hàng</Badge>;
+  if (type === 'Wholesale') return <Badge className="h-5 border-slate-200 bg-slate-50 px-1.5 text-[10px] font-semibold uppercase tracking-normal text-slate-600">Bán buôn</Badge>;
+  if (type === 'Retail') return <Badge className="h-5 border-slate-200 bg-slate-50 px-1.5 text-[10px] font-semibold uppercase tracking-normal text-slate-600">Bán lẻ</Badge>;
+  return <Badge className="h-5 border-slate-200 bg-slate-50 px-1.5 text-[10px] font-semibold uppercase tracking-normal text-slate-600">Trả hàng</Badge>;
 }
 
 export function OrderTable({ 
@@ -73,6 +76,7 @@ export function OrderTable({
   const allSelected = data.length > 0 && selectedIds.length === data.length;
   const someSelected = selectedIds.length > 0 && selectedIds.length < data.length;
   const colCount = (showCheckbox ? 1 : 0) + 4 + (hideStatusColumn ? 0 : 1) + 1;
+  const singleViewAction = !renderCustomActions && !onEdit && !onDelete;
 
   return (
     <Table className={DATA_TABLE_ROOT_CLASS}>
@@ -83,18 +87,18 @@ export function OrderTable({
               <Checkbox 
                 checked={allSelected ? true : someSelected ? "indeterminate" : false} 
                 onCheckedChange={(checked) => onSelectAll(checked as boolean)}
-                className="border-slate-300 data-[state=checked]:bg-white data-[state=checked]:text-blue-600 data-[state=checked]:border-blue-600"
+                className={DATA_TABLE_CHECKBOX_CLASS}
               />
             </TableHead>
           )}
-          <TableHead className={cn(ORDER_TABLE_COL.code, TABLE_HEAD_CLASS, "px-4")}>Mã đơn</TableHead>
+          <TableHead className={cn(ORDER_TABLE_COL.code, TABLE_HEAD_CLASS, "px-4")}>Mã hóa đơn</TableHead>
           <TableHead className={cn(ORDER_TABLE_COL.customer, TABLE_HEAD_CLASS, "px-4")}>Khách hàng</TableHead>
-          <TableHead className={cn(ORDER_TABLE_COL.date, TABLE_HEAD_CLASS, "px-4")}>Ngày tạo</TableHead>
-          <TableHead className={cn(ORDER_TABLE_COL.total, TABLE_HEAD_CLASS, "text-right px-4")}>Tổng tiền</TableHead>
+          <TableHead className={cn(ORDER_TABLE_COL.date, TABLE_HEAD_CLASS, "px-4")}>Ngày lập</TableHead>
+          <TableHead className={cn(ORDER_TABLE_COL.total, TABLE_HEAD_CLASS, "text-right px-4")}>Thành tiền</TableHead>
           {!hideStatusColumn && (
             <TableHead className={cn(ORDER_TABLE_COL.status, TABLE_HEAD_CLASS, "text-center px-4")}>Trạng thái</TableHead>
           )}
-          <TableHead className={cn(DATA_TABLE_ACTION_HEAD_CLASS, TABLE_HEAD_CLASS)}>Thao tác</TableHead>
+          <TableHead className={cn(singleViewAction ? DATA_TABLE_ACTION_SINGLE_HEAD_CLASS : DATA_TABLE_ACTION_HEAD_CLASS, TABLE_HEAD_CLASS)}>Thao tác</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody className="divide-y divide-slate-100">
@@ -116,7 +120,7 @@ export function OrderTable({
                     <Checkbox 
                       checked={isSelected}
                       onCheckedChange={() => onSelect(item.id)}
-                      className="border-slate-300 data-[state=checked]:bg-white data-[state=checked]:text-blue-600 data-[state=checked]:border-blue-600"
+                      className={DATA_TABLE_CHECKBOX_CLASS}
                     />
                   </TableCell>
                 )}
@@ -143,13 +147,13 @@ export function OrderTable({
                     <StatusBadge status={item.status} />
                   </TableCell>
                 )}
-                <TableCell className={DATA_TABLE_ACTION_CELL_CLASS}>
+                <TableCell className={singleViewAction ? DATA_TABLE_ACTION_SINGLE_CELL_CLASS : DATA_TABLE_ACTION_CELL_CLASS}>
                   <div className="flex items-center justify-center gap-1">
                     {renderCustomActions ? (
                       renderCustomActions(item)
                     ) : (
                       <>
-                        <Button variant="ghost" size="icon" onClick={() => onView(item)} title="Xem chi tiết" className="h-8 w-8 text-slate-400 hover:text-slate-900 transition-colors">
+                        <Button variant="ghost" size="icon" onClick={() => onView(item)} title="Xem chi tiết hóa đơn" className="h-8 w-8 text-slate-400 hover:text-slate-900 transition-colors">
                           <Eye className="h-4 w-4" />
                         </Button>
                         {onEdit && (

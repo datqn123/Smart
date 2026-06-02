@@ -46,29 +46,38 @@ public class TableColumnSettingsService {
 	}
 
 	@Transactional(readOnly = true)
-	public TableColumnSettingsData getInventoryScope(Jwt jwt) {
+	public TableColumnSettingsData getByScope(Jwt jwt, String scopeWire) {
+		Scope scope = Scope.parse(scopeWire);
 		Map<String, GlobalTableColumnSettingsJdbcRepository.Row> byKey = new LinkedHashMap<>();
 		for (GlobalTableColumnSettingsJdbcRepository.Row row : repo.findAll()) {
 			byKey.put(row.tableKey(), row);
 		}
 		List<TableColumnSettingsData.ItemData> out = new ArrayList<>();
-		for (TableKey tableKey : TableColumnCatalog.inventoryScope()) {
+		for (TableKey tableKey : scope.tableKeys()) {
 			out.add(toItemData(tableKey, byKey.get(tableKey.key())));
 		}
 		return new TableColumnSettingsData(out);
 	}
 
 	@Transactional
-	public TableColumnSettingsData saveInventoryScope(Jwt jwt, SaveTableColumnSettingsRequest request) {
+	public TableColumnSettingsData saveByScope(Jwt jwt, SaveTableColumnSettingsRequest request) {
 		int userId = StockReceiptAccessPolicy.parseUserId(jwt);
 		assertCanManageGlobalScope(jwt);
-		if (request == null || request.items() == null || request.items().isEmpty() || request.items().size() > 3) {
-			throw new BusinessException(ApiErrorCode.BAD_REQUEST, BAD_PAYLOAD_MESSAGE, Map.of("items", "Danh sách items phải có từ 1 đến 3 phần tử"));
+		Scope scope = Scope.parse(request == null ? null : request.scope());
+		if (request == null || request.items() == null || request.items().isEmpty()
+				|| request.items().size() > scope.maxItems()) {
+			throw new BusinessException(ApiErrorCode.BAD_REQUEST, BAD_PAYLOAD_MESSAGE,
+					Map.of("items", "Danh sách items phải có từ 1 đến " + scope.maxItems() + " phần tử"));
 		}
+		Set<String> allowed = scope.allowedWireKeys();
 		Set<String> seenTableKey = new LinkedHashSet<>();
 		for (int i = 0; i < request.items().size(); i++) {
 			SaveTableColumnSettingsRequest.Item item = request.items().get(i);
 			TableKey tableKey = parseTableKey(item.tableKey(), i);
+			if (!allowed.contains(tableKey.key())) {
+				throw new BusinessException(ApiErrorCode.BAD_REQUEST, BAD_PAYLOAD_MESSAGE,
+						Map.of("items[" + i + "].tableKey", "tableKey không thuộc scope " + scope.wire()));
+			}
 			if (!seenTableKey.add(tableKey.key())) {
 				throw new BusinessException(ApiErrorCode.BAD_REQUEST, BAD_PAYLOAD_MESSAGE,
 						Map.of("items[" + i + "].tableKey", "tableKey bị trùng"));
@@ -76,8 +85,9 @@ public class TableColumnSettingsService {
 			Normalized normalized = normalizePayload(item, tableKey, i);
 			repo.upsert(tableKey.key(), asJson(normalized.hiddenColumns()), asJson(normalized.columnOrder()), userId);
 		}
-		systemLogJdbcRepository.insertInventoryPatch(userId, "{\"entity\":\"GlobalTableColumnSettings\",\"scope\":\"inventory\"}");
-		return getInventoryScope(jwt);
+		systemLogJdbcRepository.insertInventoryPatch(userId,
+				"{\"entity\":\"GlobalTableColumnSettings\",\"scope\":\"" + scope.wire() + "\"}");
+		return getByScope(jwt, scope.wire());
 	}
 
 	private TableKey parseTableKey(String value, int index) {
@@ -91,7 +101,8 @@ public class TableColumnSettingsService {
 
 	private Normalized normalizePayload(SaveTableColumnSettingsRequest.Item item, TableKey tableKey, int index) {
 		List<ColumnMeta> metas = TableColumnCatalog.columns(tableKey);
-		Set<String> known = metas.stream().map(ColumnMeta::key).collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+		Set<String> known = metas.stream().map(ColumnMeta::key)
+				.collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
 		Set<String> required = metas.stream().filter(ColumnMeta::required).map(ColumnMeta::key)
 				.collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
 
@@ -135,7 +146,8 @@ public class TableColumnSettingsService {
 
 	private TableColumnSettingsData.ItemData toItemData(TableKey tableKey, GlobalTableColumnSettingsJdbcRepository.Row row) {
 		List<ColumnMeta> defaults = TableColumnCatalog.columns(tableKey);
-		Set<String> known = defaults.stream().map(ColumnMeta::key).collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+		Set<String> known = defaults.stream().map(ColumnMeta::key)
+				.collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
 		Set<String> required = defaults.stream().filter(ColumnMeta::required).map(ColumnMeta::key)
 				.collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
 		Set<String> hidden = new LinkedHashSet<>();
@@ -237,5 +249,55 @@ public class TableColumnSettingsService {
 	}
 
 	private record Normalized(List<String> hiddenColumns, List<String> columnOrder) {
+	}
+
+	private enum Scope {
+		INVENTORY("inventory"),
+		PRODUCTS("products"),
+		ALL("all");
+
+		private final String wire;
+
+		Scope(String wire) {
+			this.wire = wire;
+		}
+
+		String wire() {
+			return wire;
+		}
+
+		int maxItems() {
+			return tableKeys().size();
+		}
+
+		Set<String> allowedWireKeys() {
+			Set<String> out = new LinkedHashSet<>();
+			for (TableKey key : tableKeys()) {
+				out.add(key.key());
+			}
+			return out;
+		}
+
+		List<TableKey> tableKeys() {
+			return switch (this) {
+				case INVENTORY -> TableColumnCatalog.inventoryScope();
+				case PRODUCTS -> TableColumnCatalog.productScope();
+				case ALL -> TableColumnCatalog.allScope();
+			};
+		}
+
+		static Scope parse(String raw) {
+			if (!StringUtils.hasText(raw)) {
+				return INVENTORY;
+			}
+			String normalized = raw.trim();
+			for (Scope scope : values()) {
+				if (scope.wire.equalsIgnoreCase(normalized)) {
+					return scope;
+				}
+			}
+			throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Tham số yêu cầu không hợp lệ",
+					Map.of("scope", "Giá trị hợp lệ: inventory, products, all"));
+		}
 	}
 }

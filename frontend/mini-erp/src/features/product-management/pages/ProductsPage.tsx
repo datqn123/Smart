@@ -39,6 +39,7 @@ import {
   type ProductListSort,
   type StagedProductImages,
 } from "../api/productsApi"
+import { useTableColumnOrder } from "@/features/inventory/hooks/useTableVisibleColumns"
 
 const SEARCH_DEBOUNCE_MS = 400
 const PAGE_SIZE = 20
@@ -100,6 +101,14 @@ export function ProductsPage() {
   const [stagedImages, setStagedImages] = useState<StagedProductImages>({ files: [], urlAdds: [] })
 
   const [search, setSearch] = useState("")
+  const visibleColumnKeys = useTableColumnOrder("product_list", [
+    "skuCode",
+    "productName",
+    "categoryName",
+    "stock",
+    "price",
+    "status",
+  ])
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [categoryFilter, setCategoryFilter] = useState("all")
@@ -475,6 +484,7 @@ export function ProductsPage() {
             >
               <ProductTable
                 data={products}
+                visibleColumnKeys={visibleColumnKeys}
                 selectedIds={selectedIds}
                 onSelect={handleSelect}
                 onSelectAll={handleSelectAll}

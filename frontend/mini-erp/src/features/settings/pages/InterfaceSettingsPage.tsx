@@ -245,7 +245,7 @@ export function InterfaceSettingsPage() {
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">Cấu hình giao diện</h1>
             <p className="mt-1 text-sm text-slate-500">
-              Tùy chỉnh cột hiển thị và thứ tự cột cho toàn bộ người dùng có quyền Kho hàng.
+              Tùy chỉnh cột hiển thị và thứ tự cột cho toàn bộ người dùng có quyền theo từng module.
             </p>
           </div>
           <div className="w-full md:w-[320px]">

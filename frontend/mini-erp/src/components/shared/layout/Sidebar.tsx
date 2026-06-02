@@ -8,7 +8,8 @@ import {
   Settings, 
   LogOut,
   Brain,
-  ChevronDown
+  ChevronDown,
+  FolderTree
 } from "lucide-react"
 import { useSidebarStore, type NavItemKey } from "@/store/sidebarStore"
 import { useAuthStore, type UserRole } from "@/features/auth/store/useAuthStore"
@@ -16,6 +17,7 @@ import { logoutAndGoToLogin } from "@/features/auth/lib/sessionAuth"
 import type { MenuPermissions } from "@/features/auth/types/menuPermissions"
 import { useUIStore } from "@/store/useUIStore"
 import { Button } from "@/components/ui/button"
+import { getRuntimeCustomMenuForUser } from "@/features/custom-builder/runtime/customMenuRuntime"
 import {
   Collapsible,
   CollapsibleContent,
@@ -118,6 +120,7 @@ const navConfig: NavItemConfig[] = [
     subItems: [
       { label: "Thông tin cửa hàng", path: "/settings/store-info", always: true },
       { label: "Cấu hình giao diện", path: "/settings/interface", always: true },
+      { label: "Trình thiết kế dữ liệu", path: "/settings/custom-builder", always: true },
       { label: "Quản lý nhân viên", path: "/settings/employees", perm: "can_manage_staff" },
       { label: "Cấu hình cảnh báo", path: "/settings/alerts", perm: "can_configure_alerts" },
       { label: "Nhật ký hệ thống", path: "/settings/system-logs", always: true },
@@ -157,7 +160,15 @@ function buildNavForPermissions(p: MenuPermissions, role: UserRole | null): NavI
     }
     out.push({ id: c.id, label: c.label, icon: c.icon, subItems: subs })
   }
-  return out
+  const customFolders = getRuntimeCustomMenuForUser(p, role).map((folder) => ({
+    id: `custom-${folder.key}` as NavItemKey,
+    label: folder.label,
+    icon: <FolderTree className="h-[18px] w-[18px]" />,
+    subItems: folder.children.map((page) => ({ label: page.label, path: page.routePath })),
+  }))
+  const settingsItem = out.find((item) => item.id === "settings")
+  const staticBeforeSettings = out.filter((item) => item.id !== "settings")
+  return settingsItem ? [...staticBeforeSettings, ...customFolders, settingsItem] : [...out, ...customFolders]
 }
 
 export function Sidebar({ isMobile = false }: SidebarProps) {
@@ -176,16 +187,16 @@ export function Sidebar({ isMobile = false }: SidebarProps) {
     [menuPermissions, userRole],
   )
 
-  const isActiveRoute = (path: string) => location.pathname === path
+  const isActiveRoute = (path: string) => location.pathname === path || location.pathname.startsWith(`${path}/`)
   
   const isParentActive = (item: NavItem) => {
-    return item.subItems?.some(sub => sub.path === location.pathname)
+    return item.subItems?.some(sub => isActiveRoute(sub.path))
   }
 
   useEffect(() => {
     // Find parent of current route and expand it automatically
     const activeParent = filteredNavItems.find(item => 
-      item.subItems?.some(sub => sub.path === location.pathname)
+      item.subItems?.some(sub => isActiveRoute(sub.path))
     )
     if (activeParent) {
       expandItem(activeParent.id)

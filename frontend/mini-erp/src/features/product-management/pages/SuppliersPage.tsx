@@ -23,10 +23,12 @@ import {
   postSupplier,
   supplierEditSnapshotFromDetail,
   supplierEditSnapshotFromListRow,
+  SUPPLIER_LIST_SORT_LABEL_VI,
   SUPPLIER_LIST_SORT_WHITELIST,
   type GetSupplierListParams,
   type SupplierListSort,
 } from "../api/suppliersApi"
+import { useTableColumnOrder } from "@/features/inventory/hooks/useTableVisibleColumns"
 
 const SEARCH_DEBOUNCE_MS = 400
 const PAGE_SIZE = 20
@@ -69,6 +71,14 @@ export function SuppliersPage() {
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
 
   const [search, setSearch] = useState("")
+  const visibleColumnKeys = useTableColumnOrder("product_suppliers", [
+    "supplierCode",
+    "supplierName",
+    "contactName",
+    "email",
+    "address",
+    "status",
+  ])
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [sort, setSort] = useState<SupplierListSort>("updatedAt:desc")
@@ -114,7 +124,6 @@ export function SuppliersPage() {
     isPending,
     isError,
     error,
-    isFetching,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
@@ -410,56 +419,52 @@ export function SuppliersPage() {
           >
             {SUPPLIER_LIST_SORT_WHITELIST.map((s) => (
               <option key={s} value={s}>
-                {s}
+                {SUPPLIER_LIST_SORT_LABEL_VI[s]}
               </option>
             ))}
           </select>
         </div>
       </div>
 
-      {isPending && suppliers.length === 0 ? (
-        <p className="text-sm text-slate-500 shrink-0" role="status">
-          Đang tải danh sách…
-        </p>
-      ) : null}
-      {isFetching && !isPending && !isFetchingNextPage ? (
-        <p className="text-sm text-slate-500 shrink-0" role="status">
-          Đang cập nhật…
-        </p>
-      ) : null}
-      {isError && (
-        <p className="text-sm text-red-600 shrink-0" role="alert">
-          Không tải được danh sách nhà cung cấp.
-        </p>
-      )}
-
       <div className="flex-1 flex flex-col min-h-0 bg-white border border-slate-200/60 rounded-xl overflow-hidden shadow-md">
-        <div
-          ref={scrollRootRef}
-          className="flex-1 overflow-y-auto relative scroll-smooth [scrollbar-gutter:stable] min-h-0"
-        >
-          <SupplierTable
-            data={suppliers}
-            selectedIds={selectedIds}
-            onSelect={handleSelect}
-            onSelectAll={handleSelectAll}
-            onView={handleView}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-            canDelete={isOwner}
-          />
-          <div ref={loadMoreSentinelRef} className="h-1 w-full shrink-0" aria-hidden />
-        </div>
-        {listInfinite && total > 0 ? (
-          <div className="flex items-center justify-between flex-wrap gap-2 px-3 py-2 border-t border-slate-200 bg-slate-50/80 text-sm text-slate-600 min-h-11 shrink-0">
-            <span>
-              Đang hiển thị {suppliers.length} / {total} NCC
-            </span>
-            {isFetchingNextPage ? <span className="text-slate-500">Đang tải thêm…</span> : null}
-            {hasNextPage && !isFetchingNextPage ? (
-              <span className="text-slate-400 text-xs hidden sm:inline">Cuộn xuống để tải thêm</span>
-            ) : null}
+        {isPending && !listInfinite ? (
+          <div className="p-8 text-center text-slate-500 flex-1" role="status">
+            Đang tải danh sách…
           </div>
+        ) : isError && !listInfinite ? (
+          <div className="p-8 text-center text-red-600 flex-1" role="alert">
+            Không tải được danh sách nhà cung cấp.
+          </div>
+        ) : null}
+        {!isError && listInfinite ? (
+          <>
+            <div
+              ref={scrollRootRef}
+              className="flex-1 overflow-y-auto relative scroll-smooth [scrollbar-gutter:stable] min-h-0"
+            >
+              <SupplierTable
+                data={suppliers}
+                visibleColumnKeys={visibleColumnKeys}
+                selectedIds={selectedIds}
+                onSelect={handleSelect}
+                onSelectAll={handleSelectAll}
+                onView={handleView}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                canDelete={isOwner}
+              />
+              <div ref={loadMoreSentinelRef} className="h-1 w-full shrink-0" aria-hidden />
+            </div>
+            <div className="flex items-center justify-between flex-wrap gap-2 px-3 py-2 border-t border-slate-200 bg-slate-50/80 text-sm text-slate-600 min-h-11 shrink-0">
+              <span>
+                Đang hiển thị {suppliers.length} / {total} nhà cung cấp
+              </span>
+              {isFetchingNextPage ? <span className="text-slate-500">Đang tải thêm…</span> : null}
+              {hasNextPage && !isFetchingNextPage ? (
+                <span className="text-slate-400 text-xs hidden sm:inline">Cuộn xuống để tải thêm</span>
+              ) : null}
+            </div>
+          </>
         ) : null}
       </div>
 

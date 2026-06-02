@@ -15,6 +15,17 @@ export const SUPPLIER_LIST_SORT_WHITELIST = [
 
 export type SupplierListSort = (typeof SUPPLIER_LIST_SORT_WHITELIST)[number]
 
+export const SUPPLIER_LIST_SORT_LABEL_VI: Record<SupplierListSort, string> = {
+  "name:asc": "Tên nhà cung cấp (A-Z)",
+  "name:desc": "Tên nhà cung cấp (Z-A)",
+  "supplierCode:asc": "Mã nhà cung cấp (A-Z)",
+  "supplierCode:desc": "Mã nhà cung cấp (Z-A)",
+  "updatedAt:asc": "Cập nhật cũ nhất",
+  "updatedAt:desc": "Cập nhật mới nhất",
+  "createdAt:asc": "Tạo cũ nhất",
+  "createdAt:desc": "Tạo mới nhất",
+}
+
 export type SupplierListItemDto = {
   id: number
   supplierCode: string

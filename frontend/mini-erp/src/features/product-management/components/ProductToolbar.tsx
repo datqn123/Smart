@@ -37,7 +37,7 @@ export function ProductToolbar({
               placeholder="Tìm theo tên, SKU hoặc barcode..."
               value={searchStr}
               onChange={(e) => onSearch(e.target.value)}
-              className="pl-10 h-10 border-slate-200 focus:border-blue-400 focus:ring-blue-100 transition-all rounded-md"
+              className="pl-10 h-10 border-slate-200 focus:border-slate-400 focus:ring-slate-100 transition-all rounded-md"
             />
           </div>
           
@@ -45,7 +45,7 @@ export function ProductToolbar({
             <select 
               value={statusFilter} 
               onChange={(e) => onStatusChange(e.target.value)}
-              className="h-10 px-3 border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-100 w-full sm:min-w-[140px] rounded-md"
+              className="h-10 px-3 border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-100 w-full sm:min-w-[140px] rounded-md"
             >
               <option value="all">Trạng thái</option>
               <option value="Active">Hoạt động</option>
@@ -55,7 +55,7 @@ export function ProductToolbar({
             <select 
               value={categoryFilter} 
               onChange={(e) => onCategoryChange(e.target.value)}
-              className="h-10 px-3 border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-100 w-full sm:min-w-[160px] rounded-md"
+              className="h-10 px-3 border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-100 w-full sm:min-w-[160px] rounded-md"
             >
               <option value="all">Danh mục</option>
               {categoryOptions.map((c) => (
@@ -83,7 +83,7 @@ export function ProductToolbar({
           )}
           
           <Button onClick={() => onAction("create")} className="h-10 bg-slate-900 hover:bg-slate-800 text-white rounded-md shadow-sm">
-            <Plus className="h-4 w-4 mr-1.5" /> Tạo SP
+            <Plus className="h-4 w-4 mr-1.5" /> Tạo sản phẩm
           </Button>
         </div>
       </div>

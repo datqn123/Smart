@@ -9,6 +9,7 @@ export type NavItemKey =
   | "analytics"
   | "ai-tools"
   | "settings"
+  | `custom-${string}`
 
 interface SidebarStore {
   expandedItems: Set<NavItemKey>

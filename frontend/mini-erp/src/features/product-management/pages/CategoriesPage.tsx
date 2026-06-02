@@ -21,6 +21,7 @@ import {
   type CategoryPatchBody,
   type GetCategoryListParams,
 } from "../api/categoriesApi"
+import { useTableColumnOrder } from "@/features/inventory/hooks/useTableVisibleColumns"
 
 const SEARCH_DEBOUNCE_MS = 400
 
@@ -122,6 +123,13 @@ export function CategoriesPage() {
   const isOwner = useAuthStore((s) => s.user?.role === "Owner")
 
   const [search, setSearch] = useState("")
+  const visibleColumnKeys = useTableColumnOrder("product_categories", [
+    "categoryCode",
+    "categoryName",
+    "productCount",
+    "description",
+    "status",
+  ])
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [selectedIds, setSelectedIds] = useState<number[]>([])
@@ -170,6 +178,7 @@ export function CategoriesPage() {
     () => (listData?.items ?? []).map(mapNodeDtoToCategory),
     [listData],
   )
+  const flattenedCategories = useMemo(() => flattenCategories(categories), [categories])
 
   const detailQuery = useQuery({
     queryKey: ["product-management", "categories", "detail", viewingCategory?.id] as const,
@@ -222,8 +231,7 @@ export function CategoriesPage() {
   }
 
   const handleSelectAll = (checked: boolean) => {
-    const flat = flattenCategories(categories)
-    setSelectedIds(checked ? flat.map((c) => c.id) : [])
+    setSelectedIds(checked ? flattenedCategories.map((c) => c.id) : [])
   }
 
   const handleToolbarAction = (action: string) => {
@@ -315,8 +323,8 @@ export function CategoriesPage() {
   return (
     <div className="p-4 md:p-6 lg:p-8 flex flex-col h-full min-h-0 gap-4 md:gap-5 overflow-hidden">
       <div className="shrink-0">
-        <h1 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight uppercase">Danh mục sản phẩm</h1>
-        <p className="text-sm text-slate-500 mt-1 font-medium">Phân loại sản phẩm theo cấu trúc cây phân cấp</p>
+        <h1 className="text-xl md:text-2xl font-semibold text-slate-900 tracking-tight">Danh mục sản phẩm</h1>
+        <p className="text-sm text-slate-500 mt-1">Phân loại sản phẩm theo cấu trúc cây phân cấp</p>
       </div>
 
       <CategoryToolbar
@@ -329,31 +337,36 @@ export function CategoriesPage() {
         canBulkDelete={isOwner}
       />
 
-      {isPending && (
-        <p className="text-sm text-slate-500 shrink-0" role="status">
-          Đang tải danh sách…
-        </p>
-      )}
-      {isError && (
-        <p className="text-sm text-red-600 shrink-0" role="alert">
-          {error instanceof ApiRequestError ? error.body.message : "Không tải được danh mục."}
-        </p>
-      )}
-
       <div className="flex-1 flex flex-col min-h-0 bg-white border border-slate-200/60 rounded-xl overflow-hidden shadow-md">
-        <div className="flex-1 overflow-y-auto relative scroll-smooth [scrollbar-gutter:stable] min-h-0">
-          <CategoryTable
-            data={categories}
-            selectedIds={selectedIds}
-            onSelect={handleSelect}
-            onSelectAll={handleSelectAll}
-            onView={handleView}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-            onAddSub={handleAddSub}
-            canDelete={isOwner}
-          />
-        </div>
+        {isPending && !listData ? (
+          <div className="p-8 text-center text-slate-500 flex-1" role="status">
+            Đang tải danh sách…
+          </div>
+        ) : isError && !listData ? (
+          <div className="p-8 text-center text-red-600 flex-1" role="alert">
+            {error instanceof ApiRequestError ? error.body.message : "Không tải được danh mục."}
+          </div>
+        ) : (
+          <>
+            <div className="flex-1 overflow-y-auto relative scroll-smooth [scrollbar-gutter:stable] min-h-0">
+              <CategoryTable
+                data={categories}
+                visibleColumnKeys={visibleColumnKeys}
+                selectedIds={selectedIds}
+                onSelect={handleSelect}
+                onSelectAll={handleSelectAll}
+                onView={handleView}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                onAddSub={handleAddSub}
+                canDelete={isOwner}
+              />
+            </div>
+            <div className="flex items-center justify-between flex-wrap gap-2 px-3 py-2 border-t border-slate-200 bg-slate-50/80 text-sm text-slate-600 min-h-11 shrink-0">
+              <span>Đang hiển thị {flattenedCategories.length} / {flattenedCategories.length} danh mục</span>
+            </div>
+          </>
+        )}
       </div>
 
       <CategoryDetailDialog

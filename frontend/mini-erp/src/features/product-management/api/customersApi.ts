@@ -20,6 +20,19 @@ export const CUSTOMER_LIST_SORT_WHITELIST = [
 
 export type CustomerListSort = (typeof CUSTOMER_LIST_SORT_WHITELIST)[number]
 
+export const CUSTOMER_LIST_SORT_LABEL_VI: Record<CustomerListSort, string> = {
+  "name:asc": "Tên khách hàng (A-Z)",
+  "name:desc": "Tên khách hàng (Z-A)",
+  "customerCode:asc": "Mã khách hàng (A-Z)",
+  "customerCode:desc": "Mã khách hàng (Z-A)",
+  "updatedAt:asc": "Cập nhật cũ nhất",
+  "updatedAt:desc": "Cập nhật mới nhất",
+  "createdAt:asc": "Tạo cũ nhất",
+  "createdAt:desc": "Tạo mới nhất",
+  "loyaltyPoints:asc": "Điểm tích lũy thấp đến cao",
+  "loyaltyPoints:desc": "Điểm tích lũy cao đến thấp",
+}
+
 export type CustomerListItemDto = {
   id: number
   customerCode: string

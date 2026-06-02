@@ -1,6 +1,13 @@
 import { apiJson } from "@/lib/api/http"
 
-export type TableKey = "inventory_stock" | "inventory_receipts" | "inventory_dispatch"
+export type TableKey =
+  | "inventory_stock"
+  | "inventory_receipts"
+  | "inventory_dispatch"
+  | "product_categories"
+  | "product_list"
+  | "product_suppliers"
+  | "product_customers"
 
 export type TableColumnConfig = {
   key: string
@@ -21,6 +28,7 @@ export type TableColumnSetting = {
 }
 
 export type SaveTableColumnSettingsBody = {
+  scope?: "inventory" | "products" | "all"
   items: {
     tableKey: TableKey
     hiddenColumns: string[]
@@ -33,7 +41,7 @@ export const TABLE_COLUMN_SETTINGS_UPDATED_EVENT = "table-column-settings-update
 const TABLE_COLUMN_DEFAULTS: TableColumnSetting[] = [
   {
     tableKey: "inventory_stock",
-    tableLabel: "Tồn kho",
+    tableLabel: "Kho hàng - Tồn kho",
     columns: [
       { key: "skuCode", label: "Mã SP", required: true, visible: true, order: 0 },
       { key: "productName", label: "Tên sản phẩm", required: true, visible: true, order: 1 },
@@ -45,7 +53,7 @@ const TABLE_COLUMN_DEFAULTS: TableColumnSetting[] = [
   },
   {
     tableKey: "inventory_receipts",
-    tableLabel: "Phiếu nhập kho",
+    tableLabel: "Kho hàng - Phiếu nhập kho",
     columns: [
       { key: "receiptCode", label: "Mã phiếu", required: true, visible: true, order: 0 },
       { key: "supplierName", label: "Nhà cung cấp", required: false, visible: true, order: 1 },
@@ -59,7 +67,7 @@ const TABLE_COLUMN_DEFAULTS: TableColumnSetting[] = [
   },
   {
     tableKey: "inventory_dispatch",
-    tableLabel: "Xuất kho & Điều phối",
+    tableLabel: "Kho hàng - Xuất kho & Điều phối",
     columns: [
       { key: "dispatchCode", label: "Mã phiếu", required: true, visible: true, order: 0 },
       { key: "orderCode", label: "Mã đơn hàng", required: false, visible: true, order: 1 },
@@ -68,6 +76,53 @@ const TABLE_COLUMN_DEFAULTS: TableColumnSetting[] = [
       { key: "userName", label: "Người xuất", required: false, visible: true, order: 4 },
       { key: "itemCount", label: "Số lượng", required: false, visible: true, order: 5 },
       { key: "status", label: "Trạng thái", required: false, visible: true, order: 6 },
+    ],
+  },
+  {
+    tableKey: "product_categories",
+    tableLabel: "Sản phẩm - Danh mục sản phẩm",
+    columns: [
+      { key: "categoryCode", label: "Mã phân loại", required: true, visible: true, order: 0 },
+      { key: "categoryName", label: "Tên danh mục", required: true, visible: true, order: 1 },
+      { key: "productCount", label: "Số sản phẩm", required: false, visible: true, order: 2 },
+      { key: "description", label: "Mô tả", required: false, visible: true, order: 3 },
+      { key: "status", label: "Trạng thái", required: false, visible: true, order: 4 },
+    ],
+  },
+  {
+    tableKey: "product_list",
+    tableLabel: "Sản phẩm - Sản phẩm",
+    columns: [
+      { key: "skuCode", label: "Mã sản phẩm", required: true, visible: true, order: 0 },
+      { key: "productName", label: "Tên sản phẩm", required: true, visible: true, order: 1 },
+      { key: "categoryName", label: "Danh mục", required: false, visible: true, order: 2 },
+      { key: "stock", label: "Tồn kho", required: false, visible: true, order: 3 },
+      { key: "price", label: "Giá bán", required: false, visible: true, order: 4 },
+      { key: "status", label: "Trạng thái", required: false, visible: true, order: 5 },
+    ],
+  },
+  {
+    tableKey: "product_suppliers",
+    tableLabel: "Sản phẩm - Nhà cung cấp",
+    columns: [
+      { key: "supplierCode", label: "Mã nhà cung cấp", required: true, visible: true, order: 0 },
+      { key: "supplierName", label: "Nhà cung cấp", required: true, visible: true, order: 1 },
+      { key: "contactName", label: "Người liên hệ", required: false, visible: true, order: 2 },
+      { key: "email", label: "Email", required: false, visible: true, order: 3 },
+      { key: "address", label: "Địa chỉ", required: false, visible: true, order: 4 },
+      { key: "status", label: "Trạng thái", required: false, visible: true, order: 5 },
+    ],
+  },
+  {
+    tableKey: "product_customers",
+    tableLabel: "Sản phẩm - Khách hàng",
+    columns: [
+      { key: "customerCode", label: "Mã khách hàng", required: true, visible: true, order: 0 },
+      { key: "customerName", label: "Khách hàng", required: true, visible: true, order: 1 },
+      { key: "phone", label: "Số điện thoại", required: false, visible: true, order: 2 },
+      { key: "email", label: "Email", required: false, visible: true, order: 3 },
+      { key: "orderCount", label: "Số đơn hàng", required: false, visible: true, order: 4 },
+      { key: "status", label: "Trạng thái", required: false, visible: true, order: 5 },
     ],
   },
 ]
@@ -149,7 +204,7 @@ function normalizeApiSettings(raw: GetTableColumnSettingsResponse | null | undef
 
 export async function getTableColumnSettings(): Promise<TableColumnSetting[]> {
   try {
-    const data = await apiJson<GetTableColumnSettingsResponse>("/api/v1/interface-settings/table-columns?scope=inventory", {
+    const data = await apiJson<GetTableColumnSettingsResponse>("/api/v1/interface-settings/table-columns?scope=all", {
       auth: true,
     })
     return normalizeApiSettings(data)
@@ -162,7 +217,10 @@ export async function saveTableColumnSettings(body: SaveTableColumnSettingsBody)
   await apiJson("/api/v1/interface-settings/table-columns", {
     method: "PUT",
     auth: true,
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      scope: body.scope ?? "all",
+      items: body.items,
+    }),
   })
   dispatchSettingsUpdatedEvent()
 }

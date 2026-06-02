@@ -93,41 +93,41 @@ export const PRODUCT_TABLE_COL = {
 export const CATEGORY_TABLE_COL = {
   select: "w-[48px]",
   categoryCode: "w-[180px]",
-  categoryName: "min-w-[240px]",
-  productCount: "w-[92px]",
-  description: "min-w-[240px]",
+  categoryName: "w-[220px] min-w-0",
+  productCount: "w-[116px]",
+  description: "w-[240px] min-w-0",
   status: "w-[120px]",
 } as const
 /** Khách hàng */
 export const CUSTOMER_TABLE_COL = {
   select: "w-[48px]",
-  code: "w-[112px]",
-  name: "min-w-[200px]",
+  code: "w-[132px]",
+  name: "w-[200px] min-w-0",
   phone: "w-[128px]",
-  email: "w-[200px]",
-  orders: "w-[80px]",
+  email: "w-[220px] min-w-0",
+  orders: "w-[116px]",
   status: "w-[120px]",
 } as const
 
 /** Nhà cung cấp — `address` dùng `w-[1%]` để hút phần dư trong `table-fixed` (RULES_UI_TABLE). */
 export const SUPPLIER_TABLE_COL = {
   select: "w-[48px]",
-  code: "w-[100px]",
+  code: "w-[132px]",
   name: "w-[180px] min-w-0",
-  contact: "w-[120px] min-w-0",
-  email: "w-[200px] min-w-0",
-  address: "min-w-[200px] w-[1%]",
+  contact: "w-[148px] min-w-0",
+  email: "w-[220px] min-w-0",
+  address: "w-[220px] min-w-0",
   status: "w-[112px]",
 } as const
 
 /** Đơn hàng (Wholesale / Retail — `OrderTable`): `code` hút phần dư; `customer` cố định + truncate, tránh cột Khách hàng quá rộng. */
 export const ORDER_TABLE_COL = {
   select: "w-[48px]",
-  code: "min-w-[108px] w-[1%]",
-  customer: "w-[176px] min-w-0",
-  date: "w-[104px]",
+  code: "w-[136px]",
+  customer: "w-[280px] min-w-0",
+  date: "w-[128px]",
   items: "w-[84px]",
-  total: "w-[136px]",
+  total: "w-[160px]",
   payment: "w-[112px]",
   status: "w-[128px]",
 } as const

@@ -37,6 +37,8 @@ import { EmployeesPage } from "./features/settings/pages/EmployeesPage"
 import { AlertSettingsPage } from "./features/settings/pages/AlertSettingsPage"
 import { LogsPage } from "./features/settings/pages/LogsPage"
 import { InterfaceSettingsPage } from "./features/settings/pages/InterfaceSettingsPage"
+import { CustomBuilderPage } from "./features/custom-builder/pages/CustomBuilderPage"
+import { CustomRuntimePage } from "./features/custom-builder/pages/CustomRuntimePage"
 import { WarehouseLocationsPage } from "./features/inventory/pages/WarehouseLocationsPage"
 import { ChatBotPage } from "./features/ai/pages/ChatBotPage"
 
@@ -115,11 +117,16 @@ function App() {
           {/* AI Tools Routes */}
           <Route path="/ai/chat" element={<ChatBotPage />} />
 
+          {/* Custom Runtime Routes */}
+          <Route path="/custom/:pageKey" element={<CustomRuntimePage />} />
+          <Route path="/custom/:pageKey/:recordId" element={<CustomRuntimePage />} />
+
           {/* Settings Routes */}
           <Route path="/settings/store-info" element={<StoreInfoPage />} />
           <Route path="/settings/employees" element={<EmployeesPage />} />
           <Route path="/settings/alerts" element={<AlertSettingsPage />} />
           <Route path="/settings/interface" element={<InterfaceSettingsPage />} />
+          <Route path="/settings/custom-builder" element={<CustomBuilderPage />} />
           <Route path="/settings/system-logs" element={<LogsPage />} />
         </Route>
 

@@ -38,24 +38,20 @@ public class InterfaceSettingsTableColumnsController {
 	}
 
 	@GetMapping
-	@PreAuthorize("hasAuthority('can_manage_inventory')")
-	public ResponseEntity<ApiSuccessResponse<TableColumnSettingsData>> getInventoryScope(Authentication authentication,
+	@PreAuthorize("hasAnyAuthority('can_manage_inventory','can_manage_products','can_manage_customers')")
+	public ResponseEntity<ApiSuccessResponse<TableColumnSettingsData>> getByScope(Authentication authentication,
 			@RequestParam(value = "scope", required = false, defaultValue = "inventory") String scope) {
-		if (!"inventory".equalsIgnoreCase(scope.trim())) {
-			throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Tham số yêu cầu không hợp lệ",
-					java.util.Map.of("scope", "Giá trị hợp lệ: inventory"));
-		}
 		Jwt jwt = requireJwt(authentication);
-		TableColumnSettingsData data = service.getInventoryScope(jwt);
+		TableColumnSettingsData data = service.getByScope(jwt, scope);
 		return ResponseEntity.ok(ApiSuccessResponse.of(data, "Thành công"));
 	}
 
 	@PutMapping
-	@PreAuthorize("hasAuthority('can_manage_inventory') and hasAuthority('can_manage_staff')")
-	public ResponseEntity<ApiSuccessResponse<TableColumnSettingsData>> saveInventoryScope(Authentication authentication,
+	@PreAuthorize("hasAuthority('can_manage_staff')")
+	public ResponseEntity<ApiSuccessResponse<TableColumnSettingsData>> saveByScope(Authentication authentication,
 			@RequestBody SaveTableColumnSettingsRequest request) {
 		Jwt jwt = requireJwt(authentication);
-		TableColumnSettingsData data = service.saveInventoryScope(jwt, request);
+		TableColumnSettingsData data = service.saveByScope(jwt, request);
 		return ResponseEntity.ok(ApiSuccessResponse.of(data, "Đã cập nhật cấu hình cột"));
 	}
 

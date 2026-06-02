@@ -1,95 +1,128 @@
+import React from "react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Eye, Edit2, Trash2 } from "lucide-react"
-import { 
-  DATA_TABLE_ROOT_CLASS, 
-  DATA_TABLE_ACTION_HEAD_CLASS, 
+import {
+  DATA_TABLE_ROOT_CLASS,
+  DATA_TABLE_ACTION_HEAD_CLASS,
   DATA_TABLE_ACTION_CELL_CLASS,
   SUPPLIER_TABLE_COL,
   TABLE_HEAD_CLASS,
   TABLE_CELL_PRIMARY_CLASS,
   TABLE_CELL_SECONDARY_CLASS,
   TABLE_CELL_MONO_CLASS,
+  DATA_TABLE_CHECKBOX_CLASS,
 } from "@/lib/data-table-layout"
 import { cn } from "@/lib/utils"
 import type { Supplier } from "../types"
 
 interface SupplierTableProps {
   data: Supplier[]
+  visibleColumnKeys?: string[]
   selectedIds: number[]
   onSelect: (id: number) => void
   onSelectAll: (checked: boolean) => void
   onView: (item: Supplier) => void
   onEdit: (item: Supplier) => void
   onDelete: (item: Supplier) => void
-  /** Task046 — BE `assertOwnerOnly` khi xóa. */
   canDelete?: boolean
 }
 
-export function SupplierTable({ 
-  data, 
-  selectedIds, 
-  onSelect, 
-  onSelectAll, 
-  onView, 
+const REQUIRED_COLUMNS = new Set(["supplierCode", "supplierName"])
+const DEFAULT_COLUMNS = ["supplierCode", "supplierName", "contactName", "email", "address", "status"]
+
+export function SupplierTable({
+  data,
+  visibleColumnKeys = DEFAULT_COLUMNS,
+  selectedIds,
+  onSelect,
+  onSelectAll,
+  onView,
   onEdit,
   onDelete,
   canDelete = false,
 }: SupplierTableProps) {
-  const allSelected = data.length > 0 && selectedIds.length === data.length;
-  const someSelected = selectedIds.length > 0 && selectedIds.length < data.length;
+  const allSelected = data.length > 0 && selectedIds.length === data.length
+  const someSelected = selectedIds.length > 0 && selectedIds.length < data.length
+
+  const columnRenderers = {
+    supplierCode: {
+      head: <TableHead className={cn(SUPPLIER_TABLE_COL.code, TABLE_HEAD_CLASS, "px-4")}>Mã nhà cung cấp</TableHead>,
+      cell: (item: Supplier) => <TableCell className={cn(SUPPLIER_TABLE_COL.code, TABLE_CELL_MONO_CLASS, "px-4")}>{item.supplierCode}</TableCell>,
+    },
+    supplierName: {
+      head: <TableHead className={cn(SUPPLIER_TABLE_COL.name, TABLE_HEAD_CLASS, "px-4")}>Nhà cung cấp</TableHead>,
+      cell: (item: Supplier) => <TableCell className={cn(SUPPLIER_TABLE_COL.name, TABLE_CELL_PRIMARY_CLASS, "px-4 truncate min-w-0")}>{item.name}</TableCell>,
+    },
+    contactName: {
+      head: <TableHead className={cn(SUPPLIER_TABLE_COL.contact, TABLE_HEAD_CLASS, "px-4")}>Người liên hệ</TableHead>,
+      cell: (item: Supplier) => <TableCell className={cn(SUPPLIER_TABLE_COL.contact, TABLE_CELL_SECONDARY_CLASS, "px-4 truncate min-w-0")}>{item.contactPerson || "-"}</TableCell>,
+    },
+    email: {
+      head: <TableHead className={cn(SUPPLIER_TABLE_COL.email, TABLE_HEAD_CLASS, "px-4")}>Email</TableHead>,
+      cell: (item: Supplier) => <TableCell className={cn(SUPPLIER_TABLE_COL.email, TABLE_CELL_SECONDARY_CLASS, "px-4 truncate min-w-0")}>{item.email || "-"}</TableCell>,
+    },
+    address: {
+      head: <TableHead className={cn(SUPPLIER_TABLE_COL.address, TABLE_HEAD_CLASS, "px-4 text-left")}>Địa chỉ</TableHead>,
+      cell: (item: Supplier) => <TableCell className={cn(SUPPLIER_TABLE_COL.address, TABLE_CELL_SECONDARY_CLASS, "px-4 text-left truncate min-w-0")}>{item.address || "-"}</TableCell>,
+    },
+    status: {
+      head: <TableHead className={cn(SUPPLIER_TABLE_COL.status, TABLE_HEAD_CLASS, "px-4")}>Trạng thái</TableHead>,
+      cell: (item: Supplier) => (
+        <TableCell className={cn(SUPPLIER_TABLE_COL.status, "px-4")}>
+          <Badge className={cn("text-xs font-normal border-none", item.status === "Active" ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-500")}>
+            {item.status === "Active" ? "Hoạt động" : "Ngừng"}
+          </Badge>
+        </TableCell>
+      ),
+    },
+  } satisfies Record<string, { head: React.ReactNode; cell: (item: Supplier) => React.ReactNode }>
+
+  const visibleKeySet = new Set(visibleColumnKeys)
+  const orderedColumns = DEFAULT_COLUMNS
+    .filter((key) => visibleKeySet.has(key) || REQUIRED_COLUMNS.has(key))
+    .map((key) => ({ key, renderer: columnRenderers[key] }))
+    .filter((entry): entry is { key: string; renderer: (typeof columnRenderers)[keyof typeof columnRenderers] } => entry.renderer != null)
+
+  const emptyColSpan = orderedColumns.length + 2
 
   return (
     <Table className={DATA_TABLE_ROOT_CLASS}>
       <TableHeader className="sticky top-0 z-30 bg-slate-50 shadow-sm border-b">
         <TableRow className="hover:bg-transparent border-slate-200 border-b">
           <TableHead className={cn(SUPPLIER_TABLE_COL.select, "px-4 text-center", TABLE_HEAD_CLASS)}>
-            <Checkbox 
-              checked={allSelected ? true : someSelected ? "indeterminate" : false} 
+            <Checkbox
+              checked={allSelected ? true : someSelected ? "indeterminate" : false}
               onCheckedChange={(checked) => onSelectAll(checked as boolean)}
-              className="border-slate-300 data-[state=checked]:bg-white data-[state=checked]:text-blue-600 data-[state=checked]:border-blue-600"
+              className={DATA_TABLE_CHECKBOX_CLASS}
             />
           </TableHead>
-          <TableHead className={cn(SUPPLIER_TABLE_COL.code, TABLE_HEAD_CLASS, "px-4")}>Mã NCC</TableHead>
-          <TableHead className={cn(SUPPLIER_TABLE_COL.name, TABLE_HEAD_CLASS, "px-4")}>Nhà cung cấp</TableHead>
-          <TableHead className={cn(SUPPLIER_TABLE_COL.contact, TABLE_HEAD_CLASS, "px-4")}>Người liên hệ</TableHead>
-          <TableHead className={cn(SUPPLIER_TABLE_COL.email, TABLE_HEAD_CLASS, "px-4")}>Email</TableHead>
-          <TableHead className={cn(SUPPLIER_TABLE_COL.address, TABLE_HEAD_CLASS, "px-4 text-left")}>Địa chỉ</TableHead>
-          <TableHead className={cn(SUPPLIER_TABLE_COL.status, TABLE_HEAD_CLASS, "px-4")}>Trạng thái</TableHead>
+          {orderedColumns.map((column) => <React.Fragment key={column.key}>{column.renderer.head}</React.Fragment>)}
           <TableHead className={cn(DATA_TABLE_ACTION_HEAD_CLASS, TABLE_HEAD_CLASS)}>Thao tác</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody className="divide-y divide-slate-100">
         {data.length === 0 ? (
           <TableRow>
-            <TableCell colSpan={8} className="h-24 text-center text-slate-500 text-sm">
+            <TableCell colSpan={emptyColSpan} className="h-24 text-center text-slate-500 text-sm">
               Không tìm thấy nhà cung cấp nào.
             </TableCell>
           </TableRow>
         ) : (
           data.map((item) => {
-            const isSelected = selectedIds.includes(item.id);
+            const isSelected = selectedIds.includes(item.id)
             return (
               <TableRow key={item.id} className={cn("group h-14", isSelected ? "bg-slate-50" : "hover:bg-slate-50/50")}>
                 <TableCell className="px-4 text-center">
-                  <Checkbox 
+                  <Checkbox
                     checked={isSelected}
                     onCheckedChange={() => onSelect(item.id)}
-                    className="border-slate-300 data-[state=checked]:bg-white data-[state=checked]:text-blue-600 data-[state=checked]:border-blue-600"
+                    className={DATA_TABLE_CHECKBOX_CLASS}
                   />
                 </TableCell>
-                <TableCell className={cn(SUPPLIER_TABLE_COL.code, TABLE_CELL_MONO_CLASS, "px-4")}>{item.supplierCode}</TableCell>
-                <TableCell className={cn(SUPPLIER_TABLE_COL.name, TABLE_CELL_PRIMARY_CLASS, "px-4 truncate")}>{item.name}</TableCell>
-                <TableCell className={cn(SUPPLIER_TABLE_COL.contact, TABLE_CELL_SECONDARY_CLASS, "px-4 truncate")}>{item.contactPerson || '-'}</TableCell>
-                <TableCell className={cn(SUPPLIER_TABLE_COL.email, TABLE_CELL_SECONDARY_CLASS, "px-4 truncate")}>{item.email || '-'}</TableCell>
-                <TableCell className={cn(SUPPLIER_TABLE_COL.address, TABLE_CELL_SECONDARY_CLASS, "px-4 text-left truncate min-w-0")}>{item.address || '-'}</TableCell>
-                <TableCell className={cn(SUPPLIER_TABLE_COL.status, "px-4")}>
-                  <Badge className={cn("text-xs font-normal border-none", item.status === 'Active' ? 'bg-green-50 text-green-700' : 'bg-slate-100 text-slate-500')}>
-                    {item.status === 'Active' ? 'Hoạt động' : 'Ngừng'}
-                  </Badge>
-                </TableCell>
+                {orderedColumns.map((column) => <React.Fragment key={column.key}>{column.renderer.cell(item)}</React.Fragment>)}
                 <TableCell className={DATA_TABLE_ACTION_CELL_CLASS}>
                   <div className="flex items-center justify-center gap-1">
                     <Button variant="ghost" size="icon" onClick={() => onView(item)} title="Xem chi tiết" className="h-8 w-8 text-slate-500 hover:text-slate-900 transition-colors">
@@ -98,17 +131,19 @@ export function SupplierTable({
                     <Button variant="ghost" size="icon" onClick={() => onEdit(item)} title="Chỉnh sửa" className="h-8 w-8 text-slate-500 hover:text-slate-900 transition-colors">
                       <Edit2 className="h-4 w-4" />
                     </Button>
-                    {canDelete ? (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => onDelete(item)}
-                        title="Xóa"
-                        className="h-8 w-8 text-slate-500 hover:text-red-600 transition-colors"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    ) : null}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      disabled={!canDelete}
+                      onClick={() => {
+                        if (!canDelete) return
+                        onDelete(item)
+                      }}
+                      title={canDelete ? "Xóa" : "Chỉ Owner mới được xóa"}
+                      className="h-8 w-8 text-slate-500 hover:text-red-600 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
                 </TableCell>
               </TableRow>
