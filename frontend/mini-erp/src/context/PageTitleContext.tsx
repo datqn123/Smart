@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type ReactNode } from "react"
+import { createContext, useContext, useCallback, useMemo, type ReactNode } from "react"
 
 interface PageTitleContextType {
   title: string
@@ -8,10 +8,15 @@ interface PageTitleContextType {
 const PageTitleContext = createContext<PageTitleContextType | undefined>(undefined)
 
 export function PageTitleProvider({ children }: { children: ReactNode }) {
-  const [title, setTitle] = useState("Dashboard")
+  const setTitle = useCallback((newTitle: string) => {
+    const cleanTitle = newTitle.trim()
+    document.title = cleanTitle ? `${cleanTitle} - Mini ERP` : "Mini ERP"
+  }, [])
+
+  const value = useMemo(() => ({ title: "", setTitle }), [setTitle])
 
   return (
-    <PageTitleContext.Provider value={{ title, setTitle }}>
+    <PageTitleContext.Provider value={value}>
       {children}
     </PageTitleContext.Provider>
   )

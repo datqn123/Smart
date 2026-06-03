@@ -28,6 +28,16 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
+import {
+  createCustomMenuFolder,
+  createCustomMenuPage,
+  getCustomMenuTree,
+  patchCustomMenuFolder,
+  patchCustomMenuPage,
+  publishCustomMenu,
+  type BuilderMenuTree,
+} from "@/features/custom-builder/api/customInterfaceApi"
+import { useAuthStore } from "@/features/auth/store/useAuthStore"
 
 type FolderStatus = "Draft" | "Published" | "Hidden"
 type PageStatus = "Draft" | "Published" | "NeedsConfig" | "Hidden"
@@ -37,6 +47,7 @@ type CustomMenuPageNode = {
   nodeType: "page"
   id: string
   key: string
+  originalKey?: string
   label: string
   icon?: string
   parentKey: string
@@ -62,6 +73,7 @@ type CustomMenuFolderNode = {
   nodeType: "folder"
   id: string
   key: string
+  originalKey?: string
   label: string
   icon?: string
   description?: string
@@ -106,6 +118,7 @@ const initialFolders: CustomMenuFolderNode[] = [
     nodeType: "folder",
     id: "folder-quality",
     key: "kiem_hang",
+    originalKey: "kiem_hang",
     label: "Kiểm hàng",
     icon: "folder",
     description: "Nhóm giao diện phục vụ kiểm hàng và xử lý sự cố kho.",
@@ -126,6 +139,7 @@ const initialFolders: CustomMenuFolderNode[] = [
         nodeType: "page",
         id: "page-damaged-stock",
         key: "phieu_kiem_hang_hong",
+        originalKey: "phieu_kiem_hang_hong",
         label: "Phiếu kiểm hàng hỏng",
         icon: "file",
         parentKey: "kiem_hang",
@@ -208,6 +222,55 @@ function getSelectedItem(folders: CustomMenuFolderNode[], selected: SelectedRef)
   return folder.children.find((page) => page.key === selected.pageKey) ?? null
 }
 
+function fromApiTree(tree: BuilderMenuTree): CustomMenuFolderNode[] {
+  return (tree.folders ?? []).map((folder) => ({
+    nodeType: "folder",
+    id: folder.id,
+    key: folder.key,
+    originalKey: folder.key,
+    label: folder.label,
+    icon: "folder",
+    description: folder.description,
+    status: folder.status === "Hidden" ? "Hidden" : folder.status === "Published" ? "Published" : "Draft",
+    sortOrder: folder.sortOrder,
+    permissions: folder.roles,
+    version: folder.version,
+    draftVersion: folder.draftVersion,
+    publishedVersion: folder.publishedVersion,
+    hasDraft: folder.hasDraft,
+    publishedAt: folder.publishedAt,
+    publishedByName: folder.publishedByName,
+    etag: folder.etag,
+    updatedAt: folder.updatedAt,
+    updatedByName: folder.updatedByName,
+    children: (folder.children ?? []).map((page) => ({
+      nodeType: "page",
+      id: page.id,
+      key: page.key,
+      originalKey: page.key,
+      label: page.label,
+      icon: "file",
+      parentKey: page.parentKey,
+      routePath: page.routePath,
+      entityKey: page.entityKey,
+      pageType: page.pageType,
+      status: page.status,
+      sortOrder: page.sortOrder,
+      description: page.description,
+      permissions: page.roles,
+      version: page.version,
+      draftVersion: page.draftVersion,
+      publishedVersion: page.publishedVersion,
+      hasDraft: page.hasDraft,
+      publishedAt: page.publishedAt,
+      publishedByName: page.publishedByName,
+      etag: page.etag,
+      updatedAt: page.updatedAt,
+      updatedByName: page.updatedByName,
+    })),
+  }))
+}
+
 function statusBadgeClass(status: FolderStatus | PageStatus) {
   if (status === "Published") {
     return "border-emerald-200 bg-emerald-50 text-emerald-700"
@@ -277,6 +340,7 @@ function FieldError({ message }: { message?: string }) {
 
 export function CustomBuilderPage() {
   const { setTitle } = usePageTitle()
+  const canManageBuilder = useAuthStore((state) => state.menuPermissions.can_manage_custom_builder)
   const [folders, setFolders] = useState<CustomMenuFolderNode[]>(initialFolders)
   const [expanded, setExpanded] = useState<Set<string>>(new Set(["kiem_hang"]))
   const [selectedRef, setSelectedRef] = useState<SelectedRef>({
@@ -287,10 +351,36 @@ export function CustomBuilderPage() {
   const [saving, setSaving] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(true)
+  const [treeEtag, setTreeEtag] = useState<string | undefined>(undefined)
 
   useEffect(() => {
     setTitle("Trình thiết kế dữ liệu")
   }, [setTitle])
+
+  useEffect(() => {
+    let alive = true
+    getCustomMenuTree()
+      .then((tree) => {
+        if (!alive) return
+        const nextFolders = fromApiTree(tree)
+        setFolders(nextFolders.length > 0 ? nextFolders : initialFolders)
+        setTreeEtag(tree.treeEtag)
+        const first = nextFolders[0] ?? initialFolders[0]
+        if (first) {
+          setExpanded(new Set([first.key]))
+          setSelectedRef({ type: "folder", folderKey: first.key })
+        }
+        setDirty(false)
+      })
+      .catch(() => {
+        if (alive) {
+          setFolders(initialFolders)
+        }
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
 
   const selectedItem = getSelectedItem(folders, selectedRef)
   const selectedFolder =
@@ -333,73 +423,117 @@ export function CustomBuilderPage() {
     })
   }
 
-  const createFolder = () => {
+  const createFolder = async () => {
     const key = makeUniqueKey("danh_muc_moi", allKeys(folders))
-    const newFolder: CustomMenuFolderNode = {
-      nodeType: "folder",
-      id: `folder-${Date.now()}`,
-      key,
-      label: "Danh mục mới",
-      icon: "folder",
-      description: "",
-      status: "Draft",
-      sortOrder: folders.length,
-      permissions: DEFAULT_PERMISSIONS,
-      version: 1,
-      draftVersion: 1,
-      publishedVersion: undefined,
-      hasDraft: true,
-      publishedAt: undefined,
-      publishedByName: undefined,
-      etag: `folder-${key}-draft-1`,
-      updatedAt: "03/06/2026",
-      updatedByName: "Bạn",
-      children: [],
+    try {
+      const tree = await createCustomMenuFolder({
+        key,
+        label: "Danh mục mới",
+        icon: "folder",
+        description: "",
+        visibilityRoles: DEFAULT_PERMISSIONS,
+        sortOrder: folders.length,
+      })
+      const next = fromApiTree(tree)
+      setFolders(next)
+      setTreeEtag(tree.treeEtag)
+      setExpanded((prev) => new Set(prev).add(key))
+      setSelectedRef({ type: "folder", folderKey: key })
+      setDirty(false)
+      toast.success("Đã tạo danh mục menu cha")
+    } catch {
+      const newFolder: CustomMenuFolderNode = {
+        nodeType: "folder",
+        id: `folder-${Date.now()}`,
+        key,
+        originalKey: key,
+        label: "Danh mục mới",
+        icon: "folder",
+        description: "",
+        status: "Draft",
+        sortOrder: folders.length,
+        permissions: DEFAULT_PERMISSIONS,
+        version: 1,
+        draftVersion: 1,
+        publishedVersion: undefined,
+        hasDraft: true,
+        publishedAt: undefined,
+        publishedByName: undefined,
+        etag: `folder-${key}-draft-1`,
+        updatedAt: "03/06/2026",
+        updatedByName: "Bạn",
+        children: [],
+      }
+      setFoldersDirty((prev) => reindexFolders([...orderedFolders(prev), newFolder]))
+      setExpanded((prev) => new Set(prev).add(key))
+      setSelectedRef({ type: "folder", folderKey: key })
+      toast.error("Chưa kết nối được backend, đang dùng bản nháp cục bộ.")
     }
-    setFoldersDirty((prev) => reindexFolders([...orderedFolders(prev), newFolder]))
-    setExpanded((prev) => new Set(prev).add(key))
-    setSelectedRef({ type: "folder", folderKey: key })
   }
 
-  const createPage = () => {
+  const createPage = async () => {
     const parent = selectedFolder ?? folders[0]
     if (!parent) {
       return
     }
     const key = makeUniqueKey("giao_dien_moi", allKeys(folders))
-    const newPage: CustomMenuPageNode = {
-      nodeType: "page",
-      id: `page-${Date.now()}`,
-      key,
-      label: "Giao diện mới",
-      icon: "file",
-      parentKey: parent.key,
-      routePath: `/custom/${key}`,
-      entityKey: key,
-      pageType: "table_detail",
-      status: "NeedsConfig",
-      sortOrder: parent.children.length,
-      description: "",
-      permissions: DEFAULT_PERMISSIONS,
-      version: 1,
-      draftVersion: 1,
-      publishedVersion: undefined,
-      hasDraft: true,
-      publishedAt: undefined,
-      publishedByName: undefined,
-      etag: `page-${key}-draft-1`,
-      updatedAt: "03/06/2026",
-      updatedByName: "Bạn",
+    try {
+      const tree = await createCustomMenuPage({
+        parentKey: parent.key,
+        key,
+        label: "Giao diện mới",
+        icon: "file",
+        routePath: `/custom/${key}`,
+        entityKey: key,
+        pageType: "table_detail",
+        description: "",
+        visibilityRoles: DEFAULT_PERMISSIONS,
+        sortOrder: parent.children.length,
+      })
+      const next = fromApiTree(tree)
+      setFolders(next)
+      setTreeEtag(tree.treeEtag)
+      setExpanded((prev) => new Set(prev).add(parent.key))
+      setSelectedRef({ type: "page", folderKey: parent.key, pageKey: key })
+      setDirty(false)
+      toast.success("Đã tạo giao diện menu con")
+    } catch {
+      const newPage: CustomMenuPageNode = {
+        nodeType: "page",
+        id: `page-${Date.now()}`,
+        key,
+        originalKey: key,
+        label: "Giao diện mới",
+        icon: "file",
+        parentKey: parent.key,
+        routePath: `/custom/${key}`,
+        entityKey: key,
+        pageType: "table_detail",
+        status: "NeedsConfig",
+        sortOrder: parent.children.length,
+        description: "",
+        permissions: DEFAULT_PERMISSIONS,
+        version: 1,
+        draftVersion: 1,
+        publishedVersion: undefined,
+        hasDraft: true,
+        publishedAt: undefined,
+        publishedByName: undefined,
+        etag: `page-${key}-draft-1`,
+        updatedAt: "03/06/2026",
+        updatedByName: "Bạn",
+      }
+      setFoldersDirty((prev) =>
+        prev.map((folder) =>
+          folder.key === parent.key
+            ? { ...folder, children: reindexPages([...orderedPages(folder.children), newPage]) }
+            : folder,
+        ),
+      )
+      setExpanded((prev) => new Set(prev).add(parent.key))
+      setSelectedRef({ type: "page", folderKey: parent.key, pageKey: key })
+      toast.error("Chưa kết nối được backend, đang dùng bản nháp cục bộ.")
     }
-    setFoldersDirty((prev) =>
-      prev.map((folder) =>
-        folder.key === parent.key
-          ? { ...folder, children: reindexPages([...orderedPages(folder.children), newPage]) }
-          : folder,
-      ),
-    )
-    setExpanded((prev) => new Set(prev).add(parent.key))
-    setSelectedRef({ type: "page", folderKey: parent.key, pageKey: key })
   }
 
   const updateSelectedField = (field: string, value: string) => {
@@ -512,11 +646,44 @@ export function CustomBuilderPage() {
       toast.error("Vui lòng kiểm tra lại các trường được đánh dấu.")
       return
     }
+    if (!selectedItem) {
+      return
+    }
     setSaving(true)
-    await new Promise((resolve) => window.setTimeout(resolve, 350))
-    setSaving(false)
-    setDirty(false)
-    toast.success("Đã lưu bản nháp cấu hình giao diện")
+    try {
+      const tree =
+        selectedItem.nodeType === "folder"
+          ? await patchCustomMenuFolder(selectedItem.originalKey ?? selectedItem.key, {
+              key: selectedItem.key,
+              label: selectedItem.label,
+              icon: selectedItem.icon,
+              description: selectedItem.description,
+              visibilityRoles: selectedItem.permissions,
+              sortOrder: selectedItem.sortOrder,
+              etag: selectedItem.etag,
+            })
+          : await patchCustomMenuPage(selectedItem.originalKey ?? selectedItem.key, {
+              parentKey: selectedItem.parentKey,
+              key: selectedItem.key,
+              label: selectedItem.label,
+              icon: selectedItem.icon,
+              description: selectedItem.description,
+              routePath: selectedItem.routePath,
+              entityKey: selectedItem.entityKey,
+              pageType: selectedItem.pageType,
+              visibilityRoles: selectedItem.permissions,
+              sortOrder: selectedItem.sortOrder,
+              etag: selectedItem.etag,
+            })
+      setFolders(fromApiTree(tree))
+      setTreeEtag(tree.treeEtag)
+      setDirty(false)
+      toast.success("Đã lưu bản nháp cấu hình giao diện")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Không thể lưu bản nháp cấu hình giao diện.")
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handlePublish = async () => {
@@ -528,25 +695,29 @@ export function CustomBuilderPage() {
       return
     }
     setPublishing(true)
-    await new Promise((resolve) => window.setTimeout(resolve, 350))
-    setFoldersDirty((prev) =>
-      prev.map((folder) => {
-        if (selectedItem.nodeType === "folder" && folder.key === selectedItem.key) {
-          return { ...folder, status: "Published" }
-        }
-        if (selectedItem.nodeType === "page" && folder.key === selectedRef.folderKey) {
-          return {
-            ...folder,
-            children: folder.children.map((page) =>
-              page.key === selectedItem.key ? { ...page, status: "Published" } : page,
-            ),
-          }
-        }
-        return folder
-      }),
+    try {
+      const tree = await publishCustomMenu(treeEtag)
+      setFolders(fromApiTree(tree))
+      setTreeEtag(tree.treeEtag)
+      setDirty(false)
+      toast.success("Đã publish cấu hình giao diện")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Cấu hình chưa hợp lệ để publish.")
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  if (!canManageBuilder) {
+    return (
+      <div className="flex min-h-full items-center justify-center bg-slate-50 p-6">
+        <div className="max-w-md rounded-lg border border-slate-200 bg-white p-6 text-center shadow-sm">
+          <AlertTriangle className="mx-auto h-10 w-10 text-slate-400" />
+          <h1 className="mt-4 text-lg font-semibold text-slate-950">Bạn không có quyền mở trình thiết kế</h1>
+          <p className="mt-2 text-sm text-slate-500">Vui lòng dùng tài khoản Owner hoặc Admin để cấu hình giao diện tùy chỉnh.</p>
+        </div>
+      </div>
     )
-    setPublishing(false)
-    toast.success("Đã publish cấu hình mô phỏng")
   }
 
   return (

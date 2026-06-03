@@ -29,6 +29,14 @@ class MenuPermissionClaimsTest {
 	}
 
 	@Test
+	void fromRolePermissionsJson_customBuilderPermissionsWhenPresent() {
+		String json = "{\"can_manage_custom_builder\": true, \"can_use_custom_entities\": true}";
+		Map<String, Boolean> m = MenuPermissionClaims.fromRolePermissionsJson(json);
+		assertThat(m.get("can_manage_custom_builder")).isTrue();
+		assertThat(m.get("can_use_custom_entities")).isTrue();
+	}
+
+	@Test
 	void fromRolePermissionsJson_nullOrBlank_allFalse() {
 		assertThat(MenuPermissionClaims.fromRolePermissionsJson(null).get("can_view_finance")).isFalse();
 		assertThat(MenuPermissionClaims.fromRolePermissionsJson("").get("can_view_finance")).isFalse();
@@ -37,9 +45,10 @@ class MenuPermissionClaimsTest {
 	@Test
 	void grantedAuthoritiesFromMpClaim_marksTrueAsAuthorities() {
 		List<GrantedAuthority> list = MenuPermissionClaims.grantedAuthoritiesFromMpClaim(
-				Map.of("can_manage_staff", true, "can_approve", false));
+				Map.of("can_manage_staff", true, "can_approve", false, "can_manage_custom_builder", true));
 		assertThat(list)
 				.contains(new SimpleGrantedAuthority("can_manage_staff"))
+				.contains(new SimpleGrantedAuthority("can_manage_custom_builder"))
 				.doesNotContain(new SimpleGrantedAuthority("can_approve"));
 	}
 

@@ -18,6 +18,8 @@ import type { MenuPermissions } from "@/features/auth/types/menuPermissions"
 import { useUIStore } from "@/store/useUIStore"
 import { Button } from "@/components/ui/button"
 import { getRuntimeCustomMenuForUser } from "@/features/custom-builder/runtime/customMenuRuntime"
+import type { RuntimeCustomMenuFolder } from "@/features/custom-builder/runtime/customMenuRuntime"
+import { getRuntimeCustomMenu } from "@/features/custom-builder/api/customInterfaceApi"
 import {
   Collapsible,
   CollapsibleContent,
@@ -120,7 +122,7 @@ const navConfig: NavItemConfig[] = [
     subItems: [
       { label: "Thông tin cửa hàng", path: "/settings/store-info", always: true },
       { label: "Cấu hình giao diện", path: "/settings/interface", always: true },
-      { label: "Trình thiết kế dữ liệu", path: "/settings/custom-builder", always: true },
+      { label: "Trình thiết kế dữ liệu", path: "/settings/custom-builder", perm: "can_manage_custom_builder" },
       { label: "Quản lý nhân viên", path: "/settings/employees", perm: "can_manage_staff" },
       { label: "Cấu hình cảnh báo", path: "/settings/alerts", perm: "can_configure_alerts" },
       { label: "Nhật ký hệ thống", path: "/settings/system-logs", always: true },
@@ -149,7 +151,11 @@ function subItemVisible(
   return false
 }
 
-function buildNavForPermissions(p: MenuPermissions, role: UserRole | null): NavItem[] {
+function buildNavForPermissions(
+  p: MenuPermissions,
+  role: UserRole | null,
+  runtimeFolders: RuntimeCustomMenuFolder[],
+): NavItem[] {
   const out: NavItem[] = []
   for (const c of navConfig) {
     const subs = c.subItems
@@ -160,7 +166,7 @@ function buildNavForPermissions(p: MenuPermissions, role: UserRole | null): NavI
     }
     out.push({ id: c.id, label: c.label, icon: c.icon, subItems: subs })
   }
-  const customFolders = getRuntimeCustomMenuForUser(p, role).map((folder) => ({
+  const customFolders = getRuntimeCustomMenuForUser(p, role, runtimeFolders).map((folder) => ({
     id: `custom-${folder.key}` as NavItemKey,
     label: folder.label,
     icon: <FolderTree className="h-[18px] w-[18px]" />,
@@ -175,16 +181,37 @@ export function Sidebar({ isMobile = false }: SidebarProps) {
   const location = useLocation()
   const navigate = useNavigate()
   const { expandedItems, toggleItem, expandItem } = useSidebarStore()
-  const { setSidebarOpen, sidebarWidth, setSidebarWidth } = useUIStore()
+  const setSidebarOpen = useUIStore((s) => s.setSidebarOpen)
+  const sidebarWidth = useUIStore((s) => s.sidebarWidth)
+  const setSidebarWidth = useUIStore((s) => s.setSidebarWidth)
   const isResizing = useRef(false)
   const zustandLogout = useAuthStore((state) => state.logout)
   const menuPermissions = useAuthStore((state) => state.menuPermissions)
   const userRole = useAuthStore((state) => state.user?.role ?? null)
   const [loggingOut, setLoggingOut] = useState(false)
+  const [runtimeFolders, setRuntimeFolders] = useState<RuntimeCustomMenuFolder[]>([])
+
+  useEffect(() => {
+    let alive = true
+    getRuntimeCustomMenu()
+      .then((data) => {
+        if (alive) {
+          setRuntimeFolders(data.folders ?? [])
+        }
+      })
+      .catch(() => {
+        if (alive) {
+          setRuntimeFolders([])
+        }
+      })
+    return () => {
+      alive = false
+    }
+  }, [menuPermissions, userRole])
 
   const filteredNavItems = useMemo(
-    () => buildNavForPermissions(menuPermissions, userRole),
-    [menuPermissions, userRole],
+    () => buildNavForPermissions(menuPermissions, userRole, runtimeFolders),
+    [menuPermissions, userRole, runtimeFolders],
   )
 
   const isActiveRoute = (path: string) => location.pathname === path || location.pathname.startsWith(`${path}/`)
@@ -198,10 +225,10 @@ export function Sidebar({ isMobile = false }: SidebarProps) {
     const activeParent = filteredNavItems.find(item => 
       item.subItems?.some(sub => isActiveRoute(sub.path))
     )
-    if (activeParent) {
+    if (activeParent && !expandedItems.has(activeParent.id)) {
       expandItem(activeParent.id)
     }
-  }, [location.pathname, expandItem, filteredNavItems])
+  }, [location.pathname, expandItem, filteredNavItems, expandedItems])
 
   const handleNavigation = (path: string) => {
     navigate(path)

@@ -39,7 +39,9 @@ public final class MenuPermissionClaims {
 		"can_manage_staff",
 		"can_configure_alerts",
 		"can_view_store_profile",
-		"can_view_system_logs"
+		"can_view_system_logs",
+		"can_manage_custom_builder",
+		"can_use_custom_entities"
 	};
 
 	private MenuPermissionClaims() {

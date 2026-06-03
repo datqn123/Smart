@@ -4,7 +4,8 @@ import { Header } from "./Header"
 import { useUIStore } from "@/store/useUIStore"
 
 export function MainLayout() {
-  const { sidebarOpen, setSidebarOpen } = useUIStore()
+  const sidebarOpen = useUIStore((s) => s.sidebarOpen)
+  const setSidebarOpen = useUIStore((s) => s.setSidebarOpen)
 
   return (
     <div className="h-screen w-full flex bg-white overflow-hidden">

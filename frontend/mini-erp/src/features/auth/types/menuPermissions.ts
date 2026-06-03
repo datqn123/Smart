@@ -13,4 +13,6 @@ export type MenuPermissions = {
   can_view_finance: boolean
   can_manage_staff: boolean
   can_configure_alerts: boolean
+  can_manage_custom_builder: boolean
+  can_use_custom_entities: boolean
 }

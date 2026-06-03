@@ -24,6 +24,8 @@ const EMPTY_PERMS: MenuPermissions = {
   can_view_finance: false,
   can_manage_staff: false,
   can_configure_alerts: false,
+  can_manage_custom_builder: false,
+  can_use_custom_entities: false,
 }
 
 interface AuthState {

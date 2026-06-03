@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useParams } from "react-router-dom"
 import { AlertTriangle, CheckCircle2, FileText, ShieldAlert } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -10,17 +10,71 @@ import {
   canSeeRuntimePage,
   findRuntimeCustomPage,
 } from "@/features/custom-builder/runtime/customMenuRuntime"
+import type { RuntimeCustomFolder, RuntimeCustomPage } from "@/features/custom-builder/runtime/customMenuRuntime"
+import { getRuntimeCustomPage } from "@/features/custom-builder/api/customInterfaceApi"
+import { ApiRequestError } from "@/lib/api/http"
 
 export function CustomRuntimePage() {
   const { pageKey } = useParams()
   const { setTitle } = usePageTitle()
   const menuPermissions = useAuthStore((state) => state.menuPermissions)
   const role = useAuthStore((state) => state.user?.role ?? null)
-  const result = pageKey ? findRuntimeCustomPage(pageKey) : null
+  const [remoteResult, setRemoteResult] = useState<{ folder: RuntimeCustomFolder; page: RuntimeCustomPage } | null>(null)
+  const [errorStatus, setErrorStatus] = useState<number | null>(null)
+  const fallbackResult = pageKey ? findRuntimeCustomPage(pageKey) : null
+  const result = remoteResult ?? (errorStatus === null ? fallbackResult : null)
+
+  useEffect(() => {
+    let alive = true
+    setRemoteResult(null)
+    setErrorStatus(null)
+    if (!pageKey) {
+      setErrorStatus(404)
+      return () => {
+        alive = false
+      }
+    }
+    getRuntimeCustomPage(pageKey)
+      .then((data) => {
+        if (!alive) return
+        const folder = data.folders?.[0]
+        const page = folder?.children?.[0]
+        if (folder && page) {
+          setRemoteResult({ folder, page })
+        } else {
+          setErrorStatus(404)
+        }
+      })
+      .catch((error) => {
+        if (!alive) return
+        if (error instanceof ApiRequestError) {
+          setErrorStatus(error.status)
+          return
+        }
+        setErrorStatus(404)
+      })
+    return () => {
+      alive = false
+    }
+  }, [pageKey])
 
   useEffect(() => {
     setTitle(result?.page.label ?? "Giao diện tùy chỉnh")
   }, [result?.page.label, setTitle])
+
+  if (errorStatus === 403) {
+    return (
+      <div className="flex min-h-full items-center justify-center bg-slate-50 p-6">
+        <div className="max-w-md rounded-lg border border-slate-200 bg-white p-6 text-center shadow-sm">
+          <ShieldAlert className="mx-auto h-10 w-10 text-slate-400" />
+          <h1 className="mt-4 text-lg font-semibold text-slate-950">Bạn không có quyền mở giao diện này</h1>
+          <p className="mt-2 text-sm text-slate-500">
+            Hệ thống đã ẩn metadata chi tiết cho tới khi quyền menu, entity và dữ liệu được xác nhận.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   if (!result) {
     return (

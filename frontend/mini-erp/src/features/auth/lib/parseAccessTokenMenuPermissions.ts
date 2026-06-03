@@ -11,6 +11,8 @@ const KEYS: (keyof MenuPermissions)[] = [
   "can_view_finance",
   "can_manage_staff",
   "can_configure_alerts",
+  "can_manage_custom_builder",
+  "can_use_custom_entities",
 ]
 
 const DEFAULT_FALSE: MenuPermissions = KEYS.reduce((acc, k) => {

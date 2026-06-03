@@ -72,7 +72,8 @@ export function Header() {
   const location = useLocation()
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
   const notificationRef = useRef<HTMLDivElement>(null)
-  const { sidebarOpen, setSidebarOpen } = useUIStore()
+  const sidebarOpen = useUIStore((s) => s.sidebarOpen)
+  const setSidebarOpen = useUIStore((s) => s.setSidebarOpen)
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const user = useAuthStore((s) => s.user)
   const role = user?.role

@@ -201,8 +201,9 @@ export function getVisibleRuntimePages(
 export function getRuntimeCustomMenuForUser(
   permissions: MenuPermissions,
   role: UserRole | null,
+  source: RuntimeCustomFolder[] = customRuntimeCatalog,
 ): RuntimeCustomMenuFolder[] {
-  return customRuntimeCatalog
+  return source
     .filter((folder) => canSeeRuntimeFolder(folder, permissions, role))
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map((folder) => ({
@@ -211,8 +212,8 @@ export function getRuntimeCustomMenuForUser(
     }))
 }
 
-export function findRuntimeCustomPage(pageKey: string) {
-  for (const folder of customRuntimeCatalog) {
+export function findRuntimeCustomPage(pageKey: string, source: RuntimeCustomFolder[] = customRuntimeCatalog) {
+  for (const folder of source) {
     const page = folder.children.find((child) => child.key === pageKey)
     if (page) {
       return { folder, page }
