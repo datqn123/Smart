@@ -42,6 +42,9 @@ import {
   type BuilderFieldDefinition,
   type BuilderFieldType,
   type BuilderPageBundle,
+  type BuilderWorkflowDefinition,
+  type BuilderWorkflowState,
+  type BuilderWorkflowTransition,
   type CreatePageWizardDraft,
 } from "@/features/custom-builder/api/customBuilderMockAdapter"
 import type { RuntimeCustomMenuFolder, RuntimeCustomPage, ValidationSummary } from "@/features/custom-builder/runtime/customMenuRuntime"
@@ -109,7 +112,7 @@ const validationSectionLabels: Record<string, string> = {
   view: "Hiển thị",
   logic: "Logic field",
   permission: "Quyền truy cập",
-  workflow: "Nâng cao",
+  workflow: "Workflow",
   inventory: "Nâng cao",
   runtime: "Preview/runtime",
 }
@@ -602,6 +605,221 @@ function FieldLogicSettings({
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+function makeWorkflowState(index: number): BuilderWorkflowState {
+  return {
+    id: `wf-state-${index}-${Date.now()}`,
+    key: index === 0 ? "draft" : `state_${index + 1}`,
+    label: index === 0 ? "Nháp" : `State ${index + 1}`,
+    type: index === 0 ? "start" : "normal",
+  }
+}
+
+function makeWorkflowTransition(index: number, workflow: BuilderWorkflowDefinition): BuilderWorkflowTransition {
+  const fromStateKey = workflow.states[0]?.key ?? ""
+  const toStateKey = workflow.states[1]?.key ?? workflow.states[0]?.key ?? ""
+  return {
+    id: `wf-transition-${index}-${Date.now()}`,
+    label: index === 0 ? "Gửi bước tiếp theo" : `Transition ${index + 1}`,
+    fromStateKey,
+    toStateKey,
+    allowedRoles: ["Owner", "Admin"],
+  }
+}
+
+function WorkflowDesigner({
+  workflow,
+  onChange,
+}: {
+  workflow: BuilderWorkflowDefinition
+  onChange: (workflow: BuilderWorkflowDefinition) => void
+}) {
+  const updateState = (stateId: string, patch: Partial<BuilderWorkflowState>) => {
+    const previous = workflow.states.find((state) => state.id === stateId)
+    onChange({
+      ...workflow,
+      states: workflow.states.map((state) => (state.id === stateId ? { ...state, ...patch } : state)),
+      transitions: patch.key && previous
+        ? workflow.transitions.map((transition) => ({
+            ...transition,
+            fromStateKey: transition.fromStateKey === previous.key ? patch.key! : transition.fromStateKey,
+            toStateKey: transition.toStateKey === previous.key ? patch.key! : transition.toStateKey,
+          }))
+        : workflow.transitions,
+    })
+  }
+
+  const updateTransition = (transitionId: string, patch: Partial<BuilderWorkflowTransition>) => {
+    onChange({
+      ...workflow,
+      transitions: workflow.transitions.map((transition) => (transition.id === transitionId ? { ...transition, ...patch } : transition)),
+    })
+  }
+
+  const toggleTransitionRole = (transition: BuilderWorkflowTransition, role: UserRole, checked: boolean) => {
+    updateTransition(transition.id, {
+      allowedRoles: checked
+        ? [...new Set([...transition.allowedRoles, role])]
+        : transition.allowedRoles.filter((item) => item !== role),
+    })
+  }
+
+  const activeStateOptions = workflow.states.filter((state) => state.key.trim())
+
+  return (
+    <div className="rounded-md border border-slate-200 bg-white p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <SlidersHorizontal className="h-4 w-4 text-slate-500" />
+            <h3 className="text-sm font-semibold text-slate-950">Workflow cơ bản</h3>
+          </div>
+          <p className="mt-1 text-sm text-slate-500">Chỉ thiết kế trạng thái và bước chuyển trong settings. Chưa chạy workflow thật.</p>
+        </div>
+        <label className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm">
+          <Checkbox
+            checked={workflow.enabled}
+            onCheckedChange={(checked) => {
+              const enabled = Boolean(checked)
+              onChange({
+                ...workflow,
+                enabled,
+                states: enabled && workflow.states.length === 0 ? [makeWorkflowState(0), { ...makeWorkflowState(1), key: "approved", label: "Hoàn tất", type: "final" }] : workflow.states,
+              })
+            }}
+          />
+          Bật workflow
+        </label>
+      </div>
+
+      {!workflow.enabled ? (
+        <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+          Workflow đang tắt. Runtime sẽ dùng trạng thái mặc định từ fixture.
+        </div>
+      ) : (
+        <div className="mt-4 space-y-4">
+          <div className="rounded-md border border-slate-200 p-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-950">State designer</p>
+                <p className="mt-1 text-xs text-slate-500">Mỗi workflow cần một state bắt đầu và một state kết thúc.</p>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={() => onChange({ ...workflow, states: [...workflow.states, makeWorkflowState(workflow.states.length)] })}>
+                <Plus className="mr-2 h-4 w-4" />
+                Thêm state
+              </Button>
+            </div>
+            <div className="mt-3 space-y-2">
+              {workflow.states.map((state) => (
+                <div key={state.id} className="grid gap-2 rounded-md border border-slate-200 p-3 md:grid-cols-[1fr_1fr_150px_auto]">
+                  <Input value={state.label} onChange={(event) => updateState(state.id, { label: event.target.value })} placeholder="Tên state" />
+                  <Input className="font-mono text-sm" value={state.key} onChange={(event) => updateState(state.id, { key: slugify(event.target.value) })} placeholder="state_key" />
+                  <Select value={state.type} onValueChange={(value) => updateState(state.id, { type: value as BuilderWorkflowState["type"] })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="start">Bắt đầu</SelectItem>
+                      <SelectItem value="normal">Trung gian</SelectItem>
+                      <SelectItem value="final">Kết thúc</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={workflow.states.length <= 2}
+                    onClick={() =>
+                      onChange({
+                        ...workflow,
+                        states: workflow.states.filter((item) => item.id !== state.id),
+                        transitions: workflow.transitions.filter((transition) => transition.fromStateKey !== state.key && transition.toStateKey !== state.key),
+                      })
+                    }
+                  >
+                    Xóa
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-md border border-slate-200 p-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-950">Transition designer</p>
+                <p className="mt-1 text-xs text-slate-500">Transition chỉ là cấu hình draft; không gọi API duyệt thật.</p>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={() => onChange({ ...workflow, transitions: [...workflow.transitions, makeWorkflowTransition(workflow.transitions.length, workflow)] })}>
+                <Plus className="mr-2 h-4 w-4" />
+                Thêm transition
+              </Button>
+            </div>
+            <div className="mt-3 space-y-2">
+              {workflow.transitions.length === 0 ? (
+                <div className="rounded-md border border-dashed border-slate-300 p-4 text-sm text-slate-500">Chưa có transition.</div>
+              ) : (
+                workflow.transitions.map((transition) => (
+                  <div key={transition.id} className="rounded-md border border-slate-200 p-3">
+                    <div className="grid gap-2 md:grid-cols-[1fr_160px_160px_auto]">
+                      <Input value={transition.label} onChange={(event) => updateTransition(transition.id, { label: event.target.value })} placeholder="Tên transition" />
+                      <Select value={transition.fromStateKey || "__none"} onValueChange={(value) => updateTransition(transition.id, { fromStateKey: value === "__none" ? "" : value })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none">Nguồn</SelectItem>
+                          {activeStateOptions.map((state) => <SelectItem key={state.id} value={state.key}>{state.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <Select value={transition.toStateKey || "__none"} onValueChange={(value) => updateTransition(transition.id, { toStateKey: value === "__none" ? "" : value })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none">Đích</SelectItem>
+                          {activeStateOptions.map((state) => <SelectItem key={state.id} value={state.key}>{state.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <Button type="button" variant="outline" onClick={() => onChange({ ...workflow, transitions: workflow.transitions.filter((item) => item.id !== transition.id) })}>
+                        Xóa
+                      </Button>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {roleOptions.map((role) => (
+                        <label key={role} className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-xs">
+                          <Checkbox checked={transition.allowedRoles.includes(role)} onCheckedChange={(checked) => toggleTransitionRole(transition, role, Boolean(checked))} />
+                          {role}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+            <p className="text-sm font-semibold text-slate-950">Preview workflow nhẹ</p>
+            <div className="mt-3 flex flex-col gap-2 md:flex-row md:flex-wrap">
+              {workflow.states.map((state, index) => (
+                <div key={state.id} className="flex items-center gap-2">
+                  <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm">
+                    <span className="font-medium text-slate-950">{state.label}</span>
+                    <span className="ml-2 text-xs text-slate-500">{state.type}</span>
+                  </div>
+                  {index < workflow.states.length - 1 && <span className="text-slate-400">-&gt;</span>}
+                </div>
+              ))}
+            </div>
+            {workflow.transitions.length > 0 && (
+              <div className="mt-3 space-y-1 text-xs text-slate-600">
+                {workflow.transitions.map((transition) => (
+                  <div key={transition.id}>
+                    {transition.label}: {transition.fromStateKey || "?"} -&gt; {transition.toStateKey || "?"}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -1565,19 +1783,25 @@ function EditInterfaceSettings({
               <button type="button" className="flex w-full items-center justify-between rounded-md border border-slate-200 p-4 text-left" onClick={() => setAdvancedOpen((value) => !value)}>
                 <span>
                   <span className="block font-semibold text-slate-950">Nâng cao</span>
-                  <span className="mt-1 block text-sm text-slate-500">Workflow, connector, inventory và AI đang khóa ở S1-S3.</span>
+                  <span className="mt-1 block text-sm text-slate-500">Mở khi cần workflow cơ bản. Connector, inventory và AI vẫn là placeholder.</span>
                 </span>
                 <Badge variant="outline">{advancedOpen ? "Đang mở" : "Đang đóng"}</Badge>
               </button>
               {advancedOpen && (
-                <div className="grid gap-3 md:grid-cols-2">
-                  {["Quy trình", "Connector", "Inventory effect", "AI copilot"].map((item) => (
+                <div className="space-y-3">
+                  <WorkflowDesigner
+                    workflow={bundle.workflow}
+                    onChange={(workflow) => onChange((current) => ({ ...current, workflow }))}
+                  />
+                  <div className="grid gap-3 md:grid-cols-3">
+                  {["Connector", "Inventory effect", "AI copilot"].map((item) => (
                     <div key={item} className="rounded-md border border-slate-200 bg-slate-50 p-4">
                       <p className="font-semibold text-slate-950">{item}</p>
                       <p className="mt-2 text-sm text-slate-500">Tính năng này sẽ được cấu hình sau khi giao diện dữ liệu cơ bản đã ổn định.</p>
                       <Button type="button" variant="outline" className="mt-3" disabled>Chưa khả dụng</Button>
                     </div>
                   ))}
+                  </div>
                 </div>
               )}
             </div>

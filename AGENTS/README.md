@@ -28,6 +28,7 @@ Examples:
 | Skill | Purpose |
 | :--- | :--- |
 | [`codegraph-context`](skills/codegraph-context/SKILL.md) | Use CodeGraph MCP or CLI fallback for code discovery, impact analysis, affected tests, and review scope. |
+| [`superpowers-bridge`](skills/superpowers-bridge/SKILL.md) | Align installed Superpowers skills with the project agent workflow without replacing the mandatory chain. |
 | [`srs-writer`](skills/srs-writer/SKILL.md) | Write full-stack SRS documents for Smart ERP features, including backend, frontend, database, and AI agentic flows. |
 | [`tech-spec-writer`](skills/tech-spec-writer/SKILL.md) | Convert an SRS into an implementation-ready technical specification, architecture decision, and coding handoff. |
 | [`qa-spec-writer`](skills/qa-spec-writer/SKILL.md) | Convert a Tech Spec into a test plan, failure-mode matrix, and QA readiness gate before coding. |
@@ -41,7 +42,9 @@ Examples:
 - New documentation files under `docs/**` or `AGENTS/**` must be numbered by counting files in the exact destination folder, non-recursively, then using `<NNN>_<descriptive-slug>.md`.
 - Do not continue doc numbering from sibling folders, parent folders, other task folders, or similarly named files elsewhere.
 - Workflow stages must use [`codegraph-context`](skills/codegraph-context/SKILL.md) before broad manual scanning, then verify findings by reading source files.
+- Workflow stages must use [`superpowers-bridge`](skills/superpowers-bridge/SKILL.md) to align installed Superpowers skills with the active project agent stage.
 - CodeGraph usage must be visible: first progress update says `CodeGraph preflight`, first tool batch runs CodeGraph or declares fallback, and final response includes a `CodeGraph:` line.
+- Superpowers usage must be visible for code/workflow tasks: final response includes a `Superpowers:` line naming the skills or principles applied.
 - Do not edit agent runtime source under `ai_python/`.
 - Use skills in `AGENTS/skills/**` as project working instructions, not production code.
 - Prefer one focused skill per responsibility.

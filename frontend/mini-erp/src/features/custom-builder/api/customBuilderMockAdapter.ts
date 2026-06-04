@@ -91,6 +91,27 @@ export type BuilderPermissionDraft = {
   delete: UserRole[]
 }
 
+export type BuilderWorkflowState = {
+  id: string
+  key: string
+  label: string
+  type: "start" | "normal" | "final"
+}
+
+export type BuilderWorkflowTransition = {
+  id: string
+  label: string
+  fromStateKey: string
+  toStateKey: string
+  allowedRoles: UserRole[]
+}
+
+export type BuilderWorkflowDefinition = {
+  enabled: boolean
+  states: BuilderWorkflowState[]
+  transitions: BuilderWorkflowTransition[]
+}
+
 export type BuilderPageBundle = {
   menuPage: RuntimeCustomPage
   entityDefinition: {
@@ -103,6 +124,7 @@ export type BuilderPageBundle = {
   fields: BuilderFieldDefinition[]
   views: BuilderViewDefinition
   permissions: BuilderPermissionDraft
+  workflow: BuilderWorkflowDefinition
   validationSummary: ValidationSummary
   etag: string
   sampleRecords: RuntimeRecord[]
@@ -136,6 +158,25 @@ export type CreatePageWizardDraft = {
 }
 
 const okSummary: ValidationSummary = { valid: true, errors: [], warnings: [] }
+
+const workflowOff: BuilderWorkflowDefinition = {
+  enabled: false,
+  states: [],
+  transitions: [],
+}
+
+const damagedStockWorkflow: BuilderWorkflowDefinition = {
+  enabled: true,
+  states: [
+    { id: "wf-state-draft", key: "draft", label: "Nháp", type: "start" },
+    { id: "wf-state-pending", key: "pending_review", label: "Chờ duyệt", type: "normal" },
+    { id: "wf-state-done", key: "approved", label: "Đã duyệt", type: "final" },
+  ],
+  transitions: [
+    { id: "wf-transition-submit", label: "Gửi duyệt", fromStateKey: "draft", toStateKey: "pending_review", allowedRoles: ["Owner", "Admin", "Warehouse"] },
+    { id: "wf-transition-approve", label: "Duyệt", fromStateKey: "pending_review", toStateKey: "approved", allowedRoles: ["Owner", "Admin"] },
+  ],
+}
 
 export const customRuntimeCatalog: RuntimeCustomFolder[] = [
   {
@@ -392,6 +433,7 @@ const pageBundles: Record<string, BuilderPageBundle> = {
     },
     fields: damagedStockFields,
     views: damagedStockView,
+    workflow: damagedStockWorkflow,
     permissions: {
       view: ["Owner", "Admin", "Staff", "Warehouse"],
       create: ["Owner", "Admin", "Warehouse"],
@@ -424,6 +466,7 @@ const pageBundles: Record<string, BuilderPageBundle> = {
       listColumns: damagedStockView.listColumns.slice(0, 3),
       filterFields: ["report_code"],
     },
+    workflow: workflowOff,
     permissions: { view: ["Owner", "Admin"], create: ["Owner", "Admin"], update: ["Owner"], delete: ["Owner"] },
     validationSummary: okSummary,
     etag: "bundle-kiem-toan-chat-luong-v1",
@@ -592,6 +635,7 @@ export async function createMockBuilderPage(input: CreatePageWizardDraft): Promi
       previewMode: "desktop",
     },
     permissions: { view: input.roles, create: input.roles, update: input.roles, delete: ["Owner", "Admin"] },
+    workflow: workflowOff,
     validationSummary: page.validationSummary,
     etag: `bundle-${key}-draft-1`,
     sampleRecords: [],
@@ -729,7 +773,62 @@ export function validateBundle(bundle: BuilderPageBundle): ValidationSummary {
         errors.push({ section: "view", message: `${field.label} là bắt buộc nên phải có trong form.`, fieldKey: field.fieldKey })
       }
     })
+  const workflowSummary = validateWorkflow(bundle.workflow)
+  workflowSummary.errors.forEach((error) => errors.push(error))
+  workflowSummary.warnings.forEach((warning) => warnings.push(warning))
   return { valid: errors.length === 0, errors, warnings }
+}
+
+function validateWorkflow(workflow: BuilderWorkflowDefinition): Pick<ValidationSummary, "errors" | "warnings"> {
+  const errors: ValidationSummary["errors"] = []
+  const warnings: ValidationSummary["warnings"] = []
+  if (!workflow.enabled) {
+    return { errors, warnings }
+  }
+  const activeStates = workflow.states.filter((state) => state.key.trim())
+  if (activeStates.length < 2) {
+    errors.push({ section: "workflow", message: "Workflow bật cần tối thiểu 2 state." })
+  }
+  const stateKeys = new Set<string>()
+  activeStates.forEach((state) => {
+    if (!/^[a-z0-9_]+$/.test(state.key)) {
+      errors.push({ section: "workflow", message: `${state.label || state.key} có state key không hợp lệ.` })
+    }
+    if (!state.label.trim()) {
+      errors.push({ section: "workflow", message: `${state.key || "state"} cần tên hiển thị.` })
+    }
+    if (stateKeys.has(state.key)) {
+      errors.push({ section: "workflow", message: `State key ${state.key} bị trùng.` })
+    }
+    stateKeys.add(state.key)
+  })
+  if (!activeStates.some((state) => state.type === "start")) {
+    errors.push({ section: "workflow", message: "Workflow cần một state bắt đầu." })
+  }
+  if (!activeStates.some((state) => state.type === "final")) {
+    errors.push({ section: "workflow", message: "Workflow cần một state kết thúc." })
+  }
+  if (workflow.transitions.length === 0) {
+    errors.push({ section: "workflow", message: "Workflow bật cần tối thiểu một transition." })
+  }
+  workflow.transitions.forEach((transition) => {
+    if (!transition.label.trim()) {
+      errors.push({ section: "workflow", message: "Transition cần tên hiển thị." })
+    }
+    if (!stateKeys.has(transition.fromStateKey)) {
+      errors.push({ section: "workflow", message: `${transition.label || "Transition"} thiếu state nguồn hợp lệ.` })
+    }
+    if (!stateKeys.has(transition.toStateKey)) {
+      errors.push({ section: "workflow", message: `${transition.label || "Transition"} thiếu state đích hợp lệ.` })
+    }
+    if (transition.fromStateKey && transition.fromStateKey === transition.toStateKey) {
+      errors.push({ section: "workflow", message: `${transition.label || "Transition"} không được đi về cùng một state.` })
+    }
+    if (transition.allowedRoles.length === 0) {
+      warnings.push({ section: "workflow", message: `${transition.label || "Transition"} chưa chọn role thực hiện.` })
+    }
+  })
+  return { errors, warnings }
 }
 
 export function roleCanOpenPage(page: RuntimeCustomPage, role: UserRole | null) {

@@ -65,6 +65,32 @@ Visible enforcement:
 - Final responses for workflow/code tasks must include a short `CodeGraph:` line that states what ran, for example `status + context`, `status + impact + affected`, or `unavailable, used rg fallback`.
 - A workflow/code task that only shows `rg`, `Get-Content`, or direct file reads without a CodeGraph preflight is non-compliant unless the user explicitly bypassed CodeGraph.
 
+## Mandatory Superpowers Alignment
+
+Installed Superpowers skills are a methodology layer for the project agents. They do not replace the mandatory project workflow.
+
+For any code-affecting prompt:
+
+1. Run the mandatory CodeGraph preflight first.
+2. Load `AGENTS/skills/superpowers-bridge/SKILL.md`.
+3. Apply the relevant Superpowers skill principles for the active stage.
+4. Continue through the project agent chain unless explicitly bypassed by the user.
+
+Stage alignment:
+
+- `SRS_WRITER`: use brainstorming principles for requirements discovery and owner decisions.
+- `TECH_SPEC_WRITER`: use writing-plans principles for exact, bite-sized, testable implementation slices.
+- `QA_SPEC_WRITER`: use test-driven-development principles to define expected failing tests before coding.
+- `CODING_AGENT`: use systematic-debugging for bugs, test-driven-development for behavior changes, and executing-plans or subagent-driven-development for implementation.
+- `CODE_REVIEW_AGENT`: use requesting-code-review, receiving-code-review, and verification-before-completion principles.
+
+Visible enforcement:
+
+- Final responses for workflow/code tasks must include a short `Superpowers:` line, for example `brainstorming + writing-plans` or `TDD + verification-before-completion`.
+- If the installed Superpowers tool or skill is unavailable, continue with the project-local bridge and state the fallback.
+- Do not create `CLAUDE.md` unless the user explicitly asks for it.
+- Do not let Superpowers default doc locations override the project documentation naming rule.
+
 When the user says `Agent AUTO`, `AUTO_RUN`, `chạy tự động`, `tự làm hết workflow`, or any equivalent request, run the full workflow in automatic mode:
 
 ```text

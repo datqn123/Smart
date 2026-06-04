@@ -41,6 +41,18 @@ codegraph callees "<main symbol>" --json
 
 If status reports pending changes, run `codegraph sync` before relying on results. Use CodeGraph to identify files to read/edit, dependency risks, and tests, then verify by reading source files.
 
+## Superpowers Alignment
+
+Use [`../superpowers-bridge/SKILL.md`](../superpowers-bridge/SKILL.md) for project-local Superpowers alignment.
+
+For Tech Spec work, apply `superpowers:writing-plans` principles:
+
+- Map exact files that will be created, read, edited, or tested.
+- Break implementation into small, independently verifiable slices.
+- Include concrete commands and expected results when a Coding Agent will need them.
+- Avoid placeholders such as `TBD`, vague "add validation", or "write tests later".
+- Keep the project Tech Spec / Coding Handoff template as the required artifact; do not switch to Superpowers default plan locations.
+
 Useful commands:
 
 ```powershell

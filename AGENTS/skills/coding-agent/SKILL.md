@@ -37,6 +37,18 @@ codegraph impact "<main symbol>" --json
 
 If status reports pending changes, run `codegraph sync` before relying on results. Before running tests, use `codegraph affected <changed-files> --json` to help choose focused tests. Always verify CodeGraph results by reading source files directly before editing.
 
+## Superpowers Alignment
+
+Use [`../superpowers-bridge/SKILL.md`](../superpowers-bridge/SKILL.md) for project-local Superpowers alignment.
+
+Apply these Superpowers principles during coding:
+
+- For bugs, use `superpowers:systematic-debugging`: reproduce or trace the failure, identify root cause, check similar scopes, then fix.
+- For feature, bugfix, refactor, and behavior changes, use `superpowers:test-driven-development`: write or identify the failing test before production code unless the task is documentation-only, generated code, or configuration-only.
+- For approved implementation plans, use `superpowers:subagent-driven-development` when independent subagent tooling is available; otherwise use `superpowers:executing-plans` inline with the same checkpoints.
+- Before claiming success, use `superpowers:verification-before-completion`: run fresh verification or state exactly what could not be verified.
+- Do not use Superpowers to skip SRS, Tech Spec, QA Spec, CodeGraph, or Code Review stages.
+
 Useful search commands:
 
 ```powershell

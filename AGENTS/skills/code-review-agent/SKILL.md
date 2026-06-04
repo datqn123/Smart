@@ -41,6 +41,18 @@ codegraph affected <changed-files> --json
 
 If status reports pending changes, run `codegraph sync` before relying on results. Use CodeGraph to identify cross-scope impact and missing tests, then ground every finding in source or diff line references.
 
+## Superpowers Alignment
+
+Use [`../superpowers-bridge/SKILL.md`](../superpowers-bridge/SKILL.md) for project-local Superpowers alignment.
+
+For review work, apply these Superpowers principles:
+
+- Use `superpowers:requesting-code-review` discipline: review against the handoff, QA Spec, and actual diff rather than summarizing changes.
+- Use `superpowers:receiving-code-review` discipline when evaluating review feedback: verify each issue technically and do not accept or reject feedback performatively.
+- Use `superpowers:verification-before-completion` before declaring `REVIEW_PASS`: base the status on current evidence and name any unrun tests.
+- Findings remain the primary output and must be ordered by severity.
+- Do not use Superpowers to soften blockers, skip CodeGraph impact checks, or omit missing-test findings.
+
 Useful commands:
 
 ```powershell

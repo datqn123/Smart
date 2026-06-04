@@ -192,6 +192,35 @@ For every code-affecting prompt:
 4. The final response must include a concise `CodeGraph:` line with the actual operation used.
 5. If a transcript shows only manual file reads/searches and no CodeGraph preflight, treat that run as workflow non-compliance and restart discovery with CodeGraph before continuing.
 
+## Superpowers Alignment Rule
+
+Superpowers is a methodology layer for execution discipline. It does not replace this workflow and does not allow skipping any project stage.
+
+For code-affecting prompts:
+
+1. Run CodeGraph preflight first.
+2. Load `AGENTS/skills/superpowers-bridge/SKILL.md`.
+3. Apply the relevant Superpowers skills for the active stage.
+4. Continue the project chain until a stop condition or final review.
+
+Stage mapping:
+
+| Workflow stage | Superpowers alignment |
+| :--- | :--- |
+| `SRS_WRITER` | Brainstorming principles: clarify user intent, options, constraints, acceptance criteria, and owner decisions. |
+| `TECH_SPEC_WRITER` | Writing-plans principles: exact files, small implementation slices, commands, expected results, no placeholders. |
+| `QA_SPEC_WRITER` | Test-driven-development principles: tests and expected failures are designed before implementation. |
+| `CODING_AGENT` | Systematic debugging for bugs; TDD for behavior changes; executing-plans or subagent-driven-development for task execution. |
+| `CODE_REVIEW_AGENT` | Requesting/receiving code review and verification-before-completion principles. |
+
+If subagent execution tools are unavailable, execute inline with the same checkpoints instead of skipping review or verification.
+
+Final responses for code/workflow tasks must include:
+
+```text
+Superpowers: <skills or principles applied>
+```
+
 ## Safety Boundaries
 
 - Do not edit `ai_python` runtime for workflow documentation tasks.

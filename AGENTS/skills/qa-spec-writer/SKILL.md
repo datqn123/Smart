@@ -38,6 +38,18 @@ codegraph affected <expected-or-changed-source-files> --json
 
 If status reports pending changes, run `codegraph sync` before relying on results. Use CodeGraph to seed affected tests and regression scope, then verify by reading existing tests and source.
 
+## Superpowers Alignment
+
+Use [`../superpowers-bridge/SKILL.md`](../superpowers-bridge/SKILL.md) for project-local Superpowers alignment.
+
+For QA Spec work, apply `superpowers:test-driven-development` principles:
+
+- Define the expected failing tests before Coding Agent writes behavior-changing code.
+- Name the exact unit, integration, UI, or AI graph test file when known.
+- State the expected failure signal for new behavior when practical.
+- Include anti-regression coverage for adjacent scopes found through CodeGraph and source reads.
+- Do not write production code from this stage.
+
 Useful commands:
 
 ```powershell

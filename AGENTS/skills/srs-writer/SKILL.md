@@ -28,6 +28,18 @@ codegraph query "<domain symbol, route, page, service, table>" --json
 
 If status reports pending changes, run `codegraph sync` before relying on results. Use CodeGraph `relatedFiles`, symbols, routes, and relationships as traceability candidates, then read the actual source files before writing requirements.
 
+### Superpowers Alignment
+
+Use [`../superpowers-bridge/SKILL.md`](../superpowers-bridge/SKILL.md) for project-local Superpowers alignment.
+
+For SRS work, apply `superpowers:brainstorming` principles:
+
+- Clarify the user's real goal before freezing requirements.
+- Surface viable options and tradeoffs when the requested behavior is ambiguous.
+- Ask only blocker questions; otherwise record assumptions and continue.
+- Present requirements in readable sections that can be approved or challenged.
+- Do not skip the project SRS template or CodeGraph evidence requirements.
+
 ### Always Read
 
 - `docs/frontend/mini-erp/features/FEATURES_UI_INDEX.md`
