@@ -103,6 +103,17 @@ const sectionLabels: Record<EditSection, string> = {
   advanced: "Nâng cao",
 }
 
+const validationSectionLabels: Record<string, string> = {
+  menu: "Menu",
+  data: "Dữ liệu",
+  view: "Hiển thị",
+  logic: "Logic field",
+  permission: "Quyền truy cập",
+  workflow: "Nâng cao",
+  inventory: "Nâng cao",
+  runtime: "Preview/runtime",
+}
+
 function slugify(value: string) {
   return value
     .normalize("NFD")
@@ -131,6 +142,22 @@ function collectInterfaces(folders: RuntimeCustomMenuFolder[], bundles: Record<s
   )
 }
 
+function validationSectionLabel(section: string) {
+  return validationSectionLabels[section] ?? section
+}
+
+function groupValidationItems<T extends { section: string }>(items: T[]) {
+  return items.reduce<Record<string, T[]>>((groups, item) => {
+    const key = item.section || "runtime"
+    groups[key] = [...(groups[key] ?? []), item]
+    return groups
+  }, {})
+}
+
+function firstValidationSection(summary?: ValidationSummary) {
+  return summary?.errors[0]?.section ?? summary?.warnings[0]?.section ?? null
+}
+
 function makeDraftField(index: number): BuilderFieldDefinition {
   return {
     id: `field-draft-${index}-${Date.now()}`,
@@ -149,42 +176,124 @@ function makeDraftField(index: number): BuilderFieldDefinition {
 function ValidationSummaryPanel({
   summary,
   onJump,
+  compact = false,
+  title = "Kiểm tra cấu hình",
 }: {
   summary?: ValidationSummary
   onJump?: (section: string) => void
+  compact?: boolean
+  title?: string
 }) {
   const errors = summary?.errors ?? []
   const warnings = summary?.warnings ?? []
+  const errorGroups = groupValidationItems(errors)
+  const warningGroups = groupValidationItems(warnings)
+  const firstSection = firstValidationSection(summary)
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold text-slate-950">Kiểm tra cấu hình</h3>
+        <h3 className="text-sm font-semibold text-slate-950">{title}</h3>
         <Badge variant="outline" className={summary?.valid ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"}>
-          {summary?.valid ? "Sẵn sàng" : `${errors.length} lỗi`}
+          {summary?.valid ? "Sẵn sàng publish" : `${errors.length} lỗi`}
         </Badge>
       </div>
+      {firstSection && onJump && errors.length > 0 && (
+        <Button type="button" className="w-full bg-slate-900 text-white hover:bg-slate-800" onClick={() => onJump(firstSection)}>
+          Sửa lỗi đầu tiên
+        </Button>
+      )}
       {errors.length === 0 && warnings.length === 0 ? (
         <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
-          Không còn lỗi bắt buộc. Có thể lưu nháp hoặc publish khi API thật sẵn sàng.
+          Không còn lỗi bắt buộc. Publish thật vẫn do backend validate khi nối API.
         </div>
       ) : (
-        <div className="space-y-2">
-          {errors.map((error) => (
-            <div key={`${error.section}-${error.message}`} className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-              <div className="font-semibold">{error.section}: {error.message}</div>
+        <div className="space-y-3">
+          {Object.entries(errorGroups).map(([section, items]) => (
+            <div key={`error-${section}`} className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              <div className="flex items-center justify-between gap-3">
+                <p className="font-semibold">{validationSectionLabel(section)}</p>
+                <Badge variant="outline" className="border-red-200 bg-white text-red-700">{items.length} lỗi</Badge>
+              </div>
+              <ul className={cn("mt-2 space-y-1", compact && "text-xs")}>
+                {items.map((error) => (
+                  <li key={`${error.section}-${error.message}-${error.fieldKey ?? ""}`}>{error.message}</li>
+                ))}
+              </ul>
               {onJump && (
-                <Button type="button" variant="outline" size="sm" className="mt-2 bg-white" onClick={() => onJump(error.section)}>
-                  Sửa lỗi này
+                <Button type="button" variant="outline" size="sm" className="mt-3 bg-white" onClick={() => onJump(section)}>
+                  Sửa section này
                 </Button>
               )}
             </div>
           ))}
-          {warnings.slice(0, 3).map((warning) => (
-            <div key={`${warning.section}-${warning.message}`} className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
-              {warning.section}: {warning.message}
+          {Object.entries(warningGroups).map(([section, items]) => (
+            <div key={`warning-${section}`} className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
+              <div className="flex items-center justify-between gap-3">
+                <p className="font-semibold">{validationSectionLabel(section)}</p>
+                <Badge variant="outline" className="border-amber-200 bg-white text-amber-700">{items.length} cảnh báo</Badge>
+              </div>
+              <ul className={cn("mt-2 space-y-1", compact && "text-xs")}>
+                {items.slice(0, compact ? 2 : items.length).map((warning) => (
+                  <li key={`${warning.section}-${warning.message}`}>{warning.message}</li>
+                ))}
+              </ul>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PublishReadinessPanel({
+  summary,
+  dirty,
+  saving,
+  publishing,
+  conflict,
+  onFixFirst,
+}: {
+  summary: ValidationSummary
+  dirty: boolean
+  saving: boolean
+  publishing: boolean
+  conflict: boolean
+  onFixFirst: () => void
+}) {
+  const blockers = [
+    ...summary.errors.map((error) => error.message),
+    ...(dirty ? ["Có thay đổi chưa lưu."] : []),
+    ...(conflict ? ["Có mock conflict, cần reload/compare trước khi publish API thật."] : []),
+    ...(saving || publishing ? ["Đang xử lý thao tác, vui lòng chờ."] : []),
+  ]
+  const ready = blockers.length === 0
+
+  return (
+    <div className={cn("rounded-md border p-4", ready ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50")}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className={cn("text-sm font-semibold", ready ? "text-emerald-800" : "text-amber-800")}>Publish readiness</h3>
+          <p className={cn("mt-1 text-sm", ready ? "text-emerald-700" : "text-amber-700")}>
+            {ready ? "Không còn blocker trong UI draft. Backend vẫn là nguồn validate cuối khi có API thật." : "Publish đang bị khóa để tránh thao tác nguy hiểm."}
+          </p>
+        </div>
+        <Badge variant="outline" className={ready ? "border-emerald-200 bg-white text-emerald-700" : "border-amber-200 bg-white text-amber-700"}>
+          {ready ? "Có thể publish" : `${blockers.length} blocker`}
+        </Badge>
+      </div>
+      {!ready && (
+        <div className="mt-3 space-y-2">
+          <ul className="space-y-1 text-sm text-amber-800">
+            {blockers.slice(0, 5).map((blocker) => (
+              <li key={blocker}>{blocker}</li>
+            ))}
+          </ul>
+          {summary.errors.length > 0 && (
+            <Button type="button" variant="outline" className="bg-white" onClick={onFixFirst}>
+              Sửa lỗi đầu tiên
+            </Button>
+          )}
         </div>
       )}
     </div>
@@ -703,6 +812,17 @@ function CreateInterfaceWizard({
   }, [existingKeys, fields, formFieldKeys, key, label, listColumnKeys.length, menuMode, newParentLabel, pageType, parentKey])
 
   const canContinue = stepErrors[step].length === 0
+  const firstStepWithError = ([1, 2, 3, 4] as WizardStep[]).find((item) => stepErrors[item].length > 0) ?? 1
+  const wizardValidationSummary: ValidationSummary = {
+    valid: stepErrors[5].length === 0,
+    errors: [
+      ...stepErrors[1].map((message) => ({ section: "data", message })),
+      ...stepErrors[2].map((message) => ({ section: "menu", message })),
+      ...stepErrors[3].map((message) => ({ section: "data", message })),
+      ...stepErrors[4].map((message) => ({ section: "view", message })),
+    ],
+    warnings: [{ section: "runtime", message: "Publish thật đang khóa ở UI-first; bước này chỉ lưu draft bằng fixture adapter." }],
+  }
 
   const updateLabel = (value: string) => {
     setLabel(value)
@@ -983,31 +1103,40 @@ function CreateInterfaceWizard({
 
             {step === 5 && (
               <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-                <div className="rounded-md border border-slate-200 p-4">
-                  <h3 className="text-sm font-semibold text-slate-950">Tóm tắt cấu hình</h3>
-                  <dl className="mt-3 grid gap-3 text-sm md:grid-cols-2">
-                    <div><dt className="text-slate-500">Tên</dt><dd className="font-medium text-slate-950">{label}</dd></div>
-                    <div><dt className="text-slate-500">Route</dt><dd className="font-mono text-slate-950">{routePath}</dd></div>
-                    <div><dt className="text-slate-500">Menu cha</dt><dd className="font-medium text-slate-950">{menuMode === "new" ? newParentLabel : folders.find((folder) => folder.key === parentKey)?.label}</dd></div>
-                    <div><dt className="text-slate-500">Field</dt><dd className="font-medium text-slate-950">{fields.length}</dd></div>
-                    <div><dt className="text-slate-500">Loại hiển thị</dt><dd className="font-medium text-slate-950">{pageTypeLabels[pageType]}</dd></div>
-                    <div><dt className="text-slate-500">Quyền mặc định</dt><dd className="font-medium text-slate-950">{roles.join(", ")}</dd></div>
-                  </dl>
+                <div className="space-y-4">
+                  <div className="rounded-md border border-slate-200 p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <h3 className="text-sm font-semibold text-slate-950">Publish readiness</h3>
+                        <p className="mt-1 text-xs text-slate-500">Kiểm tra trước khi lưu draft. Publish API thật chưa nằm trong scope.</p>
+                      </div>
+                      <Badge variant="outline" className={wizardValidationSummary.valid ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700"}>
+                        {wizardValidationSummary.valid ? "Sẵn sàng lưu" : "Cần sửa"}
+                      </Badge>
+                    </div>
+                    <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
+                      <div><dt className="text-slate-500">Tên</dt><dd className="font-medium text-slate-950">{label}</dd></div>
+                      <div><dt className="text-slate-500">Route</dt><dd className="break-all font-mono text-slate-950">{routePath}</dd></div>
+                      <div><dt className="text-slate-500">Menu cha</dt><dd className="font-medium text-slate-950">{menuMode === "new" ? newParentLabel : folders.find((folder) => folder.key === parentKey)?.label}</dd></div>
+                      <div><dt className="text-slate-500">Field</dt><dd className="font-medium text-slate-950">{fields.length}</dd></div>
+                      <div><dt className="text-slate-500">Loại hiển thị</dt><dd className="font-medium text-slate-950">{pageTypeLabels[pageType]}</dd></div>
+                      <div><dt className="text-slate-500">Quyền mặc định</dt><dd className="font-medium text-slate-950">{roles.join(", ")}</dd></div>
+                    </dl>
+                  </div>
+                  <ValidationSummaryPanel
+                    summary={wizardValidationSummary}
+                    title="Lỗi cần xử lý"
+                    onJump={() => setStep(firstStepWithError)}
+                  />
                 </div>
-                <div>
-                  {stepErrors[5].length ? (
-                    <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-                      <p className="font-semibold">Còn {stepErrors[5].length} lỗi cần sửa</p>
-                      <Button type="button" variant="outline" className="mt-3 bg-white" onClick={() => setStep(([1, 2, 3, 4] as WizardStep[]).find((item) => stepErrors[item].length > 0) ?? 1)}>
-                        Sửa lỗi đầu tiên
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
-                      <p className="font-semibold">Cấu hình hợp lệ</p>
-                      <p className="mt-1">Có thể lưu bản nháp. Publish thật sẽ do backend validate khi nối API.</p>
-                    </div>
-                  )}
+                <div className="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm">
+                  <h3 className="font-semibold text-slate-950">Hành động</h3>
+                  <p className="mt-2 text-slate-500">
+                    Lưu nháp luôn dùng fixture adapter. Publish chỉ được bật khi không còn lỗi và đã lưu draft.
+                  </p>
+                  <Button type="button" variant="outline" className="mt-4 w-full bg-white" disabled={wizardValidationSummary.valid} onClick={() => setStep(firstStepWithError)}>
+                    Sửa lỗi đầu tiên
+                  </Button>
                 </div>
               </div>
             )}
@@ -1087,6 +1216,7 @@ function EditInterfaceSettings({
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [previewMode, setPreviewMode] = useState<"table" | "form">("table")
   const summary = validateBundle(bundle)
+  const firstErrorSection = firstValidationSection(summary)
 
   const jumpTo = (target: string) => {
     if (target === "data" || target === "logic") setSection("data")
@@ -1414,7 +1544,15 @@ function EditInterfaceSettings({
 
           {section === "check" && (
             <div className="space-y-4">
-              <ValidationSummaryPanel summary={summary} onJump={jumpTo} />
+              <PublishReadinessPanel
+                summary={summary}
+                dirty={dirty}
+                saving={saving}
+                publishing={publishing}
+                conflict={conflict}
+                onFixFirst={() => firstErrorSection && jumpTo(firstErrorSection)}
+              />
+              <ValidationSummaryPanel summary={summary} title="Lỗi và cảnh báo theo section" onJump={jumpTo} />
               <div className="grid gap-4 lg:grid-cols-2">
                 <LightweightPreview bundle={bundle} mode="table" />
                 <LightweightPreview bundle={bundle} mode="form" />
@@ -1447,7 +1585,7 @@ function EditInterfaceSettings({
         </main>
 
         <aside className="rounded-md border border-slate-200 bg-white p-4 xl:self-start">
-          <ValidationSummaryPanel summary={summary} onJump={jumpTo} />
+          <ValidationSummaryPanel summary={summary} onJump={jumpTo} compact />
           <div className="mt-4 rounded-md border border-slate-200 p-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
               <Eye className="h-4 w-4 text-slate-500" />
