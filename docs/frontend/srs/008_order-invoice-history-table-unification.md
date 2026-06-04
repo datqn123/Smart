@@ -184,7 +184,7 @@ Không hiển thị cột `Trạng thái` trong scope hiện tại nếu busines
 
 - Desktop:
   - Header, toolbar, sort/filter, table, footer nằm trong một vertical flow.
-  - Table chiếm phần còn lại của viewport, không làm page body scroll ngoài ý muốn.
+  - Table chiếm phần còn lại của viewport, không chèn ép cột — các cột giữ độ rộng đủ để hiển thị nội dung rõ ràng.
 - Mobile:
   - Search/date/sort xếp dọc hoặc wrap hợp lý.
   - Footer pagination không overlap; button `Trước`/`Sau` giữ touch target tối thiểu 44px.

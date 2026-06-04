@@ -1,6 +1,6 @@
 # ADR-005: Loại bỏ thanh cuộn ngang cho Table Layout danh sách
 
-**Status: Proposed**
+**Status: Deprecated — Owner revoked the "fit in one viewport" constraint to allow horizontal scroll when needed.**
 **Date: 18/04/2026**
 **Deciders: Agent TECH_LEAD, Owner**
 

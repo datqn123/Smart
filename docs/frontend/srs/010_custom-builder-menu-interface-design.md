@@ -3,7 +3,8 @@
 > File: `docs/frontend/srs/010_custom-builder-menu-interface-design.md`  
 > Agent: SRS_WRITER  
 > Ngay tao: 03/06/2026  
-> Trang thai: READY_FOR_TECH_SPEC  
+> Trang thai: SUPERSEDED_BY_012  
+> Ghi chu: Khong dung file nay lam SRS UI chinh nua. Dung `docs/frontend/srs/012_custom-builder-settings-first-ui-redesign.md` cho thiet ke giao dien settings-first. File nay chi con gia tri tham khao y tuong folder/page.  
 > Pham vi: Frontend UI/UX cho chuc nang tao danh muc menu cha va giao dien menu con cua Custom Entity / Workflow Builder.
 
 ---

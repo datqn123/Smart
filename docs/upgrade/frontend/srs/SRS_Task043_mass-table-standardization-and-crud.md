@@ -97,7 +97,7 @@ Then Cột "Thao tác" (NV) phải luôn hiển thị ở bên phải màn hình
 And Có shadow ngăn cách cột Thao tác với dữ liệu đang cuộn
 ```
 
-**Loại bỏ thanh cuộn ngang, các cột phải có kích thước thích hợp sao cho phù hợp với 1 khung hình window. Không cần phải có thanh cuộn ngang**
+**Các cột phải có kích thước thích hợp, thanh cuộn ngang được phép xuất hiện khi cần.**
 
 ### 5.3 AC03: CRUD Completeness
 

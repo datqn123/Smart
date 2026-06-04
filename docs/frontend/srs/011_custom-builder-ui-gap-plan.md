@@ -3,7 +3,8 @@
 > File: `docs/frontend/srs/011_custom-builder-ui-gap-plan.md`  
 > Agent: SRS_WRITER  
 > Ngay tao: 03/06/2026  
-> Trang thai: DRAFT_FOR_PO_REVIEW  
+> Trang thai: SUPERSEDED_BY_012  
+> Ghi chu: Khong dung file nay lam SRS UI chinh nua. Dung `docs/frontend/srs/012_custom-builder-settings-first-ui-redesign.md` cho thiet ke giao dien settings-first. File nay chi con gia tri tham khao horizontal gap va cac phase lien quan.  
 > Pham vi: Tong hop 8 task Custom Builder, SRS menu da thu gon va UI hien co de lap plan thiet ke giao dien con thieu.
 
 ---

@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button"
 import { getRuntimeCustomMenuForUser } from "@/features/custom-builder/runtime/customMenuRuntime"
 import type { RuntimeCustomMenuFolder } from "@/features/custom-builder/runtime/customMenuRuntime"
 import { getRuntimeCustomMenu } from "@/features/custom-builder/api/customInterfaceApi"
+import { getMockRuntimeCustomMenu } from "@/features/custom-builder/api/customBuilderMockAdapter"
 import {
   Collapsible,
   CollapsibleContent,
@@ -200,9 +201,11 @@ export function Sidebar({ isMobile = false }: SidebarProps) {
         }
       })
       .catch(() => {
-        if (alive) {
-          setRuntimeFolders([])
-        }
+        getMockRuntimeCustomMenu().then((data) => {
+          if (alive) {
+            setRuntimeFolders(data.folders ?? [])
+          }
+        })
       })
     return () => {
       alive = false

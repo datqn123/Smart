@@ -38,7 +38,7 @@ Xây dựng một giao diện hộp thoại (Dialog) cho phép sửa đổi thô
 - **Tương tác**:
   - **Focus**: Viền đen mỏng (`border-black`) khi focus vào ô nhập liệu.
   - **Selection**: Màu bôi đen văn bản mặc định (không được dùng màu đen đặc).
-  - **No Scroll**: Không được xuất hiện thanh cuộn ngang; bảng phải tự fit 100% khung hình.
+  - **Horizontal Scroll**: Cho phép thanh cuộn ngang nếu nội dung vượt quá chiều rộng khung hình, columns không bị ép thu hẹp quá mức.
 
 ## 5. Danh sách Task dự kiến
 

@@ -1,5 +1,6 @@
 import type { UserRole } from "@/features/auth/store/useAuthStore"
 import type { MenuPermissions } from "@/features/auth/types/menuPermissions"
+import { customRuntimeCatalog } from "@/features/custom-builder/api/customBuilderMockAdapter"
 
 export type CustomRuntimeStatus = "Draft" | "Published" | "NeedsConfig" | "Hidden"
 export type CustomRuntimePageType = "record_list" | "form" | "table_detail"
@@ -62,92 +63,6 @@ export type RuntimeCustomFolder = {
 export type RuntimeCustomMenuFolder = RuntimeCustomFolder & {
   children: RuntimeCustomPage[]
 }
-
-export const customRuntimeCatalog: RuntimeCustomFolder[] = [
-  {
-    nodeType: "folder",
-    id: "folder-quality",
-    key: "kiem_hang",
-    label: "Kiểm hàng",
-    description: "Nhóm giao diện kiểm hàng và xử lý sự cố kho.",
-    status: "Published",
-    sortOrder: 0,
-    roles: ["Owner", "Admin", "Staff", "Warehouse"],
-    version: 3,
-    draftVersion: 4,
-    publishedVersion: 3,
-    hasDraft: true,
-    publishedAt: "03/06/2026",
-    publishedByName: "System Administrator",
-    updatedAt: "03/06/2026",
-    updatedByName: "System Administrator",
-    etag: "folder-kiem-hang-v3",
-    validationSummary: {
-      valid: true,
-      errors: [],
-      warnings: [{ section: "workflow", message: "Quy trình đang dùng cấu hình mặc định." }],
-    },
-    children: [
-      {
-        nodeType: "page",
-        id: "page-damaged-stock",
-        key: "phieu_kiem_hang_hong",
-        label: "Phiếu kiểm hàng hỏng",
-        parentKey: "kiem_hang",
-        routePath: "/custom/phieu_kiem_hang_hong",
-        entityKey: "damaged_stock_report",
-        pageType: "table_detail",
-        status: "Published",
-        sortOrder: 0,
-        description: "Ghi nhận sản phẩm hỏng và chuẩn bị quy trình kiểm duyệt.",
-        roles: ["Owner", "Admin", "Staff", "Warehouse"],
-        entityPermission: "can_manage_inventory",
-        dataPermission: "can_manage_inventory",
-        version: 5,
-        draftVersion: 6,
-        publishedVersion: 5,
-        hasDraft: true,
-        publishedAt: "03/06/2026",
-        publishedByName: "System Administrator",
-        updatedAt: "03/06/2026",
-        updatedByName: "System Administrator",
-        etag: "page-phieu-kiem-hang-hong-v5",
-        validationSummary: {
-          valid: true,
-          errors: [],
-          warnings: [
-            { section: "runtime", message: "Runtime hiện là bản preview, chưa ghi dữ liệu thật." },
-          ],
-        },
-      },
-      {
-        nodeType: "page",
-        id: "page-internal-quality-audit",
-        key: "kiem_toan_chat_luong_noi_bo",
-        label: "Kiểm toán chất lượng nội bộ",
-        parentKey: "kiem_hang",
-        routePath: "/custom/kiem_toan_chat_luong_noi_bo",
-        entityKey: "internal_quality_audit",
-        pageType: "record_list",
-        status: "Published",
-        sortOrder: 1,
-        description: "Trang minh họa page bị ẩn với role không phù hợp.",
-        roles: ["Owner", "Admin"],
-        entityPermission: "can_manage_staff",
-        dataPermission: "can_manage_staff",
-        version: 1,
-        publishedVersion: 1,
-        hasDraft: false,
-        publishedAt: "03/06/2026",
-        publishedByName: "System Administrator",
-        updatedAt: "03/06/2026",
-        updatedByName: "System Administrator",
-        etag: "page-kiem-toan-chat-luong-v1",
-        validationSummary: { valid: true, errors: [], warnings: [] },
-      },
-    ],
-  },
-]
 
 function roleAllowed(allowedRoles: UserRole[], role: UserRole | null) {
   return role == null || allowedRoles.includes(role)

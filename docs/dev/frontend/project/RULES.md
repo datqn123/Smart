@@ -350,7 +350,6 @@ Desktop:   > 1024px  (xl, 2xl)
   - Tablet: 768px (iPad), 834px (iPad Pro)
   - Desktop: 1280px, 1920px
 - **Use Chrome DevTools Device Mode** for quick checks
-- **Verify NO horizontal scroll** on any page (except data tables with explicit scroll)
 
 ### 4.11 Common Responsive Patterns
 
@@ -460,8 +459,8 @@ Desktop:   > 1024px  (xl, 2xl)
 2. **Never use Tesseract.js.** Use Backend API for OCR.
 3. **Optimistic Updates:** Mandatory via TanStack Query for all mutations.
 4. **Shadcn UI First:** Always use Shadcn components before custom ones.
-5. **No Horizontal Overflow:** Pages MUST NOT cause horizontal scrolling on any viewport (test with `overflow-x-hidden` on body).
-6. **Loading States:** Always show loading/skeleton states during data fetching.
+5. **Loading States:** Always show loading/skeleton states during data fetching.
+6. **Component Content Clarity:** Không chèn ép component làm hẹp kích thước hiển thị dữ liệu (cột, danh sách, giá trị) đến mức phải xuất hiện thanh cuộn nội bộ. Nếu viewport không đủ rộng, ưu tiên thanh cuộn ngang ở cấp page/layout thay vì thu nhỏ nội dung bên trong component. Mỗi component phải hiển thị rõ ràng danh sách và giá trị, không bị truncate/che khuất vì bị ép khít.
 7. **Error Handling:** Display user-friendly error messages with retry options.
 
 ---
