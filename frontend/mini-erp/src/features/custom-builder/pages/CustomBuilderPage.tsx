@@ -5,15 +5,12 @@ import {
   Copy,
   Edit,
   Eye,
-  FileText,
   FolderPlus,
   Loader2,
   Plus,
   RefreshCw,
   Save,
   Search,
-  Settings,
-  ShieldCheck,
   SlidersHorizontal,
   Wand2,
 } from "lucide-react"
@@ -37,10 +34,15 @@ import {
   createMockBuilderPage,
   getMockBuilderMenuTree,
   getMockBuilderPageBundle,
+  previewMockLogicConnectorRule,
   saveMockBuilderDraft,
   validateBundle,
   type BuilderFieldDefinition,
   type BuilderFieldType,
+  type BuilderLogicConnectorDefinition,
+  type BuilderLogicConnectorOperation,
+  type BuilderLogicConnectorRule,
+  type BuilderLogicConnectorTrigger,
   type BuilderPageBundle,
   type BuilderWorkflowDefinition,
   type BuilderWorkflowState,
@@ -97,6 +99,23 @@ const fieldTypeLabels: Record<BuilderFieldType, string> = {
   line_items: "Dòng chi tiết",
 }
 
+const logicTriggerLabels: Record<BuilderLogicConnectorTrigger, string> = {
+  onCreate: "Khi tạo bản ghi",
+  onUpdate: "Khi cập nhật bản ghi",
+  onWorkflowTransition: "Khi chuyển workflow",
+}
+
+const logicOperationLabels: Record<BuilderLogicConnectorOperation, string> = {
+  copy: "Copy source sang target",
+  set: "Set giá trị cố định",
+  add: "Cộng",
+  subtract: "Trừ",
+  multiply: "Nhân",
+  sumLines: "Tổng dòng chi tiết",
+}
+
+const logicOperations = Object.keys(logicOperationLabels) as BuilderLogicConnectorOperation[]
+
 const sectionLabels: Record<EditSection, string> = {
   overview: "Tổng quan",
   data: "Dữ liệu",
@@ -110,7 +129,7 @@ const validationSectionLabels: Record<string, string> = {
   menu: "Menu",
   data: "Dữ liệu",
   view: "Hiển thị",
-  logic: "Logic field",
+  logic: "Logic field & connector",
   permission: "Quyền truy cập",
   workflow: "Workflow",
   inventory: "Nâng cao",
@@ -824,6 +843,256 @@ function WorkflowDesigner({
   )
 }
 
+function makeLogicConnectorRule(index: number, fields: BuilderFieldDefinition[]): BuilderLogicConnectorRule {
+  const activeFields = fields.filter((field) => field.status !== "Archived")
+  const firstSource = activeFields.find((field) => field.type === "number" || field.type === "money") ?? activeFields[0]
+  const firstTarget = activeFields.find((field) => field.fieldKey !== firstSource?.fieldKey) ?? activeFields[0]
+  return {
+    id: `logic-rule-${index}-${Date.now()}`,
+    name: index === 0 ? "Quy tắc tự động đầu tiên" : `Quy tắc ${index + 1}`,
+    trigger: "onCreate",
+    sourceFieldKey: firstSource?.fieldKey ?? "",
+    operation: "copy",
+    targetFieldKey: firstTarget?.fieldKey ?? "",
+    value: "",
+  }
+}
+
+function LogicConnectorBuilder({
+  logicConnector,
+  bundle,
+  onChange,
+}: {
+  logicConnector: BuilderLogicConnectorDefinition
+  bundle: BuilderPageBundle
+  onChange: (logicConnector: BuilderLogicConnectorDefinition) => void
+}) {
+  const [selectedRuleId, setSelectedRuleId] = useState(logicConnector.rules[0]?.id ?? "")
+  const activeFields = bundle.fields.filter((field) => field.status !== "Archived")
+  const selectedRule = logicConnector.rules.find((rule) => rule.id === selectedRuleId) ?? logicConnector.rules[0]
+
+  const updateRule = (ruleId: string, patch: Partial<BuilderLogicConnectorRule>) => {
+    onChange({
+      ...logicConnector,
+      rules: logicConnector.rules.map((rule) => (rule.id === ruleId ? { ...rule, ...patch } : rule)),
+    })
+  }
+
+  const addRule = () => {
+    const rule = makeLogicConnectorRule(logicConnector.rules.length, activeFields)
+    onChange({ ...logicConnector, rules: [...logicConnector.rules, rule] })
+    setSelectedRuleId(rule.id)
+  }
+
+  const dryRun = selectedRule ? previewMockLogicConnectorRule(selectedRule, bundle) : null
+  const readonlyJson = selectedRule
+    ? JSON.stringify(
+        {
+          trigger: selectedRule.trigger,
+          sourceFieldKey: selectedRule.sourceFieldKey,
+          operation: selectedRule.operation,
+          targetFieldKey: selectedRule.targetFieldKey,
+          value: selectedRule.value,
+        },
+        null,
+        2,
+      )
+    : "{\n  \"enabled\": true,\n  \"rules\": []\n}"
+
+  return (
+    <div className="rounded-md border border-slate-200 bg-white p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <Wand2 className="h-4 w-4 text-slate-500" />
+            <h3 className="text-sm font-semibold text-slate-950">Logic Connector cơ bản</h3>
+          </div>
+          <p className="mt-1 text-sm text-slate-500">Tạo rule tự động an toàn bằng allowlist operation. Không có SQL, JS, formula tự do hoặc endpoint tùy chỉnh.</p>
+        </div>
+        <label className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm">
+          <Checkbox
+            checked={logicConnector.enabled}
+            onCheckedChange={(checked) => {
+              const enabled = Boolean(checked)
+              const rules = enabled && logicConnector.rules.length === 0 ? [makeLogicConnectorRule(0, activeFields)] : logicConnector.rules
+              onChange({ ...logicConnector, enabled, rules })
+              setSelectedRuleId(rules[0]?.id ?? "")
+            }}
+          />
+          Bật logic tự động
+        </label>
+      </div>
+
+      {!logicConnector.enabled ? (
+        <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+          Logic tự động đang tắt. Không có connector nào chạy trong fixture.
+        </div>
+      ) : (
+        <div className="mt-4 space-y-4">
+          <div className="rounded-md border border-slate-200 p-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-950">Connector list</p>
+                <p className="mt-1 text-xs text-slate-500">Mỗi rule chạy trong mock adapter frontend, không gọi backend.</p>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={addRule}>
+                <Plus className="mr-2 h-4 w-4" />
+                Thêm connector
+              </Button>
+            </div>
+            <div className="mt-3 space-y-2">
+              {logicConnector.rules.length === 0 ? (
+                <div className="rounded-md border border-dashed border-slate-300 p-4 text-sm text-slate-500">Chưa có connector rule.</div>
+              ) : (
+                logicConnector.rules.map((rule) => (
+                  <button
+                    key={rule.id}
+                    type="button"
+                    className={cn(
+                      "flex w-full flex-col gap-2 rounded-md border p-3 text-left sm:flex-row sm:items-center sm:justify-between",
+                      selectedRule?.id === rule.id ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white",
+                    )}
+                    onClick={() => setSelectedRuleId(rule.id)}
+                  >
+                    <span>
+                      <span className="block text-sm font-semibold text-slate-950">{rule.name || "Chưa đặt tên"}</span>
+                      <span className="mt-1 block text-xs text-slate-500">
+                        {logicTriggerLabels[rule.trigger]} / {rule.operation} / {rule.targetFieldKey || "chưa chọn target"}
+                      </span>
+                    </span>
+                    <Badge variant="outline">{logicOperationLabels[rule.operation]}</Badge>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+
+          {selectedRule && (
+            <div className="rounded-md border border-slate-200 p-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-slate-950">Connector wizard</p>
+                  <p className="mt-1 text-xs text-slate-500">Đi theo 5 bước: trigger, source, operation, target, review.</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const nextRules = logicConnector.rules.filter((rule) => rule.id !== selectedRule.id)
+                    onChange({ ...logicConnector, rules: nextRules })
+                    setSelectedRuleId(nextRules[0]?.id ?? "")
+                  }}
+                >
+                  Xóa rule
+                </Button>
+              </div>
+
+              <div className="mt-3 grid gap-3 lg:grid-cols-5">
+                <div>
+                  <Label>1. Trigger</Label>
+                  <Select value={selectedRule.trigger} onValueChange={(value) => updateRule(selectedRule.id, { trigger: value as BuilderLogicConnectorTrigger })}>
+                    <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {(Object.keys(logicTriggerLabels) as BuilderLogicConnectorTrigger[]).map((trigger) => (
+                        <SelectItem key={trigger} value={trigger}>{logicTriggerLabels[trigger]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>2. Source</Label>
+                  <Select
+                    value={selectedRule.sourceFieldKey || "__none"}
+                    onValueChange={(value) => updateRule(selectedRule.id, { sourceFieldKey: value === "__none" ? "" : value })}
+                    disabled={selectedRule.operation === "set"}
+                  >
+                    <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none">Không dùng</SelectItem>
+                      {activeFields.map((field) => <SelectItem key={field.id} value={field.fieldKey}>{field.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>3. Operation</Label>
+                  <Select
+                    value={selectedRule.operation}
+                    onValueChange={(value) =>
+                      updateRule(selectedRule.id, {
+                        operation: value as BuilderLogicConnectorOperation,
+                        sourceFieldKey: value === "set" ? "" : selectedRule.sourceFieldKey,
+                      })
+                    }
+                  >
+                    <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {logicOperations.map((operation) => (
+                        <SelectItem key={operation} value={operation}>{logicOperationLabels[operation]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>4. Target</Label>
+                  <Select value={selectedRule.targetFieldKey || "__none"} onValueChange={(value) => updateRule(selectedRule.id, { targetFieldKey: value === "__none" ? "" : value })}>
+                    <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none">Chọn target</SelectItem>
+                      {activeFields.map((field) => <SelectItem key={field.id} value={field.fieldKey}>{field.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Giá trị set / hệ số</Label>
+                  <Input
+                    className="mt-1.5"
+                    value={selectedRule.value}
+                    onChange={(event) => updateRule(selectedRule.id, { value: event.target.value })}
+                    placeholder={selectedRule.operation === "set" ? "Giá trị cố định" : "Tùy chọn"}
+                  />
+                </div>
+              </div>
+
+              <div className="mt-3">
+                <Label>Tên rule</Label>
+                <Input className="mt-1.5" value={selectedRule.name} onChange={(event) => updateRule(selectedRule.id, { name: event.target.value })} />
+              </div>
+
+              <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-sm font-semibold text-slate-950">5. Review dry-run mock</p>
+                  {dryRun && (
+                    <div className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
+                      <div className="rounded-md border border-slate-200 bg-white p-3">
+                        <p className="text-xs text-slate-500">Source</p>
+                        <p className="mt-1 font-medium text-slate-950">{dryRun.sourceValue}</p>
+                      </div>
+                      <div className="rounded-md border border-slate-200 bg-white p-3">
+                        <p className="text-xs text-slate-500">Target trước</p>
+                        <p className="mt-1 font-medium text-slate-950">{dryRun.beforeValue}</p>
+                      </div>
+                      <div className="rounded-md border border-slate-200 bg-white p-3">
+                        <p className="text-xs text-slate-500">Target sau</p>
+                        <p className="mt-1 font-medium text-slate-950">{dryRun.afterValue}</p>
+                      </div>
+                    </div>
+                  )}
+                  <p className="mt-3 text-xs text-slate-500">{dryRun?.description}</p>
+                </div>
+                <div className="rounded-md border border-slate-200 p-3">
+                  <p className="text-sm font-semibold text-slate-950">Rule JSON read-only</p>
+                  <Textarea className="mt-3 min-h-44 font-mono text-xs" value={readonlyJson} readOnly />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function BuilderListPage({
   interfaces,
   loading,
@@ -1000,7 +1269,7 @@ function CreateInterfaceWizard({
   const [fields, setFields] = useState<BuilderFieldDefinition[]>([makeDraftField(0)])
   const [listColumnKeys, setListColumnKeys] = useState<string[]>(["name"])
   const [formFieldKeys, setFormFieldKeys] = useState<string[]>(["name"])
-  const [roles, setRoles] = useState<UserRole[]>(["Owner", "Admin"])
+  const [roles] = useState<UserRole[]>(["Owner", "Admin"])
 
   const routePath = `/custom/${key || "ma_giao_dien"}`
   const parentValue = menuMode === "new" ? slugify(newParentLabel) || "giao_dien_custom" : parentKey
@@ -1781,9 +2050,9 @@ function EditInterfaceSettings({
           {section === "advanced" && (
             <div className="space-y-4">
               <button type="button" className="flex w-full items-center justify-between rounded-md border border-slate-200 p-4 text-left" onClick={() => setAdvancedOpen((value) => !value)}>
-                <span>
-                  <span className="block font-semibold text-slate-950">Nâng cao</span>
-                  <span className="mt-1 block text-sm text-slate-500">Mở khi cần workflow cơ bản. Connector, inventory và AI vẫn là placeholder.</span>
+                  <span>
+                    <span className="block font-semibold text-slate-950">Nâng cao</span>
+                  <span className="mt-1 block text-sm text-slate-500">Mở khi cần workflow hoặc logic connector cơ bản. Inventory và AI vẫn là placeholder.</span>
                 </span>
                 <Badge variant="outline">{advancedOpen ? "Đang mở" : "Đang đóng"}</Badge>
               </button>
@@ -1793,8 +2062,13 @@ function EditInterfaceSettings({
                     workflow={bundle.workflow}
                     onChange={(workflow) => onChange((current) => ({ ...current, workflow }))}
                   />
-                  <div className="grid gap-3 md:grid-cols-3">
-                  {["Connector", "Inventory effect", "AI copilot"].map((item) => (
+                  <LogicConnectorBuilder
+                    logicConnector={bundle.logicConnector}
+                    bundle={bundle}
+                    onChange={(logicConnector) => onChange((current) => ({ ...current, logicConnector }))}
+                  />
+                  <div className="grid gap-3 md:grid-cols-2">
+                  {["Inventory effect", "AI copilot"].map((item) => (
                     <div key={item} className="rounded-md border border-slate-200 bg-slate-50 p-4">
                       <p className="font-semibold text-slate-950">{item}</p>
                       <p className="mt-2 text-sm text-slate-500">Tính năng này sẽ được cấu hình sau khi giao diện dữ liệu cơ bản đã ổn định.</p>
@@ -1883,7 +2157,7 @@ export function CustomBuilderPage() {
   const interfaces = useMemo(() => {
     const clean = search.trim().toLowerCase()
     return collectInterfaces(folders, bundleCache)
-      .filter(({ folder, page }) => filter === "all" || page.status === filter)
+      .filter(({ page }) => filter === "all" || page.status === filter)
       .filter(({ folder, page }) => !clean || page.label.toLowerCase().includes(clean) || page.key.toLowerCase().includes(clean) || folder.label.toLowerCase().includes(clean))
   }, [bundleCache, filter, folders, search])
 

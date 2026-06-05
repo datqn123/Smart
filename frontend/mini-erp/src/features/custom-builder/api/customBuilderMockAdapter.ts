@@ -112,6 +112,24 @@ export type BuilderWorkflowDefinition = {
   transitions: BuilderWorkflowTransition[]
 }
 
+export type BuilderLogicConnectorTrigger = "onCreate" | "onUpdate" | "onWorkflowTransition"
+export type BuilderLogicConnectorOperation = "copy" | "set" | "add" | "subtract" | "multiply" | "sumLines"
+
+export type BuilderLogicConnectorRule = {
+  id: string
+  name: string
+  trigger: BuilderLogicConnectorTrigger
+  sourceFieldKey: string
+  operation: BuilderLogicConnectorOperation
+  targetFieldKey: string
+  value: string
+}
+
+export type BuilderLogicConnectorDefinition = {
+  enabled: boolean
+  rules: BuilderLogicConnectorRule[]
+}
+
 export type BuilderPageBundle = {
   menuPage: RuntimeCustomPage
   entityDefinition: {
@@ -125,6 +143,7 @@ export type BuilderPageBundle = {
   views: BuilderViewDefinition
   permissions: BuilderPermissionDraft
   workflow: BuilderWorkflowDefinition
+  logicConnector: BuilderLogicConnectorDefinition
   validationSummary: ValidationSummary
   etag: string
   sampleRecords: RuntimeRecord[]
@@ -165,6 +184,11 @@ const workflowOff: BuilderWorkflowDefinition = {
   transitions: [],
 }
 
+const logicConnectorOff: BuilderLogicConnectorDefinition = {
+  enabled: false,
+  rules: [],
+}
+
 const damagedStockWorkflow: BuilderWorkflowDefinition = {
   enabled: true,
   states: [
@@ -175,6 +199,21 @@ const damagedStockWorkflow: BuilderWorkflowDefinition = {
   transitions: [
     { id: "wf-transition-submit", label: "Gửi duyệt", fromStateKey: "draft", toStateKey: "pending_review", allowedRoles: ["Owner", "Admin", "Warehouse"] },
     { id: "wf-transition-approve", label: "Duyệt", fromStateKey: "pending_review", toStateKey: "approved", allowedRoles: ["Owner", "Admin"] },
+  ],
+}
+
+const damagedStockLogicConnector: BuilderLogicConnectorDefinition = {
+  enabled: true,
+  rules: [
+    {
+      id: "logic-rule-damage-label",
+      name: "Đặt trạng thái khi có số lượng hỏng",
+      trigger: "onCreate",
+      sourceFieldKey: "damaged_quantity",
+      operation: "set",
+      targetFieldKey: "handling_status",
+      value: "Chờ xử lý",
+    },
   ],
 }
 
@@ -434,6 +473,7 @@ const pageBundles: Record<string, BuilderPageBundle> = {
     fields: damagedStockFields,
     views: damagedStockView,
     workflow: damagedStockWorkflow,
+    logicConnector: damagedStockLogicConnector,
     permissions: {
       view: ["Owner", "Admin", "Staff", "Warehouse"],
       create: ["Owner", "Admin", "Warehouse"],
@@ -467,6 +507,7 @@ const pageBundles: Record<string, BuilderPageBundle> = {
       filterFields: ["report_code"],
     },
     workflow: workflowOff,
+    logicConnector: logicConnectorOff,
     permissions: { view: ["Owner", "Admin"], create: ["Owner", "Admin"], update: ["Owner"], delete: ["Owner"] },
     validationSummary: okSummary,
     etag: "bundle-kiem-toan-chat-luong-v1",
@@ -636,6 +677,7 @@ export async function createMockBuilderPage(input: CreatePageWizardDraft): Promi
     },
     permissions: { view: input.roles, create: input.roles, update: input.roles, delete: ["Owner", "Admin"] },
     workflow: workflowOff,
+    logicConnector: logicConnectorOff,
     validationSummary: page.validationSummary,
     etag: `bundle-${key}-draft-1`,
     sampleRecords: [],
@@ -660,6 +702,54 @@ export async function saveMockBuilderDraft(bundle: BuilderPageBundle): Promise<B
   }
   pageBundles[bundle.menuPage.key] = next
   return delay(next, 420)
+}
+
+export type BuilderLogicConnectorDryRun = {
+  sourceValue: string
+  beforeValue: string
+  afterValue: string
+  description: string
+}
+
+function numericValue(value: string | number | undefined) {
+  const parsed = Number(value ?? 0)
+  return Number.isNaN(parsed) ? 0 : parsed
+}
+
+export function previewMockLogicConnectorRule(
+  rule: BuilderLogicConnectorRule,
+  bundle: BuilderPageBundle,
+): BuilderLogicConnectorDryRun {
+  const sampleValues = bundle.sampleRecords[0]?.values ?? {}
+  const sourceValue = sampleValues[rule.sourceFieldKey]
+  const targetValue = sampleValues[rule.targetFieldKey]
+  let afterValue: string | number = targetValue ?? ""
+
+  if (rule.operation === "copy") {
+    afterValue = sourceValue ?? ""
+  }
+  if (rule.operation === "set") {
+    afterValue = rule.value
+  }
+  if (rule.operation === "add") {
+    afterValue = numericValue(targetValue) + numericValue(sourceValue)
+  }
+  if (rule.operation === "subtract") {
+    afterValue = numericValue(targetValue) - numericValue(sourceValue)
+  }
+  if (rule.operation === "multiply") {
+    afterValue = numericValue(targetValue) * numericValue(sourceValue || rule.value || 1)
+  }
+  if (rule.operation === "sumLines") {
+    afterValue = numericValue(sourceValue) + numericValue(rule.value)
+  }
+
+  return {
+    sourceValue: sourceValue == null || sourceValue === "" ? "(trống)" : String(sourceValue),
+    beforeValue: targetValue == null || targetValue === "" ? "(trống)" : String(targetValue),
+    afterValue: afterValue === "" ? "(trống)" : String(afterValue),
+    description: "Dry-run fixture chỉ minh họa trước/sau trong frontend, không ghi dữ liệu thật.",
+  }
 }
 
 export function validateBundle(bundle: BuilderPageBundle): ValidationSummary {
@@ -776,7 +866,63 @@ export function validateBundle(bundle: BuilderPageBundle): ValidationSummary {
   const workflowSummary = validateWorkflow(bundle.workflow)
   workflowSummary.errors.forEach((error) => errors.push(error))
   workflowSummary.warnings.forEach((warning) => warnings.push(warning))
+  const logicConnectorSummary = validateLogicConnector(bundle.logicConnector, bundle.fields)
+  logicConnectorSummary.errors.forEach((error) => errors.push(error))
+  logicConnectorSummary.warnings.forEach((warning) => warnings.push(warning))
   return { valid: errors.length === 0, errors, warnings }
+}
+
+function validateLogicConnector(
+  logicConnector: BuilderLogicConnectorDefinition,
+  fields: BuilderFieldDefinition[],
+): Pick<ValidationSummary, "errors" | "warnings"> {
+  const errors: ValidationSummary["errors"] = []
+  const warnings: ValidationSummary["warnings"] = []
+  if (!logicConnector.enabled) {
+    return { errors, warnings }
+  }
+  const activeFields = fields.filter((field) => field.status !== "Archived")
+  const fieldByKey = new Map(activeFields.map((field) => [field.fieldKey, field]))
+  const allowedOperations: BuilderLogicConnectorOperation[] = ["copy", "set", "add", "subtract", "multiply", "sumLines"]
+  if (logicConnector.rules.length === 0) {
+    errors.push({ section: "logic", message: "Logic tự động đang bật cần tối thiểu một connector rule." })
+  }
+  logicConnector.rules.forEach((rule) => {
+    const sourceField = fieldByKey.get(rule.sourceFieldKey)
+    const targetField = fieldByKey.get(rule.targetFieldKey)
+    if (!rule.name.trim()) {
+      errors.push({ section: "logic", message: "Connector rule cần tên hiển thị." })
+    }
+    if (!allowedOperations.includes(rule.operation)) {
+      errors.push({ section: "logic", message: `${rule.name || "Connector rule"} dùng operation không nằm trong allowlist.` })
+    }
+    if (!rule.targetFieldKey || !targetField) {
+      errors.push({ section: "logic", message: `${rule.name || "Connector rule"} cần target field hợp lệ.` })
+    }
+    if (["copy", "add", "subtract", "multiply", "sumLines"].includes(rule.operation) && (!rule.sourceFieldKey || !sourceField)) {
+      errors.push({ section: "logic", message: `${rule.name || "Connector rule"} cần source field hợp lệ.` })
+    }
+    if (rule.operation === "set" && !rule.value.trim()) {
+      errors.push({ section: "logic", message: `${rule.name || "Connector rule"} cần giá trị set cố định.` })
+    }
+    if (rule.operation !== "set" && rule.sourceFieldKey && rule.sourceFieldKey === rule.targetFieldKey) {
+      errors.push({ section: "logic", message: `${rule.name || "Connector rule"} không được dùng cùng một field làm source và target.` })
+    }
+    if (["add", "subtract", "multiply"].includes(rule.operation)) {
+      const sourceNumeric = sourceField?.type === "number" || sourceField?.type === "money"
+      const targetNumeric = targetField?.type === "number" || targetField?.type === "money"
+      if (sourceField && !sourceNumeric) {
+        errors.push({ section: "logic", message: `${rule.name || "Connector rule"} cần source dạng số cho operation ${rule.operation}.`, fieldKey: rule.sourceFieldKey })
+      }
+      if (targetField && !targetNumeric) {
+        errors.push({ section: "logic", message: `${rule.name || "Connector rule"} cần target dạng số cho operation ${rule.operation}.`, fieldKey: rule.targetFieldKey })
+      }
+    }
+    if (rule.operation === "sumLines" && sourceField && sourceField.type !== "line_items") {
+      warnings.push({ section: "logic", message: `${rule.name || "Connector rule"} sumLines mới là dry-run mock, cần line_items khi nối API thật.`, fieldKey: rule.sourceFieldKey })
+    }
+  })
+  return { errors, warnings }
 }
 
 function validateWorkflow(workflow: BuilderWorkflowDefinition): Pick<ValidationSummary, "errors" | "warnings"> {
