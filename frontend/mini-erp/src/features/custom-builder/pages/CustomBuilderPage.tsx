@@ -34,6 +34,7 @@ import {
   createMockBuilderPage,
   getMockBuilderMenuTree,
   getMockBuilderPageBundle,
+  inferColumnFormat,
   previewMockLogicConnectorRule,
   saveMockBuilderDraft,
   validateBundle,
@@ -344,7 +345,7 @@ function previewValue(field: BuilderFieldDefinition, bundle: BuilderPageBundle) 
   if (sample != null && sample !== "") return String(sample)
   if (field.defaultValue != null && field.defaultValue !== "") return String(field.defaultValue)
   if (field.type === "number") return "12"
-  if (field.type === "money") return "1.250.000"
+  if (field.type === "money") return "1250000"
   if (field.type === "date") return "04/06/2026"
   if (field.type === "boolean") return "Có"
   if (field.type === "reference") return field.refEntityKey ? `Mẫu ${field.refEntityKey}` : "Chưa chọn target"
@@ -355,7 +356,7 @@ function previewValue(field: BuilderFieldDefinition, bundle: BuilderPageBundle) 
 function formatPreviewValue(value: string | number, format: BuilderViewColumn["format"]) {
   if (format === "currency") {
     const amount = Number(value)
-    return Number.isNaN(amount) ? String(value) : amount.toLocaleString("vi-VN")
+    return Number.isNaN(amount) ? String(value) : new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(amount)
   }
   if (format === "number") {
     const amount = Number(value)
@@ -1019,8 +1020,10 @@ function LogicConnectorBuilder({
                   size="sm"
                   onClick={() => {
                     const nextRules = logicConnector.rules.filter((rule) => rule.id !== selectedRule.id)
+                    const deletedIndex = logicConnector.rules.findIndex((rule) => rule.id === selectedRule.id)
+                    const nextSelected = nextRules[deletedIndex] ?? nextRules[deletedIndex - 1] ?? nextRules[0]
                     onChange({ ...logicConnector, rules: nextRules })
-                    setSelectedRuleId(nextRules[0]?.id ?? "")
+                    setSelectedRuleId(nextSelected?.id ?? "")
                   }}
                 >
                   Xóa rule
@@ -1800,7 +1803,7 @@ function EditInterfaceSettings({
     label: field.label,
     width: field.type === "long_text" ? 240 : 180,
     align: field.type === "number" || field.type === "money" ? "right" : "left",
-    format: field.type === "money" ? "currency" : field.type === "number" ? "number" : field.type === "date" ? "date" : "text",
+    format: inferColumnFormat(field.type),
   })
 
   const toggleListColumn = (field: BuilderFieldDefinition, checked: boolean) => {

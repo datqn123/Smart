@@ -70,6 +70,13 @@ export type BuilderViewColumn = {
   format: "text" | "number" | "currency" | "date" | "badge"
 }
 
+export function inferColumnFormat(fieldType: BuilderFieldType): BuilderViewColumn["format"] {
+  if (fieldType === "money") return "currency"
+  if (fieldType === "number") return "number"
+  if (fieldType === "date") return "date"
+  return "text"
+}
+
 export type BuilderFormSection = {
   id: string
   title: string
@@ -114,6 +121,15 @@ export type BuilderWorkflowDefinition = {
 
 export type BuilderLogicConnectorTrigger = "onCreate" | "onUpdate" | "onWorkflowTransition"
 export type BuilderLogicConnectorOperation = "copy" | "set" | "add" | "subtract" | "multiply" | "sumLines"
+
+export const LOGIC_CONNECTOR_OPERATIONS: Record<BuilderLogicConnectorOperation, true> = {
+  copy: true,
+  set: true,
+  add: true,
+  subtract: true,
+  multiply: true,
+  sumLines: true,
+}
 
 export type BuilderLogicConnectorRule = {
   id: string
@@ -667,7 +683,7 @@ export async function createMockBuilderPage(input: CreatePageWizardDraft): Promi
           label: field?.label ?? fieldKey,
           width: 180,
           align: field?.type === "number" || field?.type === "money" ? "right" : "left",
-          format: field?.type === "money" ? "currency" : field?.type === "number" ? "number" : field?.type === "date" ? "date" : "text",
+          format: inferColumnFormat(field?.type ?? "text"),
         }
       }),
       filterFields: draftFields.filter((field) => field.searchable || field.filterable).map((field) => field.fieldKey),
@@ -738,10 +754,11 @@ export function previewMockLogicConnectorRule(
     afterValue = numericValue(targetValue) - numericValue(sourceValue)
   }
   if (rule.operation === "multiply") {
-    afterValue = numericValue(targetValue) * numericValue(sourceValue || rule.value || 1)
+    const multiplier = rule.sourceFieldKey ? numericValue(sourceValue) : numericValue(rule.value) || 1
+    afterValue = numericValue(targetValue) * multiplier
   }
   if (rule.operation === "sumLines") {
-    afterValue = numericValue(sourceValue) + numericValue(rule.value)
+    afterValue = numericValue(targetValue) + numericValue(sourceValue)
   }
 
   return {
@@ -905,7 +922,7 @@ function validateLogicConnector(
   }
   const activeFields = fields.filter((field) => field.status !== "Archived")
   const fieldByKey = new Map(activeFields.map((field) => [field.fieldKey, field]))
-  const allowedOperations: BuilderLogicConnectorOperation[] = ["copy", "set", "add", "subtract", "multiply", "sumLines"]
+  const operationsRequiringSource: BuilderLogicConnectorOperation[] = ["copy", "add", "subtract", "sumLines"]
   if (logicConnector.rules.length === 0) {
     errors.push({ section: "logic", message: "Logic tự động đang bật cần tối thiểu một connector rule." })
   }
@@ -915,14 +932,17 @@ function validateLogicConnector(
     if (!rule.name.trim()) {
       errors.push({ section: "logic", message: "Connector rule cần tên hiển thị." })
     }
-    if (!allowedOperations.includes(rule.operation)) {
+    if (!(rule.operation in LOGIC_CONNECTOR_OPERATIONS)) {
       errors.push({ section: "logic", message: `${rule.name || "Connector rule"} dùng operation không nằm trong allowlist.` })
     }
     if (!rule.targetFieldKey || !targetField) {
       errors.push({ section: "logic", message: `${rule.name || "Connector rule"} cần target field hợp lệ.` })
     }
-    if (["copy", "add", "subtract", "multiply", "sumLines"].includes(rule.operation) && (!rule.sourceFieldKey || !sourceField)) {
+    if (operationsRequiringSource.includes(rule.operation) && (!rule.sourceFieldKey || !sourceField)) {
       errors.push({ section: "logic", message: `${rule.name || "Connector rule"} cần source field hợp lệ.` })
+    }
+    if (rule.operation === "multiply" && !rule.sourceFieldKey && !rule.value.trim()) {
+      errors.push({ section: "logic", message: `${rule.name || "Connector rule"} cần source field hoặc giá trị hệ số.` })
     }
     if (rule.operation === "set" && !rule.value.trim()) {
       errors.push({ section: "logic", message: `${rule.name || "Connector rule"} cần giá trị set cố định.` })
