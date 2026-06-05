@@ -637,7 +637,7 @@ function FieldLogicSettings({
           <div>
             <Label>Giá trị</Label>
             <Input
-              className="mt-1.5 bg-white"
+              className="mt-1.5"
               value={conditional?.value ?? ""}
               onChange={(event) => onUpdate({ conditionalVisibility: { sourceFieldKey: conditional?.sourceFieldKey, operator: conditional?.operator ?? "equals", effect: conditional?.effect ?? "show", value: event.target.value } })}
               disabled={!conditional || conditional.operator === "not_empty"}
@@ -1012,7 +1012,7 @@ function LogicConnectorBuilder({
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <p className="text-sm font-semibold text-slate-950">Connector wizard</p>
-                  <p className="mt-1 text-xs text-slate-500">Đi theo 5 bước: trigger, source, operation, target, review.</p>
+                  <p className="mt-1 text-xs text-slate-500">Đi theo 4 bước: trigger, source, operation, target — xem kết quả ở Review bên dưới.</p>
                 </div>
                 <Button
                   type="button"

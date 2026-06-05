@@ -455,7 +455,7 @@ const damagedStockRecords: RuntimeRecord[] = [
       product_ref: "Áo khoác chống nước",
       location_ref: "Kho chính / Kệ A4",
       damaged_quantity: 6,
-      handling_status: "Chờ xử lý",
+      handling_status: "Nháp",
     },
     audit: [
       { at: "03/06/2026 09:15", actor: "Nguyễn Admin", action: "Tạo phiếu từ runtime fixture" },
