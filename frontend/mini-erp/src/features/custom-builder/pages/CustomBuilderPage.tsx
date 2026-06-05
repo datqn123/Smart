@@ -44,6 +44,7 @@ import {
   type BuilderLogicConnectorRule,
   type BuilderLogicConnectorTrigger,
   type BuilderPageBundle,
+  type BuilderViewColumn,
   type BuilderWorkflowDefinition,
   type BuilderWorkflowState,
   type BuilderWorkflowTransition,
@@ -115,6 +116,22 @@ const logicOperationLabels: Record<BuilderLogicConnectorOperation, string> = {
 }
 
 const logicOperations = Object.keys(logicOperationLabels) as BuilderLogicConnectorOperation[]
+
+const columnAlignLabels: Record<BuilderViewColumn["align"], string> = {
+  left: "Trái",
+  center: "Giữa",
+  right: "Phải",
+}
+
+const columnFormatLabels: Record<BuilderViewColumn["format"], string> = {
+  text: "Text",
+  number: "Số",
+  currency: "Tiền",
+  date: "Ngày",
+  badge: "Badge",
+}
+
+const columnFormats = Object.keys(columnFormatLabels) as BuilderViewColumn["format"][]
 
 const sectionLabels: Record<EditSection, string> = {
   overview: "Tổng quan",
@@ -335,6 +352,18 @@ function previewValue(field: BuilderFieldDefinition, bundle: BuilderPageBundle) 
   return `Dữ liệu mẫu ${field.label.toLowerCase()}`
 }
 
+function formatPreviewValue(value: string | number, format: BuilderViewColumn["format"]) {
+  if (format === "currency") {
+    const amount = Number(value)
+    return Number.isNaN(amount) ? String(value) : amount.toLocaleString("vi-VN")
+  }
+  if (format === "number") {
+    const amount = Number(value)
+    return Number.isNaN(amount) ? String(value) : amount.toLocaleString("vi-VN")
+  }
+  return String(value)
+}
+
 function LightweightPreview({ bundle, mode }: { bundle: BuilderPageBundle; mode: "table" | "form" }) {
   const activeFields = bundle.fields.filter((field) => field.status !== "Archived" && !field.hidden)
   const columns = bundle.views.listColumns
@@ -343,10 +372,13 @@ function LightweightPreview({ bundle, mode }: { bundle: BuilderPageBundle; mode:
       return field ? { ...column, field } : null
     })
     .filter(Boolean) as Array<BuilderPageBundle["views"]["listColumns"][number] & { field: BuilderFieldDefinition }>
-  const formFieldKeys = bundle.views.formSections[0]?.fieldKeys ?? []
-  const formFields = formFieldKeys
-    .map((fieldKey) => activeFields.find((field) => field.fieldKey === fieldKey))
-    .filter(Boolean) as BuilderFieldDefinition[]
+  const previewFormSections = bundle.views.formSections.map((section) => ({
+    ...section,
+    fields: section.fieldKeys
+      .map((fieldKey) => activeFields.find((field) => field.fieldKey === fieldKey))
+      .filter(Boolean) as BuilderFieldDefinition[],
+  }))
+  const previewFormFieldCount = previewFormSections.reduce((total, section) => total + section.fields.length, 0)
 
   if (mode === "table") {
     return (
@@ -375,7 +407,7 @@ function LightweightPreview({ bundle, mode }: { bundle: BuilderPageBundle; mode:
                   <tr key={record.id}>
                     {columns.map((column) => (
                       <td key={column.fieldKey} className={cn("px-3 py-3", column.align === "right" && "text-right", column.align === "center" && "text-center")}>
-                        {record.values[column.fieldKey] ?? previewValue(column.field, bundle)}
+                        {formatPreviewValue(record.values[column.fieldKey] ?? previewValue(column.field, bundle), column.format)}
                       </td>
                     ))}
                   </tr>
@@ -395,24 +427,31 @@ function LightweightPreview({ bundle, mode }: { bundle: BuilderPageBundle; mode:
           <h3 className="text-sm font-semibold text-slate-950">Xem thử form nhập liệu</h3>
           <p className="mt-1 text-xs text-slate-500">Form preview chỉ minh họa layout và field bắt buộc.</p>
         </div>
-        <Badge variant="outline">{formFields.length} field</Badge>
+        <Badge variant="outline">{previewFormFieldCount} field</Badge>
       </div>
-      {formFields.length === 0 ? (
+      {previewFormFieldCount === 0 ? (
         <div className="p-6 text-center text-sm text-slate-500">Chưa chọn field để xem thử form.</div>
       ) : (
-        <div className="grid gap-3 p-4 md:grid-cols-2">
-          {formFields.map((field) => (
-            <div key={field.id}>
-              <div className="flex items-center gap-2">
-                <Label>{field.label}{field.required ? " *" : ""}</Label>
-                {field.readOnly && <Badge variant="outline" className="text-[11px]">read-only</Badge>}
+        <div className="space-y-4 p-4">
+          {previewFormSections.filter((section) => section.fields.length > 0).map((section) => (
+            <div key={section.id}>
+              <h4 className="text-sm font-semibold text-slate-950">{section.title}</h4>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                {section.fields.map((field) => (
+                  <div key={field.id}>
+                    <div className="flex items-center gap-2">
+                      <Label>{field.label}{field.required ? " *" : ""}</Label>
+                      {field.readOnly && <Badge variant="outline" className="text-[11px]">read-only</Badge>}
+                    </div>
+                    <Input className="mt-1.5" value={previewValue(field, bundle)} readOnly />
+                    {field.type === "reference" && (
+                      <p className="mt-1 text-xs text-slate-500">
+                        canonical: {field.refType ?? "core"}/{field.refEntityKey ?? "chưa chọn"}
+                      </p>
+                    )}
+                  </div>
+                ))}
               </div>
-              <Input className="mt-1.5" value={previewValue(field, bundle)} readOnly />
-              {field.type === "reference" && (
-                <p className="mt-1 text-xs text-slate-500">
-                  canonical: {field.refType ?? "core"}/{field.refEntityKey ?? "chưa chọn"}
-                </p>
-              )}
             </div>
           ))}
         </div>
@@ -1753,6 +1792,117 @@ function EditInterfaceSettings({
     })
   }
 
+  const activeFields = bundle.fields.filter((field) => field.status !== "Archived")
+  const [sortFieldKey = activeFields[0]?.fieldKey ?? "", sortDirection = "asc"] = bundle.views.defaultSort.split(" ")
+
+  const defaultColumnForField = (field: BuilderFieldDefinition): BuilderViewColumn => ({
+    fieldKey: field.fieldKey,
+    label: field.label,
+    width: field.type === "long_text" ? 240 : 180,
+    align: field.type === "number" || field.type === "money" ? "right" : "left",
+    format: field.type === "money" ? "currency" : field.type === "number" ? "number" : field.type === "date" ? "date" : "text",
+  })
+
+  const toggleListColumn = (field: BuilderFieldDefinition, checked: boolean) => {
+    onChange((current) => ({
+      ...current,
+      views: {
+        ...current.views,
+        listColumns: checked
+          ? [...current.views.listColumns, defaultColumnForField(field)]
+          : current.views.listColumns.filter((column) => column.fieldKey !== field.fieldKey),
+      },
+    }))
+  }
+
+  const updateListColumn = (fieldKey: string, patch: Partial<BuilderViewColumn>) => {
+    onChange((current) => ({
+      ...current,
+      views: {
+        ...current.views,
+        listColumns: current.views.listColumns.map((column) => (column.fieldKey === fieldKey ? { ...column, ...patch } : column)),
+      },
+    }))
+  }
+
+  const updateDefaultSort = (fieldKey: string, direction: "asc" | "desc") => {
+    onChange((current) => ({
+      ...current,
+      views: { ...current.views, defaultSort: `${fieldKey} ${direction}` },
+    }))
+  }
+
+  const toggleFilterField = (fieldKey: string, checked: boolean) => {
+    onChange((current) => ({
+      ...current,
+      views: {
+        ...current.views,
+        filterFields: checked
+          ? [...new Set([...current.views.filterFields, fieldKey])]
+          : current.views.filterFields.filter((key) => key !== fieldKey),
+      },
+    }))
+  }
+
+  const addFormSection = () => {
+    onChange((current) => ({
+      ...current,
+      views: {
+        ...current.views,
+        formSections: [
+          ...current.views.formSections,
+          { id: `section-${Date.now()}`, title: `Nhóm thông tin ${current.views.formSections.length + 1}`, fieldKeys: [] },
+        ],
+      },
+    }))
+  }
+
+  const updateFormSection = (sectionId: string, patch: Partial<BuilderPageBundle["views"]["formSections"][number]>) => {
+    onChange((current) => ({
+      ...current,
+      views: {
+        ...current.views,
+        formSections: current.views.formSections.map((item) => (item.id === sectionId ? { ...item, ...patch } : item)),
+      },
+    }))
+  }
+
+  const moveFormSection = (sectionId: string, direction: -1 | 1) => {
+    onChange((current) => {
+      const index = current.views.formSections.findIndex((item) => item.id === sectionId)
+      const nextIndex = index + direction
+      if (index < 0 || nextIndex < 0 || nextIndex >= current.views.formSections.length) return current
+      const nextSections = [...current.views.formSections]
+      const [sectionToMove] = nextSections.splice(index, 1)
+      nextSections.splice(nextIndex, 0, sectionToMove)
+      return { ...current, views: { ...current.views, formSections: nextSections } }
+    })
+  }
+
+  const removeFormSection = (sectionId: string) => {
+    onChange((current) => ({
+      ...current,
+      views: {
+        ...current.views,
+        formSections: current.views.formSections.filter((item) => item.id !== sectionId),
+      },
+    }))
+  }
+
+  const toggleFormSectionField = (sectionId: string, fieldKey: string, checked: boolean) => {
+    onChange((current) => ({
+      ...current,
+      views: {
+        ...current.views,
+        formSections: current.views.formSections.map((item) =>
+          item.id === sectionId
+            ? { ...item, fieldKeys: checked ? [...new Set([...item.fieldKeys, fieldKey])] : item.fieldKeys.filter((key) => key !== fieldKey) }
+            : item,
+        ),
+      },
+    }))
+  }
+
   return (
     <div className="space-y-4">
       <header className="rounded-md border border-slate-200 bg-white p-4">
@@ -1784,8 +1934,8 @@ function EditInterfaceSettings({
         )}
       </header>
 
-      <div className="grid gap-4 xl:grid-cols-[240px_minmax(0,1fr)_320px]">
-        <nav className="rounded-md border border-slate-200 bg-white p-2 xl:self-start">
+      <div className="grid min-w-0 gap-4 xl:grid-cols-[240px_minmax(0,1fr)_320px]">
+        <nav className="min-w-0 rounded-md border border-slate-200 bg-white p-2 xl:self-start">
           {(Object.keys(sectionLabels) as EditSection[]).map((key) => (
             <button
               key={key}
@@ -1801,7 +1951,7 @@ function EditInterfaceSettings({
           ))}
         </nav>
 
-        <main className="rounded-md border border-slate-200 bg-white p-4">
+        <main className="min-w-0 rounded-md border border-slate-200 bg-white p-4">
           {section === "overview" && (
             <div className="space-y-4">
               <h2 className="text-lg font-semibold text-slate-950">Tổng quan</h2>
@@ -1910,10 +2060,10 @@ function EditInterfaceSettings({
 
           {section === "display" && (
             <div className="space-y-4">
-              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                <div>
+              <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div className="min-w-0">
                   <h2 className="text-lg font-semibold text-slate-950">Hiển thị</h2>
-                  <p className="mt-1 text-sm text-slate-500">Chọn field cho bảng/form rồi xem thử ngay trong settings.</p>
+                  <p className="mt-1 break-words text-sm text-slate-500">Chọn field cho bảng/form rồi xem thử ngay trong settings.</p>
                 </div>
                 <div className="grid grid-cols-2 gap-2 rounded-md border border-slate-200 bg-slate-50 p-1">
                   {[
@@ -1934,63 +2084,159 @@ function EditInterfaceSettings({
                   ))}
                 </div>
               </div>
+              <div className="rounded-md border border-slate-200 p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-950">Bảng danh sách</h3>
+                    <p className="mt-1 text-xs text-slate-500">Chọn cột và chỉnh width, align, format ngay trên draft.</p>
+                  </div>
+                  <Badge variant="outline">{bundle.views.listColumns.length} cột</Badge>
+                </div>
+                <div className="mt-3 space-y-3">
+                  {activeFields.map((field) => {
+                    const column = bundle.views.listColumns.find((item) => item.fieldKey === field.fieldKey)
+                    const checked = Boolean(column)
+                    return (
+                      <div key={field.id} className="rounded-md border border-slate-200 p-3">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <label className="flex items-center gap-2 text-sm font-medium text-slate-950">
+                            <Checkbox checked={checked} onCheckedChange={(value) => toggleListColumn(field, Boolean(value))} />
+                            {field.label}
+                            <span className="font-mono text-xs text-slate-500">{field.fieldKey}</span>
+                          </label>
+                          {checked && <Badge variant="outline">{columnFormatLabels[column!.format]}</Badge>}
+                        </div>
+                        {checked && column && (
+                          <div className="mt-3 grid gap-3 md:grid-cols-[140px_1fr_1fr]">
+                            <div>
+                              <Label>Width</Label>
+                              <Input
+                                className="mt-1.5"
+                                type="number"
+                                min={80}
+                                max={480}
+                                value={column.width}
+                                onChange={(event) => updateListColumn(field.fieldKey, { width: Number(event.target.value) || 180 })}
+                              />
+                            </div>
+                            <div>
+                              <Label>Align</Label>
+                              <Select value={column.align} onValueChange={(value) => updateListColumn(field.fieldKey, { align: value as BuilderViewColumn["align"] })}>
+                                <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  {(Object.keys(columnAlignLabels) as BuilderViewColumn["align"][]).map((align) => (
+                                    <SelectItem key={align} value={align}>{columnAlignLabels[align]}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <Label>Format</Label>
+                              <Select value={column.format} onValueChange={(value) => updateListColumn(field.fieldKey, { format: value as BuilderViewColumn["format"] })}>
+                                <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  {columnFormats.map((format) => (
+                                    <SelectItem key={format} value={format}>{columnFormatLabels[format]}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
               <div className="grid gap-4 lg:grid-cols-2">
                 <div className="rounded-md border border-slate-200 p-4">
-                  <h3 className="text-sm font-semibold text-slate-950">Bảng danh sách</h3>
-                  <div className="mt-3 space-y-2">
-                    {bundle.fields.map((field) => {
-                      const checked = bundle.views.listColumns.some((column) => column.fieldKey === field.fieldKey)
-                      return (
-                        <label key={field.id} className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2 text-sm">
-                          {field.label}
-                          <Checkbox
-                            checked={checked}
-                            onCheckedChange={(value) =>
-                              onChange((current) => ({
-                                ...current,
-                                views: {
-                                  ...current.views,
-                                  listColumns: value
-                                    ? [...current.views.listColumns, { fieldKey: field.fieldKey, label: field.label, width: 180, align: "left", format: "text" }]
-                                    : current.views.listColumns.filter((column) => column.fieldKey !== field.fieldKey),
-                                },
-                              }))
-                            }
-                          />
-                        </label>
-                      )
-                    })}
+                  <h3 className="text-sm font-semibold text-slate-950">Default sort</h3>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_150px]">
+                    <div>
+                      <Label>Field sort mặc định</Label>
+                      <Select value={sortFieldKey || "__none"} onValueChange={(value) => updateDefaultSort(value === "__none" ? activeFields[0]?.fieldKey ?? "" : value, sortDirection === "desc" ? "desc" : "asc")}>
+                        <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none">Chưa chọn</SelectItem>
+                          {activeFields.map((field) => <SelectItem key={field.id} value={field.fieldKey}>{field.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Hướng</Label>
+                      <Select value={sortDirection === "desc" ? "desc" : "asc"} onValueChange={(value) => updateDefaultSort(sortFieldKey || (activeFields[0]?.fieldKey ?? ""), value as "asc" | "desc")}>
+                        <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="asc">Tăng dần</SelectItem>
+                          <SelectItem value="desc">Giảm dần</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-xs text-slate-500">Draft: <span className="font-mono">{bundle.views.defaultSort || "chưa chọn"}</span></p>
+                </div>
+
+                <div className="rounded-md border border-slate-200 p-4">
+                  <h3 className="text-sm font-semibold text-slate-950">Filter nhanh</h3>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {activeFields.map((field) => (
+                      <label key={field.id} className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2 text-sm">
+                        <span>{field.label}</span>
+                        <Checkbox checked={bundle.views.filterFields.includes(field.fieldKey)} onCheckedChange={(checked) => toggleFilterField(field.fieldKey, Boolean(checked))} />
+                      </label>
+                    ))}
                   </div>
                 </div>
-                <div className="rounded-md border border-slate-200 p-4">
-                  <h3 className="text-sm font-semibold text-slate-950">Form nhập liệu</h3>
-                  <div className="mt-3 space-y-2">
-                    {bundle.fields.map((field) => {
-                      const section = bundle.views.formSections[0]
-                      const checked = section?.fieldKeys.includes(field.fieldKey) ?? false
-                      return (
-                        <label key={field.id} className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2 text-sm">
-                          {field.label}{field.required ? " *" : ""}
-                          <Checkbox
-                            checked={checked}
-                            onCheckedChange={(value) =>
-                              onChange((current) => ({
-                                ...current,
-                                views: {
-                                  ...current.views,
-                                  formSections: current.views.formSections.map((item, index) =>
-                                    index === 0
-                                      ? { ...item, fieldKeys: value ? [...new Set([...item.fieldKeys, field.fieldKey])] : item.fieldKeys.filter((key) => key !== field.fieldKey) }
-                                      : item,
-                                  ),
-                                },
-                              }))
-                            }
-                          />
-                        </label>
-                      )
-                    })}
+              </div>
+
+              <div className="rounded-md border border-slate-200 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-950">Form nhập liệu</h3>
+                    <p className="mt-1 text-xs text-slate-500">Tạo nhiều section, đổi thứ tự và chọn field cho từng section.</p>
                   </div>
+                  <Button type="button" variant="outline" size="sm" onClick={addFormSection}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Thêm section
+                  </Button>
+                </div>
+                <div className="mt-3 space-y-3">
+                  {bundle.views.formSections.length === 0 ? (
+                    <div className="rounded-md border border-dashed border-slate-300 p-4 text-sm text-slate-500">Chưa có form section.</div>
+                  ) : (
+                    bundle.views.formSections.map((formSection, index) => (
+                      <div key={formSection.id} className="rounded-md border border-slate-200 p-3">
+                        <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+                          <div>
+                            <Label>Tên section</Label>
+                            <Input className="mt-1.5" value={formSection.title} onChange={(event) => updateFormSection(formSection.id, { title: event.target.value })} />
+                          </div>
+                          <div className="flex items-end gap-2">
+                            <Button type="button" variant="outline" size="sm" disabled={index === 0} onClick={() => moveFormSection(formSection.id, -1)}>
+                              Lên
+                            </Button>
+                            <Button type="button" variant="outline" size="sm" disabled={index === bundle.views.formSections.length - 1} onClick={() => moveFormSection(formSection.id, 1)}>
+                              Xuống
+                            </Button>
+                            <Button type="button" variant="outline" size="sm" disabled={bundle.views.formSections.length <= 1} onClick={() => removeFormSection(formSection.id)}>
+                              Xóa
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                          {activeFields.map((field) => (
+                            <label key={field.id} className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2 text-sm">
+                              <span>
+                                {field.label}{field.required ? " *" : ""}
+                              </span>
+                              <Checkbox checked={formSection.fieldKeys.includes(field.fieldKey)} onCheckedChange={(checked) => toggleFormSectionField(formSection.id, field.fieldKey, Boolean(checked))} />
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
               <LightweightPreview bundle={bundle} mode={previewMode} />

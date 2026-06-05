@@ -1,4 +1,5 @@
 import { Outlet } from "react-router-dom"
+import { useEffect } from "react"
 import { Sidebar } from "./Sidebar"
 import { Header } from "./Header"
 import { useUIStore } from "@/store/useUIStore"
@@ -6,6 +7,21 @@ import { useUIStore } from "@/store/useUIStore"
 export function MainLayout() {
   const sidebarOpen = useUIStore((s) => s.sidebarOpen)
   const setSidebarOpen = useUIStore((s) => s.setSidebarOpen)
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const mediaQuery = window.matchMedia("(max-width: 767px)")
+    const closeOnMobile = () => {
+      if (mediaQuery.matches) {
+        setSidebarOpen(false)
+      }
+    }
+
+    closeOnMobile()
+    mediaQuery.addEventListener("change", closeOnMobile)
+    return () => mediaQuery.removeEventListener("change", closeOnMobile)
+  }, [setSidebarOpen])
 
   return (
     <div className="h-screen w-full flex bg-white overflow-hidden">

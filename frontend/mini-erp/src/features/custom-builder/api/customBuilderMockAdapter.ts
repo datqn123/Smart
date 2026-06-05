@@ -67,7 +67,7 @@ export type BuilderViewColumn = {
   label: string
   width: number
   align: "left" | "right" | "center"
-  format: "text" | "number" | "date" | "badge"
+  format: "text" | "number" | "currency" | "date" | "badge"
 }
 
 export type BuilderFormSection = {
@@ -667,7 +667,7 @@ export async function createMockBuilderPage(input: CreatePageWizardDraft): Promi
           label: field?.label ?? fieldKey,
           width: 180,
           align: field?.type === "number" || field?.type === "money" ? "right" : "left",
-          format: field?.type === "number" || field?.type === "money" ? "number" : field?.type === "date" ? "date" : "text",
+          format: field?.type === "money" ? "currency" : field?.type === "number" ? "number" : field?.type === "date" ? "date" : "text",
         }
       }),
       filterFields: draftFields.filter((field) => field.searchable || field.filterable).map((field) => field.fieldKey),
@@ -781,6 +781,18 @@ export function validateBundle(bundle: BuilderPageBundle): ValidationSummary {
       errors.push({ section: "view", message: `Cột ${column.fieldKey} đang tham chiếu field không tồn tại.` })
     }
   })
+  bundle.views.filterFields.forEach((fieldKey) => {
+    if (!fieldKeys.has(fieldKey)) {
+      errors.push({ section: "view", message: `Filter ${fieldKey} đang tham chiếu field không tồn tại.` })
+    }
+  })
+  const [sortFieldKey, sortDirection] = bundle.views.defaultSort.split(" ")
+  if (sortFieldKey && !fieldKeys.has(sortFieldKey)) {
+    errors.push({ section: "view", message: `Default sort ${sortFieldKey} đang tham chiếu field không tồn tại.` })
+  }
+  if (sortDirection && sortDirection !== "asc" && sortDirection !== "desc") {
+    errors.push({ section: "view", message: "Default sort chỉ hỗ trợ asc hoặc desc." })
+  }
   bundle.fields.forEach((field) => {
     const options = (field.options ?? []).map((option) => option.trim()).filter(Boolean)
     const normalizedOptions = options.map((option) => option.toLowerCase())
@@ -856,6 +868,16 @@ export function validateBundle(bundle: BuilderPageBundle): ValidationSummary {
     }
   })
   const formFieldKeys = new Set(bundle.views.formSections.flatMap((section) => section.fieldKeys))
+  bundle.views.formSections.forEach((section) => {
+    if (!section.title.trim()) {
+      errors.push({ section: "view", message: "Form section cần tên hiển thị." })
+    }
+    section.fieldKeys.forEach((fieldKey) => {
+      if (!fieldKeys.has(fieldKey)) {
+        errors.push({ section: "view", message: `Form section ${section.title || section.id} đang tham chiếu field ${fieldKey} không tồn tại.` })
+      }
+    })
+  })
   bundle.fields
     .filter((field) => field.required && field.status !== "Archived")
     .forEach((field) => {
