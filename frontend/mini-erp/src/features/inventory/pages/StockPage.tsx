@@ -5,6 +5,14 @@ import { usePageTitle } from "@/context/PageTitleContext"
 import { Package, AlertTriangle, CalendarClock, TrendingUp } from "lucide-react"
 import { formatCurrency } from "../utils"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog"
 import type { InventoryItem, InventoryFilters, InventoryKPIs } from "../types"
 import { toast } from "sonner"
 import {
@@ -194,6 +202,9 @@ export function StockPage() {
   const [actionItems, setActionItems] = useState<InventoryItem[]>([])
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [itemsToEdit, setItemsToEdit] = useState<InventoryItem[]>([])
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false)
+  const [pendingBulkItems, setPendingBulkItems] = useState<ReturnType<typeof buildInventoryBulkPatchItems>>([])
+  const [isBulkSaving, setIsBulkSaving] = useState(false)
 
   const detailQuery = useQuery({
     queryKey: ["inventory", "v1", "detail", selectedBatchItem?.id, "related"],
@@ -344,23 +355,31 @@ export function StockPage() {
       toast.error(`Tối đa ${BULK_PATCH_MAX_ITEMS} dòng có thay đổi mỗi lần lưu hàng loạt.`)
       return
     }
+    setPendingBulkItems(bulkItems)
+    setBulkConfirmOpen(true)
+  }
+
+  const handleBulkConfirm = async () => {
+    setIsBulkSaving(true)
     try {
-      await patchBulkInventory(bulkItems)
+      await patchBulkInventory(pendingBulkItems)
       toast.success("Đã cập nhật thông tin tồn kho (hàng loạt)")
       await queryClient.invalidateQueries({ queryKey: ["inventory", "v1", "list"] })
       await queryClient.invalidateQueries({ queryKey: ["inventory", "v1", "summary"] })
       await queryClient.invalidateQueries({ queryKey: ["inventory", "v1", "detail"] })
+      setBulkConfirmOpen(false)
       setIsEditDialogOpen(false)
       setItemsToEdit([])
       setSelectedIds([])
-    }
-    catch (e) {
+      setPendingBulkItems([])
+    } catch (e) {
       if (e instanceof ApiRequestError) {
         toast.error(e.body?.message ?? "Không lưu được")
-      }
-      else {
+      } else {
         toast.error("Không lưu được")
       }
+    } finally {
+      setIsBulkSaving(false)
     }
   }
 
@@ -499,6 +518,44 @@ export function StockPage() {
         onConfirm={handleEditConfirm}
         items={itemsToEdit}
       />
+
+      <Dialog open={bulkConfirmOpen} onOpenChange={(o) => { if (!isBulkSaving) setBulkConfirmOpen(o) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Xác nhận cập nhật hàng loạt</DialogTitle>
+            <DialogDescription>
+              Bạn sắp cập nhật <span className="font-semibold text-slate-900">{pendingBulkItems.length}</span> dòng tồn kho. Thao tác này không thể hoàn tác từ giao diện.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="text-sm text-slate-600 bg-slate-50 rounded-lg p-3 border border-slate-200">
+            <ul className="space-y-1 max-h-40 overflow-y-auto">
+              {pendingBulkItems.slice(0, 8).map((it) => (
+                <li key={it.id} className="flex items-center gap-2">
+                  <span className="font-mono text-xs text-slate-400 shrink-0">#{it.id}</span>
+                  <span className="text-xs text-slate-700 truncate">
+                    {Object.entries(it).filter(([k]) => k !== "id").map(([k, v]) => `${k}: ${String(v)}`).join(" · ")}
+                  </span>
+                </li>
+              ))}
+              {pendingBulkItems.length > 8 && (
+                <li className="text-xs text-slate-400 italic">…và {pendingBulkItems.length - 8} dòng khác</li>
+              )}
+            </ul>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkConfirmOpen(false)} disabled={isBulkSaving}>
+              Hủy
+            </Button>
+            <Button
+              className="bg-slate-900 text-white hover:bg-slate-800"
+              disabled={isBulkSaving}
+              onClick={() => void handleBulkConfirm()}
+            >
+              {isBulkSaving ? "Đang lưu…" : "Xác nhận lưu"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

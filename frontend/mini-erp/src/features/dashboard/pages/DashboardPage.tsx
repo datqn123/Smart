@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { useQueries } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { useNavigate } from "react-router-dom"
 import {
   AreaChart,
@@ -34,23 +34,8 @@ import { usePageTitle } from "@/context/PageTitleContext"
 import { useAuthStore } from "@/features/auth/store/useAuthStore"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { getInventorySummary, getInventoryList } from "@/features/inventory/api/inventoryApi"
-import { getSalesOrderList } from "@/features/orders/api/salesOrdersApi"
-import { getPendingApprovals } from "@/features/approvals/api/approvalsApi"
-import { getCustomerList } from "@/features/product-management/api/customersApi"
-import { getCashTransactionsList } from "@/features/cashflow/api/cashTransactionsApi"
 import { formatCurrency } from "@/features/inventory/utils"
-import {
-  aggregateDailyRevenue,
-  revenueComparison,
-  channelBreakdown,
-  summarizeCashflow,
-  topCustomersBySpend,
-  monthToDateRange,
-} from "../utils/dashboardAnalytics"
-
-/** Lấy đủ đơn gần đây cho cả danh sách lẫn aggregate biểu đồ. */
-const ORDERS_FETCH_LIMIT = 100
+import { getDashboard } from "@/features/dashboard/api/dashboardApi"
 
 function getGreeting() {
   const h = new Date().getHours()
@@ -119,97 +104,45 @@ export function DashboardPage() {
     setTitle("Bảng Điều Khiển")
   }, [setTitle])
 
-  const mtd = useMemo(() => monthToDateRange(), [])
+  const dashboardQ = useQuery({
+    queryKey: ["dashboard", "overview", trendDays],
+    queryFn: () => getDashboard({ trendDays, recentLimit: 5, topCustomerLimit: 5, alertLimit: 5 }),
+    staleTime: 60_000,
+  })
 
-  const [
-    inventorySummaryQ,
-    pendingOrdersQ,
-    allOrdersQ,
-    approvalsQ,
-    lowStockQ,
-    ordersQ,
-    customersQ,
-    cashflowQ,
-  ] = useQueries(
-    {
-      queries: [
-        {
-          queryKey: ["dashboard", "inventory-summary"],
-          queryFn: () => getInventorySummary(),
-          staleTime: 60_000,
-        },
-        {
-          queryKey: ["dashboard", "orders-pending"],
-          queryFn: () => getSalesOrderList({ status: "Pending", limit: 1 }),
-          staleTime: 60_000,
-        },
-        {
-          queryKey: ["dashboard", "orders-all"],
-          queryFn: () => getSalesOrderList({ limit: 1 }),
-          staleTime: 60_000,
-        },
-        {
-          queryKey: ["dashboard", "approvals-pending"],
-          queryFn: () => getPendingApprovals({ limit: 5 }),
-          staleTime: 60_000,
-        },
-        {
-          queryKey: ["dashboard", "low-stock"],
-          queryFn: () =>
-            getInventoryList({ stockLevel: "low_stock", limit: 5, sort: "quantity:asc" }),
-          staleTime: 60_000,
-        },
-        {
-          queryKey: ["dashboard", "orders-recent", ORDERS_FETCH_LIMIT],
-          queryFn: () => getSalesOrderList({ limit: ORDERS_FETCH_LIMIT, sort: "createdAt:desc" }),
-          staleTime: 60_000,
-        },
-        {
-          queryKey: ["dashboard", "top-customers"],
-          queryFn: () => getCustomerList({ limit: 50, sort: "updatedAt:desc" }),
-          staleTime: 60_000,
-        },
-        {
-          queryKey: ["dashboard", "cashflow-mtd", mtd.dateFrom, mtd.dateTo],
-          queryFn: () =>
-            getCashTransactionsList({
-              dateFrom: mtd.dateFrom,
-              dateTo: mtd.dateTo,
-              status: "Completed",
-              limit: 100,
-            }),
-          staleTime: 60_000,
-        },
-      ],
-    },
+  const dashboardData = dashboardQ.data
+  const invData = dashboardData?.kpis
+  const approvalData = useMemo(
+    () =>
+      dashboardData?.kpis
+        ? {
+            summary: {
+              totalPending: dashboardData.kpis.pendingApprovals,
+              byType: dashboardData.kpis.approvalByType,
+            },
+            items: dashboardData.pendingApprovals ?? [],
+          }
+        : undefined,
+    [dashboardData],
   )
+  const lowStockData = useMemo(
+    () =>
+      dashboardData
+        ? {
+            items: dashboardData.lowStockAlerts ?? [],
+            total: dashboardData.kpis?.lowStockCount ?? dashboardData.lowStockAlerts?.length ?? 0,
+          }
+        : undefined,
+    [dashboardData],
+  )
+  const recentOrders = dashboardData?.recentOrders ?? []
 
-  const invData = inventorySummaryQ.data
-  const approvalData = approvalsQ.data
-  const orderItems = useMemo(() => ordersQ.data?.items ?? [], [ordersQ.data])
-  const recentOrders = orderItems.slice(0, 5)
-
-  // Aggregate doanh thu (chỉ tính khi có quyền tài chính để tránh phí tính toán).
-  const revenueTrend = useMemo(
-    () => (canSeeFinancials ? aggregateDailyRevenue(orderItems, trendDays) : []),
-    [canSeeFinancials, orderItems, trendDays],
-  )
-  const comparison = useMemo(
-    () => (canSeeFinancials ? revenueComparison(orderItems) : null),
-    [canSeeFinancials, orderItems],
-  )
-  const channels = useMemo(
-    () => (canSeeFinancials ? channelBreakdown(orderItems, trendDays) : null),
-    [canSeeFinancials, orderItems, trendDays],
-  )
-  const topCustomers = useMemo(
-    () => topCustomersBySpend(customersQ.data?.items ?? [], 5),
-    [customersQ.data],
-  )
-  const cashflow = useMemo(
-    () => (canSeeFinancials ? summarizeCashflow(cashflowQ.data?.items ?? []) : null),
-    [canSeeFinancials, cashflowQ.data],
-  )
+  const revenueTrend = canSeeFinancials ? dashboardData?.revenueTrend ?? [] : []
+  const comparison = canSeeFinancials ? dashboardData?.financial ?? null : null
+  const channels = canSeeFinancials ? dashboardData?.channelBreakdown ?? null : null
+  const topCustomers = dashboardData?.topCustomers ?? []
+  const cashflow = canSeeFinancials ? dashboardData?.cashflow ?? null : null
+  const dashboardLoading = dashboardQ.isLoading
 
   const kpis: {
     title: string
@@ -232,19 +165,19 @@ export function DashboardPage() {
       iconBg: "bg-blue-50",
       accentColor: "text-blue-600",
       onClick: () => navigate("/inventory/stock"),
-      loading: inventorySummaryQ.isLoading,
+      loading: dashboardLoading,
       show: true,
     },
     {
       title: "Đơn chờ xử lý",
-      value: pendingOrdersQ.data?.total ?? null,
-      sub: allOrdersQ.data ? `/ ${allOrdersQ.data.total} tổng đơn hàng` : null,
+      value: invData?.pendingOrders ?? null,
+      sub: invData ? `/ ${invData.allOrdersTotal} tổng đơn hàng` : null,
       subWarn: false,
       icon: ShoppingCart,
       iconBg: "bg-orange-50",
       accentColor: "text-orange-600",
       onClick: () => navigate("/orders/wholesale"),
-      loading: pendingOrdersQ.isLoading,
+      loading: dashboardLoading,
       show: true,
     },
     {
@@ -261,7 +194,7 @@ export function DashboardPage() {
       iconBg: "bg-purple-50",
       accentColor: "text-purple-600",
       onClick: () => navigate("/approvals/pending"),
-      loading: approvalsQ.isLoading,
+      loading: dashboardLoading,
       show: true,
     },
     {
@@ -273,7 +206,7 @@ export function DashboardPage() {
       iconBg: "bg-emerald-50",
       accentColor: "text-emerald-600",
       onClick: () => navigate("/inventory/stock"),
-      loading: inventorySummaryQ.isLoading,
+      loading: dashboardLoading,
       show: canSeeFinancials,
     },
   ].filter((k) => k.show)
@@ -285,7 +218,7 @@ export function DashboardPage() {
     { label: "Báo cáo", icon: BarChart3, to: "/analytics/revenue", color: "bg-purple-600" },
   ]
 
-  const ordersLoading = ordersQ.isLoading
+  const ordersLoading = dashboardLoading
 
   return (
     <div className="p-6 space-y-6 max-w-screen-xl mx-auto">
@@ -646,14 +579,14 @@ export function DashboardPage() {
             </Button>
           </div>
           <div className="divide-y divide-slate-50">
-            {approvalsQ.isLoading ? (
+            {dashboardLoading ? (
               <div className="flex items-center justify-center py-10 text-slate-300">
                 <Loader2 className="h-5 w-5 animate-spin" />
               </div>
-            ) : (approvalsQ.data?.items.length ?? 0) === 0 ? (
+            ) : (approvalData?.items.length ?? 0) === 0 ? (
               <p className="text-sm text-slate-400 text-center py-10">Không có mục nào cần duyệt</p>
             ) : (
-              approvalsQ.data!.items.map((item) => (
+              approvalData!.items.map((item) => (
                 <div
                   key={`${item.entityType}-${item.entityId}`}
                   className="flex items-center justify-between px-4 py-3 hover:bg-slate-50/60 transition-colors"
@@ -703,7 +636,7 @@ export function DashboardPage() {
             </Button>
           </div>
           <div className="divide-y divide-slate-50">
-            {customersQ.isLoading ? (
+            {dashboardLoading ? (
               <div className="flex items-center justify-center py-10 text-slate-300">
                 <Loader2 className="h-5 w-5 animate-spin" />
               </div>
@@ -768,7 +701,7 @@ export function DashboardPage() {
                   <span className="text-[10px] font-bold uppercase tracking-wider">Tổng thu</span>
                 </div>
                 <p className="text-lg font-black text-emerald-700 mt-2 tabular-nums truncate">
-                  {cashflowQ.isLoading ? "…" : formatCurrency(cashflow?.income ?? 0)}
+                  {dashboardLoading ? "…" : formatCurrency(cashflow?.income ?? 0)}
                 </p>
               </div>
               {/* Chi */}
@@ -778,7 +711,7 @@ export function DashboardPage() {
                   <span className="text-[10px] font-bold uppercase tracking-wider">Tổng chi</span>
                 </div>
                 <p className="text-lg font-black text-red-700 mt-2 tabular-nums truncate">
-                  {cashflowQ.isLoading ? "…" : formatCurrency(cashflow?.expense ?? 0)}
+                  {dashboardLoading ? "…" : formatCurrency(cashflow?.expense ?? 0)}
                 </p>
               </div>
             </div>
@@ -790,7 +723,7 @@ export function DashboardPage() {
                   (cashflow?.net ?? 0) >= 0 ? "text-emerald-600" : "text-red-600"
                 }`}
               >
-                {cashflowQ.isLoading
+                {dashboardLoading
                   ? "…"
                   : `${(cashflow?.net ?? 0) >= 0 ? "+" : ""}${formatCurrency(cashflow?.net ?? 0)}`}
               </span>
@@ -800,16 +733,16 @@ export function DashboardPage() {
       </div>
 
       {/* Low Stock Alert */}
-      {((lowStockQ.data?.items.length ?? 0) > 0 || lowStockQ.isLoading) && (
+      {((lowStockData?.items.length ?? 0) > 0 || dashboardLoading) && (
         <div className="bg-white rounded-xl border border-amber-200 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-amber-100 bg-amber-50/60">
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-amber-500" />
               <h2 className="text-sm font-semibold text-amber-900">
                 Cảnh báo tồn kho thấp
-                {lowStockQ.data && (
+                {lowStockData && (
                   <span className="text-amber-500 font-normal ml-1">
-                    ({lowStockQ.data.total} mặt hàng)
+                    ({lowStockData.total} mặt hàng)
                   </span>
                 )}
               </h2>
@@ -823,18 +756,18 @@ export function DashboardPage() {
               Xem tất cả <ArrowRight className="h-3 w-3 ml-1" />
             </Button>
           </div>
-          {lowStockQ.isLoading ? (
+          {dashboardLoading ? (
             <div className="flex items-center justify-center py-6 text-slate-300">
               <Loader2 className="h-5 w-5 animate-spin" />
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-              {lowStockQ.data?.items.map((item, idx) => (
+              {lowStockData?.items.map((item, idx) => (
                 <div
                   key={item.id}
                   onClick={() => navigate("/inventory/stock")}
                   className={`px-4 py-3 cursor-pointer hover:bg-amber-50/40 transition-colors ${
-                    idx < (lowStockQ.data?.items.length ?? 0) - 1
+                    idx < (lowStockData?.items.length ?? 0) - 1
                       ? "border-b xl:border-b-0 xl:border-r border-amber-100"
                       : ""
                   }`}

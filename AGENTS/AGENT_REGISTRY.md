@@ -31,6 +31,13 @@ The only allowed bypass is an explicit user instruction such as `bỏ qua workfl
 | `CODE_REVIEW_AGENT` | `REVIEWER`, `CR`, `CODE_REVIEW`, `REVIEW_AGENT` | `AGENTS/skills/code-review-agent/SKILL.md` | Review findings, test gaps, residual risks | Stop and report result |
 | `AUTO` | `AUTO_AGENT`, `AUTO_RUN`, `ORCHESTRATE`, `RUN_WORKFLOW`, `chạy tự động`, `tự làm hết workflow` | `AGENTS/WORKFLOW_RULE.md` | Runs all unblocked stages in order | Depends on current stage |
 
+## Architecture Reference
+
+Chỉ đọc `AGENTS/005_smart-erp-project-architecture.md` khi agent quên context kiến trúc (cần refresh).
+Không đọc file này ở mỗi lần chạy workflow — tránh tốn token không cần thiết.
+
+Nội dung gồm: 3 tầng backend/frontend/AI, package-by-feature, API conventions, auth, DB, state management, LangGraph, architecture decisions.
+
 ## Resolution Rules
 
 - Prefer exact agent names over aliases.

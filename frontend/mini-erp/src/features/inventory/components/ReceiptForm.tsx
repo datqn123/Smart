@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react"
 import { useForm, useFieldArray, FormProvider } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { Plus, X, Save, Send, ShoppingCart, Info, Trash2, CheckCircle2, XCircle } from "lucide-react"
+import { Plus, X, Save, Send, ShoppingCart, Info, Trash2, CheckCircle2, XCircle, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -153,6 +153,8 @@ export function ReceiptForm({
   const [rejectBusy, setRejectBusy] = useState(false)
   const [rejectInlineOpen, setRejectInlineOpen] = useState(false)
   const [rejectReason, setRejectReason] = useState("")
+  // Wizard: step 1 = Header, 2 = Lines, 3 = Review (only for new/Draft)
+  const [wizardStep, setWizardStep] = useState(1)
 
   const form = useForm<ReceiptFormData>({
     resolver: zodResolver(receiptSchema),
@@ -165,6 +167,7 @@ export function ReceiptForm({
       return
     }
     form.reset(buildReceiptFormDefaultValues(receipt))
+    setWizardStep(1)
   }, [open, form, receipt?.id, receipt?.updatedAt])
 
   useEffect(() => {
@@ -224,6 +227,22 @@ export function ReceiptForm({
 
   const isEditable = !receipt || receipt.status === "Draft"
   const showPendingApprovalActions = Boolean(receipt && receipt.status === "Pending" && canApprove)
+  // Wizard only active when creating new or editing Draft
+  const useWizard = isEditable && !receipt?.id
+  const WIZARD_STEPS = ["Thông tin chung", "Chi tiết hàng hóa", "Xem lại & Gửi"]
+
+  const goNextStep = async () => {
+    if (wizardStep === 1) {
+      const ok = await form.trigger(["supplierId", "receiptDate"])
+      if (!ok) return
+    }
+    if (wizardStep === 2) {
+      const ok = await form.trigger(["details"])
+      if (!ok) return
+    }
+    setWizardStep((s) => Math.min(s + 1, 3))
+  }
+  const goPrevStep = () => setWizardStep((s) => Math.max(s - 1, 1))
 
   const handleApprove = async () => {
     if (!receipt) {
@@ -302,6 +321,38 @@ export function ReceiptForm({
           </div>
         </DialogHeader>
 
+        {/* Wizard step indicator — only for new receipts */}
+        {useWizard && (
+          <div className="px-6 py-3 border-b border-slate-100 bg-white shrink-0">
+            <div className="flex items-center gap-0">
+              {WIZARD_STEPS.map((label, i) => {
+                const step = i + 1
+                const isActive = wizardStep === step
+                const isDone = wizardStep > step
+                return (
+                  <div key={step} className="flex items-center">
+                    <div className="flex items-center gap-2">
+                      <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold border-2 transition-colors ${
+                        isActive ? "border-slate-900 bg-slate-900 text-white"
+                        : isDone ? "border-green-600 bg-green-600 text-white"
+                        : "border-slate-200 bg-white text-slate-400"
+                      }`}>
+                        {isDone ? "✓" : step}
+                      </span>
+                      <span className={`text-sm font-medium hidden sm:inline ${isActive ? "text-slate-900" : isDone ? "text-green-700" : "text-slate-400"}`}>
+                        {label}
+                      </span>
+                    </div>
+                    {i < WIZARD_STEPS.length - 1 && (
+                      <ChevronRight className="h-4 w-4 text-slate-300 mx-2 shrink-0" />
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
           <form
             id="receipt-form"
@@ -311,8 +362,8 @@ export function ReceiptForm({
             }}
             className="space-y-8"
           >
-            {/* Header Info Section */}
-            <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+            {/* Header Info Section — Step 1 (or always show when not wizard) */}
+            <div className={`bg-white rounded-xl border border-slate-200 p-6 shadow-sm ${useWizard && wizardStep !== 1 ? "hidden" : ""}`}>
                 <div className="flex items-center gap-2 mb-4">
                     <Info size={16} className="text-slate-400" />
                     <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Thông tin chung</h3>
@@ -374,7 +425,7 @@ export function ReceiptForm({
                 </div>
             </div>
 
-            {receipt?.status === "Rejected" && (
+            {receipt?.status === "Rejected" && (!useWizard || wizardStep === 1) && (
               <div className="rounded-xl border border-red-200 bg-red-50/70 p-5">
                 <div className="flex items-start gap-3">
                   <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-100 text-red-700">
@@ -403,8 +454,8 @@ export function ReceiptForm({
               </div>
             )}
 
-            {/* Product Items Table Section */}
-            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+            {/* Product Items Table Section — Step 2 */}
+            <div className={`bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm ${useWizard && wizardStep !== 2 ? "hidden" : ""}`}>
               <div className="flex flex-col gap-4 border-b border-slate-200 bg-slate-50/80 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-2">
                     <ShoppingCart size={18} className="text-slate-400" />
@@ -613,7 +664,7 @@ export function ReceiptForm({
               )}
             </div>
             
-            {(form.formState.errors.details || form.formState.root) && (
+            {(form.formState.errors.details || form.formState.errors.root) && (!useWizard || wizardStep === 2) && (
               <div className="p-4 bg-red-50 border border-red-100 rounded-lg flex items-center gap-3">
                   <X className="text-red-500" size={18} />
                   <p className="text-sm text-red-600 font-bold">
@@ -621,14 +672,72 @@ export function ReceiptForm({
                   </p>
               </div>
             )}
+
+            {/* Step 3: Review & Submit */}
+            {useWizard && wizardStep === 3 && (
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <CheckCircle2 className="h-5 w-5 text-slate-400" />
+                  <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Xem lại trước khi gửi</h3>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="space-y-0.5">
+                    <p className="text-xs text-slate-500 uppercase font-semibold tracking-wide">Nhà cung cấp</p>
+                    <p className="font-medium text-slate-900">
+                      {mockSuppliers.find((s) => s.id === formValues.supplierId)?.name ?? `ID: ${formValues.supplierId}`}
+                    </p>
+                  </div>
+                  <div className="space-y-0.5">
+                    <p className="text-xs text-slate-500 uppercase font-semibold tracking-wide">Ngày nhập</p>
+                    <p className="font-medium text-slate-900">{formValues.receiptDate}</p>
+                  </div>
+                  {formValues.invoiceNumber && (
+                    <div className="space-y-0.5">
+                      <p className="text-xs text-slate-500 uppercase font-semibold tracking-wide">Số hóa đơn</p>
+                      <p className="font-mono text-slate-900">{formValues.invoiceNumber}</p>
+                    </div>
+                  )}
+                  {formValues.notes && (
+                    <div className="space-y-0.5 col-span-2">
+                      <p className="text-xs text-slate-500 uppercase font-semibold tracking-wide">Ghi chú</p>
+                      <p className="text-slate-700">{formValues.notes}</p>
+                    </div>
+                  )}
+                </div>
+                <div className="border-t border-slate-100 pt-4">
+                  <p className="text-xs text-slate-500 uppercase font-semibold tracking-wide mb-2">
+                    Hàng hóa ({fields.length} dòng)
+                  </p>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {formValues.details.map((d, i) => {
+                      const prod = productSelectOptions.find((p) => p.productId === d.productId)
+                      const lineTotal = (d.quantity || 0) * (d.costPrice || 0)
+                      return (
+                        <div key={i} className="flex items-center justify-between gap-3 text-sm bg-slate-50 rounded-lg px-3 py-2">
+                          <span className="truncate font-medium text-slate-800">{prod?.name ?? `SP #${d.productId}`}</span>
+                          <span className="shrink-0 text-slate-600 tabular-nums">
+                            {d.quantity} × {formatCurrency(d.costPrice)} = <span className="font-semibold text-slate-900">{formatCurrency(lineTotal)}</span>
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <div className="mt-3 flex justify-end">
+                    <p className="text-base font-bold text-slate-900">
+                      Tổng: <span className="text-xl">{formatCurrency(totalAmount)}</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </form>
         </div>
 
         <DialogFooter className="w-full flex-none flex-col gap-0 border-t border-slate-200 bg-slate-50 p-6 sm:flex-row sm:justify-start">
           <div className="flex w-full flex-col gap-4">
-            {/* Một hàng: Từ chối (trái) và Duyệt / Lưu / Gửi (phải) — cùng baseline */}
             <div className="flex w-full min-h-[44px] flex-row flex-wrap items-center justify-between gap-3">
-              <div className="flex shrink-0 items-center">
+              {/* Left: Reject (for pending approval) or Back (wizard) */}
+              <div className="flex shrink-0 items-center gap-2">
                 {showPendingApprovalActions && (
                   <Button
                     type="button"
@@ -647,9 +756,26 @@ export function ReceiptForm({
                     {rejectInlineOpen ? "Đóng nhập lý do" : "Từ chối phiếu nhập"}
                   </Button>
                 )}
+                {useWizard && wizardStep > 1 && (
+                  <Button type="button" variant="outline" className="h-11" onClick={goPrevStep} disabled={isSubmitting}>
+                    ← Quay lại
+                  </Button>
+                )}
               </div>
+
+              {/* Right: Wizard Next / Save / Submit / Approve */}
               <div className="flex flex-wrap items-center justify-end gap-3">
-                {isEditable && (
+                {useWizard && wizardStep < 3 && (
+                  <Button
+                    type="button"
+                    className="h-11 min-w-[120px] bg-slate-900 text-white hover:bg-slate-800"
+                    onClick={() => void goNextStep()}
+                  >
+                    Tiếp theo <ChevronRight className="ml-1 h-4 w-4" />
+                  </Button>
+                )}
+
+                {(!useWizard || wizardStep === 3) && isEditable && (
                   <>
                     <Button
                       type="button"

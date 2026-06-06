@@ -10,7 +10,7 @@ import { formatDate } from "../utils"
 import type { StockDispatch } from "../types"
 import type { StockDispatchDetailResponse } from "../api/dispatchApi"
 import { StatusBadge } from "./StatusBadge"
-import { Package, Calendar, User, Truck, MapPin, ClipboardList, CheckCircle2, XCircle, Printer, Boxes, Timer, Activity, UserCircle } from "lucide-react"
+import { Package, Calendar, User, Truck, MapPin, ClipboardList, CheckCircle2, XCircle, Printer, Boxes, Timer, Activity, UserCircle, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -102,21 +102,51 @@ export function DispatchDetailDialog({
               Cảnh báo thiếu hàng
             </div>
           ) : null}
-          {/* Progress Tracker (Premium Feel) */}
-          <div className="mb-12 pt-4">
+          {/* Status Progress Flow: Pending → WaitingDispatch → Delivering → Delivered */}
+          {dispatch.status !== "Cancelled" && (
+            <div className="mb-10 pt-2">
               <div className="flex justify-between relative">
-                  <div className="absolute top-1/2 left-0 w-full h-0.5 bg-slate-100 -translate-y-1/2 z-0" />
-                  <div className={cn(
-                    "absolute top-1/2 left-0 h-0.5 bg-slate-900 -translate-y-1/2 z-0 transition-all duration-700",
-                    dispatch.status === "WaitingDispatch" || dispatch.status === "Pending" ? "w-1/3" :
-                    dispatch.status === "Delivering" || dispatch.status === "Partial" ? "w-2/3" :
-                    "w-full",
-                  )} />
-                  <Step icon={Timer} label="Chờ xuất" active={dispatch.status === "WaitingDispatch" || dispatch.status === "Pending"} />
-                  <Step icon={Activity} label="Đang giao" active={dispatch.status === "Delivering" || dispatch.status === "Partial"} />
-                  <Step icon={CheckCircle2} label="Đã giao" active={dispatch.status === "Delivered" || dispatch.status === "Full"} />
+                <div className="absolute top-5 left-0 w-full h-0.5 bg-slate-100 z-0" />
+                <div className={cn(
+                  "absolute top-5 left-0 h-0.5 bg-slate-900 z-0 transition-all duration-700",
+                  dispatch.status === "Pending" ? "w-0" :
+                  dispatch.status === "WaitingDispatch" ? "w-1/3" :
+                  dispatch.status === "Delivering" || dispatch.status === "Partial" ? "w-2/3" :
+                  "w-full",
+                )} />
+                <Step
+                  icon={Clock}
+                  label="Chờ duyệt"
+                  active={dispatch.status === "Pending"}
+                  done={["WaitingDispatch", "Delivering", "Partial", "Delivered", "Full"].includes(dispatch.status)}
+                />
+                <Step
+                  icon={Timer}
+                  label="Chờ xuất kho"
+                  active={dispatch.status === "WaitingDispatch"}
+                  done={["Delivering", "Partial", "Delivered", "Full"].includes(dispatch.status)}
+                />
+                <Step
+                  icon={Activity}
+                  label="Đang giao"
+                  active={dispatch.status === "Delivering" || dispatch.status === "Partial"}
+                  done={["Delivered", "Full"].includes(dispatch.status)}
+                />
+                <Step
+                  icon={CheckCircle2}
+                  label="Đã giao"
+                  active={dispatch.status === "Delivered" || dispatch.status === "Full"}
+                  done={false}
+                />
               </div>
-          </div>
+            </div>
+          )}
+          {dispatch.status === "Cancelled" && (
+            <div className="mb-6 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <XCircle className="h-4 w-4 shrink-0" />
+              <span className="font-medium">Phiếu xuất đã bị hủy</span>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-10 mb-8">
             <div className="space-y-6">
@@ -290,20 +320,22 @@ function InfoLine({ icon: Icon, label, value }: { icon: any, label: string, valu
     )
 }
 
-function Step({ icon: Icon, label, active }: { icon: any, label: string, active?: boolean }) {
+function Step({ icon: Icon, label, active, done }: { icon: React.ElementType, label: string, active?: boolean, done?: boolean }) {
     return (
-        <div className="flex flex-col items-center gap-2 relative z-10 group">
+        <div className="flex flex-col items-center gap-2 relative z-10">
             <div className={cn(
                 "h-10 w-10 rounded-xl flex items-center justify-center border-2 transition-all duration-500",
-                active 
-                    ? "bg-slate-900 border-slate-900 text-white shadow-[0_10px_20px_rgba(15,23,42,0.2)] scale-110" 
-                    : "bg-white border-slate-100 text-slate-300"
+                active
+                    ? "bg-slate-900 border-slate-900 text-white shadow-[0_8px_16px_rgba(15,23,42,0.2)] scale-110"
+                    : done
+                      ? "bg-green-600 border-green-600 text-white"
+                      : "bg-white border-slate-100 text-slate-300"
             )}>
-                <Icon size={18} />
+                {done ? <CheckCircle2 size={18} /> : <Icon size={18} />}
             </div>
             <span className={cn(
-                "text-[10px] font-black uppercase tracking-widest",
-                active ? "text-slate-900" : "text-slate-300"
+                "text-[10px] font-black uppercase tracking-widest whitespace-nowrap",
+                active ? "text-slate-900" : done ? "text-green-700" : "text-slate-300"
             )}>{label}</span>
         </div>
     )

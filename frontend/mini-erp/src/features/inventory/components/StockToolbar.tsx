@@ -1,13 +1,14 @@
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Search, Edit2, ArrowDownToLine, ArrowUpFromLine } from "lucide-react"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { cn } from "@/lib/utils"
+
+const STOCK_FILTERS = [
+  { value: "all", label: "Tất cả" },
+  { value: "in-stock", label: "Còn hàng" },
+  { value: "low-stock", label: "Sắp hết" },
+  { value: "out-of-stock", label: "Hết hàng" },
+] as const
 
 interface StockToolbarProps {
   searchStr: string
@@ -19,68 +20,55 @@ interface StockToolbarProps {
 }
 
 export function StockToolbar({ searchStr, onSearch, status, onStatusChange, selectedIds, onAction }: StockToolbarProps) {
-  const hasSelection = selectedIds.length > 0;
+  const hasSelection = selectedIds.length > 0
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-col xl:flex-row gap-4 justify-between items-start xl:items-center">
-        {/* Search & Filter */}
-        <div className="flex flex-col sm:flex-row gap-3 w-full xl:max-w-xl">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <Input
-              placeholder="Tìm theo tên hoặc mã SP..."
-              value={searchStr}
-              onChange={(e) => onSearch(e.target.value)}
-              className="pl-9 min-h-[44px] w-full"
-            />
-          </div>
-          <Select value={status} onValueChange={onStatusChange}>
-            <SelectTrigger className="w-full sm:min-w-[200px] sm:w-fit min-h-[44px] bg-white text-slate-900 border-slate-200 focus:ring-2 focus:ring-slate-100 focus:border-slate-400 data-[state=open]:border-slate-400 transition-colors px-4">
-              <SelectValue placeholder="Trạng thái" />
-            </SelectTrigger>
-            <SelectContent position="popper" sideOffset={4} className="bg-white border-slate-200 text-slate-900 shadow-lg min-w-[200px]">
-              <SelectItem value="all" className="focus:bg-slate-100 focus:text-slate-900 cursor-pointer py-3 px-3">Tất cả trạng thái</SelectItem>
-              <SelectItem value="in-stock" className="focus:bg-slate-100 focus:text-slate-900 cursor-pointer py-3 px-3">Còn hàng</SelectItem>
-              <SelectItem value="low-stock" className="focus:bg-slate-100 focus:text-slate-900 cursor-pointer py-3 px-3">Sắp hết</SelectItem>
-              <SelectItem value="out-of-stock" className="focus:bg-slate-100 focus:text-slate-900 cursor-pointer py-3 px-3">Hết hàng</SelectItem>
-            </SelectContent>
-          </Select>
+      {/* Row 1: Search + bulk actions */}
+      <div className="flex flex-col xl:flex-row gap-3 justify-between items-start xl:items-center">
+        <div className="relative w-full xl:max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <Input
+            placeholder="Tìm theo tên hoặc mã SP..."
+            value={searchStr}
+            onChange={(e) => onSearch(e.target.value)}
+            className="pl-9 h-10 w-full"
+          />
         </div>
 
-        {/* Group Actions - Always visible */}
-        <div className={`flex flex-wrap items-center gap-2 pt-2 xl:pt-0 pb-1 xl:pb-0 w-full xl:w-auto xl:justify-end ${!hasSelection ? 'opacity-50' : ''}`}>
-          <span className="text-sm font-medium text-slate-700 mr-2 min-w-[100px] xl:min-w-0">
+        <div className={cn("flex flex-wrap items-center gap-2 w-full xl:w-auto xl:justify-end", !hasSelection && "opacity-50")}>
+          <span className="text-sm font-medium text-slate-600 mr-1">
             Đã chọn: {selectedIds.length}
           </span>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => onAction("import")}
-            disabled={!hasSelection}
-            className="min-h-[44px] xl:min-h-[36px]"
-          >
+          <Button variant="outline" size="sm" onClick={() => onAction("import")} disabled={!hasSelection} className="h-9">
             <ArrowDownToLine className="mr-1.5 h-4 w-4" />Nhập
           </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => onAction("export")}
-            disabled={!hasSelection}
-            className="min-h-[44px] xl:min-h-[36px]"
-          >
+          <Button variant="outline" size="sm" onClick={() => onAction("export")} disabled={!hasSelection} className="h-9">
             <ArrowUpFromLine className="mr-1.5 h-4 w-4" />Xuất
           </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => onAction("edit")}
-            disabled={!hasSelection}
-            className="min-h-[44px] xl:min-h-[36px]"
-          >
+          <Button variant="outline" size="sm" onClick={() => onAction("edit")} disabled={!hasSelection} className="h-9">
             <Edit2 className="mr-1.5 h-4 w-4" />Sửa
           </Button>
         </div>
+      </div>
+
+      {/* Row 2: Quick-filter tabs */}
+      <div className="flex flex-wrap gap-1.5">
+        {STOCK_FILTERS.map((f) => (
+          <button
+            key={f.value}
+            type="button"
+            onClick={() => onStatusChange(f.value)}
+            className={cn(
+              "h-8 px-3 rounded-full text-sm font-medium transition-colors border",
+              status === f.value
+                ? "bg-slate-900 text-white border-slate-900"
+                : "bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:text-slate-900",
+            )}
+          >
+            {f.label}
+          </button>
+        ))}
       </div>
     </div>
   )

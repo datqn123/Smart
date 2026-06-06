@@ -32,16 +32,16 @@ import { useTableColumnOrder } from "../hooks/useTableVisibleColumns"
 const PAGE_SIZE = 20
 const SEARCH_DEBOUNCE_MS = 400
 
-const statusOptions = [
-  { value: "all", label: "Tất cả trạng thái" },
-  { value: "WaitingDispatch", label: "Chờ xuất (xuất tay)" },
+const DISPATCH_STATUS_FILTERS = [
+  { value: "all", label: "Tất cả" },
+  { value: "Pending", label: "Chờ duyệt" },
+  { value: "WaitingDispatch", label: "Chờ xuất" },
   { value: "Delivering", label: "Đang giao" },
   { value: "Delivered", label: "Đã giao" },
-  { value: "Pending", label: "Chờ duyệt (đơn)" },
   { value: "Full", label: "Đủ hàng" },
   { value: "Partial", label: "Một phần" },
   { value: "Cancelled", label: "Đã hủy" },
-]
+] as const
 
 export function DispatchPage() {
   const queryClient = useQueryClient()
@@ -277,27 +277,34 @@ export function DispatchPage() {
       </div>
 
       <div className="bg-white p-4 rounded-lg border border-slate-200 space-y-3 shrink-0">
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <Input
-              placeholder="Tìm theo mã phiếu, đơn hàng, khách…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 h-11 bg-slate-50/50 border-slate-200 focus:bg-white transition-all"
-            />
-          </div>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="h-11 px-3 border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400 w-full sm:w-[180px] rounded-md transition-all"
-          >
-            {statusOptions.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+        {/* Row 1: Search */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <Input
+            placeholder="Tìm theo mã phiếu, đơn hàng, khách…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9 h-10 bg-slate-50/50 border-slate-200 focus:bg-white transition-all"
+          />
+        </div>
+
+        {/* Row 2: Quick-filter status tabs */}
+        <div className="flex flex-wrap gap-1.5">
+          {DISPATCH_STATUS_FILTERS.map((f) => (
+            <button
+              key={f.value}
+              type="button"
+              onClick={() => setStatusFilter(f.value)}
+              className={cn(
+                "h-8 px-3 rounded-full text-sm font-medium transition-colors border",
+                statusFilter === f.value
+                  ? "bg-slate-900 text-white border-slate-900"
+                  : "bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:text-slate-900",
+              )}
+            >
+              {f.label}
+            </button>
+          ))}
         </div>
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">

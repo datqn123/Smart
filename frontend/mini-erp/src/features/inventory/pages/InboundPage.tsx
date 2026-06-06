@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query"
 import { usePageTitle } from "@/context/PageTitleContext"
-import { Plus, Search, Calendar } from "lucide-react"
+import { Plus, Search, Calendar, Check } from "lucide-react"
 import type { StockReceipt } from "../types"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
+import { cn } from "@/lib/utils"
 import { ReceiptTable } from "../components/ReceiptTable"
 import { ReceiptDetailDialog } from "../components/ReceiptDetailDialog"
 import { ReceiptForm, type ReceiptFormData } from "../components/ReceiptForm"
@@ -30,13 +30,13 @@ import { useTableColumnOrder } from "../hooks/useTableVisibleColumns"
 const PAGE_SIZE = 20
 const SEARCH_DEBOUNCE_MS = 400
 
-const statusOptions = [
-  { label: "Tất cả trạng thái", value: "all" },
-  { label: "Nháp", value: "Draft" },
-  { label: "Chờ duyệt", value: "Pending" },
-  { label: "Đã duyệt", value: "Approved" },
-  { label: "Từ chối", value: "Rejected" },
-]
+const RECEIPT_STATUS_FILTERS = [
+  { value: "all", label: "Tất cả" },
+  { value: "Draft", label: "Nháp" },
+  { value: "Pending", label: "Chờ duyệt" },
+  { value: "Approved", label: "Đã duyệt" },
+  { value: "Rejected", label: "Từ chối" },
+] as const
 
 function parseSupplierId(raw: string): number | undefined {
   const t = raw.trim()
@@ -365,17 +365,33 @@ export function InboundPage() {
       </div>
 
       <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-3 shrink-0">
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <Input placeholder="Mã phiếu, số hóa đơn (theo API)…" value={search}
-              onChange={(e) => setSearch(e.target.value)} className="pl-9 h-11" />
-          </div>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
-            className="h-11 px-3 border border-slate-200 bg-white text-sm text-slate-900 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400 w-full sm:w-[180px]">
-            {statusOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-          </select>
+        {/* Row 1: Search */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <Input placeholder="Mã phiếu, số hóa đơn…" value={search}
+            onChange={(e) => setSearch(e.target.value)} className="pl-9 h-10" />
         </div>
+
+        {/* Row 2: Quick-filter status tabs */}
+        <div className="flex flex-wrap gap-1.5">
+          {RECEIPT_STATUS_FILTERS.map((f) => (
+            <button
+              key={f.value}
+              type="button"
+              onClick={() => setStatusFilter(f.value)}
+              className={cn(
+                "h-8 px-3 rounded-full text-sm font-medium transition-colors border",
+                statusFilter === f.value
+                  ? "bg-slate-900 text-white border-slate-900"
+                  : "bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:text-slate-900",
+              )}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Row 3: Date range + supplier + only-mine */}
         <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
           <div className="flex items-center gap-2">
             <Calendar className="h-4 w-4 text-slate-400 shrink-0" />
@@ -391,19 +407,29 @@ export function InboundPage() {
           <Input placeholder="NCC: nhập ID số hoặc lọc tên (đã tải)…" value={supplierFilter}
             onChange={(e) => setSupplierFilter(e.target.value)}
             className="h-9 min-w-[200px] w-[min(100%,280px)] shrink-0" />
-          <div className="flex items-center gap-2 shrink-0 min-h-11">
-            <Checkbox
-              id="inbound-only-mine"
-              checked={onlyMine}
-              onCheckedChange={(v) => setOnlyMine(v === true)}
-              disabled={user == null || user.id <= 0}
-              className="size-5 shrink-0"
-              aria-label="Chỉ hiển thị phiếu do tôi tạo"
-            />
-            <label htmlFor="inbound-only-mine" className="text-sm text-slate-700 cursor-pointer select-none leading-snug whitespace-nowrap">
-              Chỉ phiếu của tôi
-            </label>
-          </div>
+          <button
+            type="button"
+            onClick={() => setOnlyMine((v) => !v)}
+            aria-pressed={onlyMine}
+            disabled={user == null || user.id <= 0}
+            className={cn(
+              "inline-flex items-center gap-2 h-9 px-3 rounded-md border text-sm font-semibold transition-colors shrink-0",
+              onlyMine
+                ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+                : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+            )}
+          >
+            <span
+              className={cn(
+                "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
+                onlyMine ? "border-white bg-white" : "border-slate-300 bg-white",
+              )}
+              aria-hidden
+            >
+              {onlyMine ? <Check className="h-3 w-3 text-slate-900" strokeWidth={3} /> : null}
+            </span>
+            Phiếu của tôi
+          </button>
         </div>
       </div>
 
