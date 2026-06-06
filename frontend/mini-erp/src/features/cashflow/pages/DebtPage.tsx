@@ -1,23 +1,63 @@
 import { useEffect, useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { usePageTitle } from "@/context/PageTitleContext"
-import { mockDebts } from "../mockData"
 import type { Debt } from "../types"
 import { DebtToolbar } from "../components/DebtToolbar"
 import { DebtTable } from "../components/DebtTable"
 import { DebtDetailDialog } from "../components/DebtDetailDialog"
 import { DebtFormDialog } from "../components/DebtFormDialog"
 import { toast } from "sonner"
-import { Scale, Users, Truck, AlertCircle } from "lucide-react"
+import { Users, Truck, AlertCircle, type LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
+import { ApiRequestError } from "@/lib/api/http"
+import { DEBTS_LIST_QUERY_KEY, patchDebt, postDebt, type DebtCreateBody } from "../api/debtsApi"
+import { useDebtsListQuery } from "../hooks/useDebtsListQuery"
+
+function readPositiveNumber(value: unknown) {
+  const n = typeof value === "number" ? value : Number(value)
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
+function mapFormToCreateBody(data: Record<string, unknown>): DebtCreateBody {
+  const partnerType = data.partnerType === "Supplier" ? "Supplier" : "Customer"
+  const totalAmount = Number(data.totalAmount)
+  const paidAmount = Number(data.paidAmount ?? 0)
+  const dueDate = data.dueDate ? String(data.dueDate) : null
+  const notesRaw = data.notes != null ? String(data.notes).trim() : ""
+  const customerId = partnerType === "Customer" ? readPositiveNumber(data.customerId) : null
+  const supplierId = partnerType === "Supplier" ? readPositiveNumber(data.supplierId) : null
+  return {
+    partnerType,
+    customerId,
+    supplierId,
+    totalAmount,
+    paidAmount,
+    dueDate,
+    notes: notesRaw.length > 0 ? notesRaw : null,
+  }
+}
+
+function mapFormToPatchBody(data: Record<string, unknown>, source: Debt | null): Record<string, unknown> {
+  const dueDate = data.dueDate ? String(data.dueDate) : null
+  const notesRaw = data.notes != null ? String(data.notes).trim() : ""
+  const body: Record<string, unknown> = {
+    dueDate,
+    notes: notesRaw.length > 0 ? notesRaw : null,
+  }
+  if (source?.status !== "Cleared") {
+    body.totalAmount = Number(data.totalAmount)
+    body.paidAmount = Number(data.paidAmount ?? 0)
+  }
+  return body
+}
 
 export function DebtPage() {
   const { setTitle } = usePageTitle()
+  const queryClient = useQueryClient()
   
-  const [debts, setDebts] = useState<Debt[]>(mockDebts)
-  const [search, setSearch] = useState("")
-  const [statusFilter, setStatusFilter] = useState("all")
-  const [typeFilter, setTypeFilter] = useState("all")
   const [selectedIds, setSelectedIds] = useState<number[]>([])
+  const debtsQuery = useDebtsListQuery()
   
   // Modals state
   const [selectedItem, setSelectedItem] = useState<Debt | null>(null)
@@ -27,17 +67,28 @@ export function DebtPage() {
 
   useEffect(() => { setTitle("Sổ nợ") }, [setTitle])
 
-  const filtered = debts.filter(d => {
-    if (statusFilter !== "all" && d.status !== statusFilter) return false
-    if (typeFilter !== "all" && d.partnerType !== typeFilter) return false
-    if (search && !d.debtCode.toLowerCase().includes(search.toLowerCase()) && !d.partnerName.toLowerCase().includes(search.toLowerCase())) return false
-    return true
-  })
+  useEffect(() => {
+    if (!debtsQuery.isError) return
+    const e = debtsQuery.error
+    if (e instanceof ApiRequestError) {
+      toast.error(e.body?.message ?? e.message)
+    } else {
+      toast.error(e instanceof Error ? e.message : "Không tải được sổ nợ")
+    }
+  }, [debtsQuery.isError, debtsQuery.error])
+
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+    const visibleIds = new Set(debtsQuery.debts.map((d) => d.id))
+    setSelectedIds((prev) => prev.filter((id) => visibleIds.has(id)))
+    }, 0)
+    return () => window.clearTimeout(t)
+  }, [debtsQuery.debts])
 
   // Summary stats
-  const totalReceivable = debts.filter(d => d.partnerType === 'Customer').reduce((sum, d) => sum + d.remainingAmount, 0)
-  const totalPayable = debts.filter(d => d.partnerType === 'Supplier').reduce((sum, d) => sum + d.remainingAmount, 0)
-  const overdueCount = debts.filter(d => d.dueDate && new Date(d.dueDate) < new Date() && d.status !== 'Cleared').length
+  const totalReceivable = debtsQuery.debts.filter(d => d.partnerType === 'Customer').reduce((sum, d) => sum + d.remainingAmount, 0)
+  const totalPayable = debtsQuery.debts.filter(d => d.partnerType === 'Supplier').reduce((sum, d) => sum + d.remainingAmount, 0)
+  const overdueCount = debtsQuery.debts.filter(d => d.dueDate && new Date(d.dueDate) < new Date() && d.status !== 'Cleared').length
 
   // Handlers
   const handleSelect = (id: number) => {
@@ -45,7 +96,7 @@ export function DebtPage() {
   }
 
   const handleSelectAll = (checked: boolean) => {
-    setSelectedIds(checked ? filtered.map(d => d.id) : [])
+    setSelectedIds(checked ? debtsQuery.debts.map(d => d.id) : [])
   }
 
   const handleToolbarAction = (action: string) => {
@@ -57,7 +108,7 @@ export function DebtPage() {
         break;
       case "repay":
         if (selectedIds.length === 1) {
-            const item = debts.find(d => d.id === selectedIds[0])
+            const item = debtsQuery.debts.find(d => d.id === selectedIds[0])
             if (item) {
                 setSelectedItem(item)
                 setFormMode('edit')
@@ -66,10 +117,6 @@ export function DebtPage() {
         } else {
             toast.error("Vui lòng chọn duy nhất 1 khoản nợ để cập nhật thanh toán")
         }
-        break;
-      case "delete":
-        toast.success(`Đã xoá ${selectedIds.length} khoản nợ`)
-        setSelectedIds([])
         break;
       case "export":
         toast.info("Đang xuất dữ liệu Excel...")
@@ -88,45 +135,66 @@ export function DebtPage() {
     setIsFormOpen(true)
   }
 
-  const handleFormSubmit = (data: Record<string, unknown>) => {
-    const now = new Date().toISOString()
+  const handleFormSubmit = async (data: Record<string, unknown>) => {
     const paid = Number(data.paidAmount)
     const total = Number(data.totalAmount)
-    const remainingAmount = Math.max(0, total - paid)
-    const status = remainingAmount <= 0 ? "Cleared" : "InDebt"
-    if (formMode === 'create') {
-      const newDebt = {
-        ...data,
-        id: Date.now(),
-        remainingAmount,
-        status,
-        createdAt: now,
-        updatedAt: now,
-      } as (typeof debts)[number]
-      setDebts([newDebt, ...debts])
-    } else {
-      setDebts(
-        debts.map((d) =>
-          d.id === selectedItem?.id
-            ? ({
-                ...d,
-                ...data,
-                remainingAmount,
-                status,
-                updatedAt: now,
-              } as (typeof debts)[number])
-            : d
-        )
-      )
+    if (!Number.isFinite(total) || total < 0) {
+      toast.error("Tổng nợ không hợp lệ")
+      return
     }
-    setIsFormOpen(false)
+    if (!Number.isFinite(paid) || paid < 0 || paid > total) {
+      toast.error("Đã thanh toán phải từ 0 đến tổng nợ")
+      return
+    }
+    if (formMode === 'create') {
+      const body = mapFormToCreateBody(data)
+      if (body.partnerType === "Customer" && !body.customerId) {
+        toast.error("Vui lòng nhập ID khách hàng")
+        return
+      }
+      if (body.partnerType === "Supplier" && !body.supplierId) {
+        toast.error("Vui lòng nhập ID nhà cung cấp")
+        return
+      }
+      try {
+        await postDebt(body)
+        toast.success("Đã tạo khoản nợ")
+        await queryClient.invalidateQueries({ queryKey: [...DEBTS_LIST_QUERY_KEY] })
+        setIsFormOpen(false)
+      } catch (e) {
+        if (e instanceof ApiRequestError) {
+          toast.error(e.body?.message ?? e.message)
+        } else {
+          toast.error(e instanceof Error ? e.message : "Không tạo được khoản nợ")
+        }
+      }
+      return
+    }
+    if (!selectedItem?.id) {
+      toast.error("Thiếu thông tin khoản nợ")
+      return
+    }
+    try {
+      const updated = await patchDebt(selectedItem.id, mapFormToPatchBody(data, selectedItem))
+      toast.success("Đã cập nhật khoản nợ")
+      await queryClient.invalidateQueries({ queryKey: [...DEBTS_LIST_QUERY_KEY] })
+      setSelectedItem(updated)
+      setIsFormOpen(false)
+    } catch (e) {
+      if (e instanceof ApiRequestError) {
+        toast.error(e.body?.message ?? e.message)
+      } else {
+        toast.error(e instanceof Error ? e.message : "Không cập nhật được khoản nợ")
+      }
+    }
   }
+
   return (
     <div className="p-4 md:p-6 lg:p-8 flex flex-col h-full min-h-0 gap-4 md:gap-5 overflow-hidden">
       {/* Header & Stats Cards */}
       <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-6 shrink-0">
         <div>
-          <h1 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight uppercase">Sổ nợ đối tác</h1>
+          <h1 className="text-xl md:text-2xl font-semibold text-slate-900 tracking-tight">Sổ nợ đối tác</h1>
           <p className="text-sm text-slate-500 mt-1 font-medium">Theo dõi công nợ khách hàng và nhà cung cấp</p>
         </div>
 
@@ -156,27 +224,63 @@ export function DebtPage() {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-h-0 gap-4 md:gap-5">
         <DebtToolbar 
-          searchStr={search}
-          onSearch={setSearch}
-          statusFilter={statusFilter}
-          onStatusChange={setStatusFilter}
-          typeFilter={typeFilter}
-          onTypeChange={setTypeFilter}
+          searchStr={debtsQuery.search}
+          onSearch={debtsQuery.setSearch}
+          statusFilter={debtsQuery.statusFilter}
+          onStatusChange={debtsQuery.setStatusFilter}
+          typeFilter={debtsQuery.partnerTypeFilter}
+          onTypeChange={debtsQuery.setPartnerTypeFilter}
+          dueDateFrom={debtsQuery.dueDateFrom}
+          dueDateTo={debtsQuery.dueDateTo}
+          onDueDateFromChange={debtsQuery.setDueDateFrom}
+          onDueDateToChange={debtsQuery.setDueDateTo}
           selectedIds={selectedIds}
           onAction={handleToolbarAction}
         />
         
         <div className="flex-1 flex flex-col min-h-0 bg-white border border-slate-200/60 rounded-xl overflow-hidden shadow-md">
           <div className="flex-1 overflow-y-auto relative scroll-smooth [scrollbar-gutter:stable] min-h-0">
+            {debtsQuery.isFetching ? (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/60 text-sm font-medium text-slate-500">
+                Đang tải…
+              </div>
+            ) : null}
             <DebtTable 
-              data={filtered}
+              data={debtsQuery.debts}
               selectedIds={selectedIds}
               onSelect={handleSelect}
               onSelectAll={handleSelectAll}
               onView={handleView}
               onEdit={handleEdit}
-              onDelete={(item) => toast.error(`Yêu cầu xóa: ${item.debtCode}`)}
             />
+          </div>
+          <div className="flex items-center justify-between gap-2 border-t border-slate-100 px-4 py-2 text-xs font-bold text-slate-600">
+            <span>
+              Đang hiển thị {debtsQuery.debts.length} / {debtsQuery.isFetching ? "…" : debtsQuery.total} khoản nợ
+            </span>
+            <div className="flex items-center gap-2">
+              <span>Trang {debtsQuery.page} / {debtsQuery.totalPages}</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 px-3"
+                disabled={debtsQuery.page <= 1 || debtsQuery.isFetching}
+                onClick={() => debtsQuery.setPage((p) => Math.max(1, p - 1))}
+              >
+                Trước
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 px-3"
+                disabled={debtsQuery.page >= debtsQuery.totalPages || debtsQuery.isFetching}
+                onClick={() => debtsQuery.setPage((p) => p + 1)}
+              >
+                Sau
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -199,15 +303,15 @@ export function DebtPage() {
   )
 }
 
-function StatCard({ label, amount, icon: Icon, color, isCount = false }: { label: string, amount: number, icon: any, color: 'blue' | 'indigo' | 'rose', isCount?: boolean }) {
+function StatCard({ label, amount, icon: Icon, color, isCount = false }: { label: string, amount: number, icon: LucideIcon, color: 'blue' | 'indigo' | 'rose', isCount?: boolean }) {
     const colorMap = {
-        blue: "text-blue-600 bg-slate-50 border-slate-100",
-        indigo: "text-indigo-600 bg-slate-50 border-slate-100",
+        blue: "text-slate-700 bg-slate-50 border-slate-100",
+        indigo: "text-slate-700 bg-slate-50 border-slate-100",
         rose: "text-rose-600 bg-slate-50 border-slate-100"
     }
     
     return (
-        <div className="px-5 py-3 rounded-2xl border border-slate-200/60 flex items-center gap-4 bg-white shadow-[0_2px_8px_-3px_rgba(0,0,0,0.05)] min-w-[200px]">
+        <div className="px-5 py-3 rounded-xl border border-slate-200 flex items-center gap-4 bg-white min-w-50">
             <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center", colorMap[color].split(' ')[1])}>
                 <Icon size={18} className={colorMap[color].split(' ')[0]} />
             </div>

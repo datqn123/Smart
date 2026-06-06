@@ -18,6 +18,13 @@ import {
 import { cn } from "@/lib/utils"
 import type { Customer } from "../types"
 
+function loyaltyTier(pts: number): { label: string; cls: string } | null {
+  if (pts <= 0) return null
+  if (pts < 1000) return { label: "Đồng", cls: "bg-slate-100 text-slate-600 border border-slate-300" }
+  if (pts < 5000) return { label: "Bạc", cls: "bg-slate-200 text-slate-700 border border-slate-400" }
+  return { label: "Vàng", cls: "bg-amber-100 text-amber-700 border border-amber-300" }
+}
+
 interface CustomerTableProps {
   data: Customer[]
   visibleColumnKeys?: string[]
@@ -41,7 +48,7 @@ export function CustomerTable({
   onDelete,
   canDelete = false,
 }: CustomerTableProps) {
-  const defaultColumnKeys = ["customerCode", "customerName", "phone", "email", "orderCount", "status"] as const
+  const defaultColumnKeys = ["customerCode", "customerName", "phone", "loyaltyPoints", "totalSpent", "orderCount", "status"] as const
   const visibleSet = new Set(visibleColumnKeys ?? defaultColumnKeys)
   const orderedBusinessColumns = defaultColumnKeys.filter((key) => visibleSet.has(key))
   const allSelected = data.length > 0 && selectedIds.length === data.length
@@ -70,6 +77,12 @@ export function CustomerTable({
           {orderedBusinessColumns.includes("email") && (
             <TableHead className={cn(CUSTOMER_TABLE_COL.email, TABLE_HEAD_CLASS, "px-4")}>Email</TableHead>
           )}
+          {orderedBusinessColumns.includes("loyaltyPoints") && (
+            <TableHead className={cn(CUSTOMER_TABLE_COL.loyaltyPoints, TABLE_HEAD_CLASS, "px-4")}>Điểm tích lũy</TableHead>
+          )}
+          {orderedBusinessColumns.includes("totalSpent") && (
+            <TableHead className={cn(CUSTOMER_TABLE_COL.totalSpent, TABLE_HEAD_CLASS, "px-4")}>Tổng mua</TableHead>
+          )}
           {orderedBusinessColumns.includes("orderCount") && (
             <TableHead className={cn(CUSTOMER_TABLE_COL.orders, TABLE_HEAD_CLASS, "px-4 text-center")}>Số đơn hàng</TableHead>
           )}
@@ -82,7 +95,7 @@ export function CustomerTable({
       <TableBody className="divide-y divide-slate-100">
         {data.length === 0 ? (
           <TableRow>
-            <TableCell colSpan={8} className="h-24 text-center text-slate-500 text-sm">
+            <TableCell colSpan={orderedBusinessColumns.length + 2} className="h-24 text-center text-slate-500 text-sm">
               Không tìm thấy khách hàng nào.
             </TableCell>
           </TableRow>
@@ -90,7 +103,7 @@ export function CustomerTable({
           data.map((item) => {
             const isSelected = selectedIds.includes(item.id)
             return (
-              <TableRow key={item.id} className={cn("group h-14", isSelected ? "bg-slate-50" : "hover:bg-slate-50/50")}>
+              <TableRow key={item.id} className={cn("group h-14 transition-colors", isSelected ? "bg-slate-100" : "hover:bg-slate-50/60")}>
                 <TableCell className="px-4 text-center">
                   <Checkbox
                     checked={isSelected}
@@ -111,12 +124,38 @@ export function CustomerTable({
                   if (columnKey === "email") {
                     return <TableCell key={columnKey} className={cn(CUSTOMER_TABLE_COL.email, TABLE_CELL_SECONDARY_CLASS, "px-4 truncate")}>{item.email || "-"}</TableCell>
                   }
+                  if (columnKey === "loyaltyPoints") {
+                    const tier = loyaltyTier(item.loyaltyPoints)
+                    return (
+                      <TableCell key={columnKey} className={cn(CUSTOMER_TABLE_COL.loyaltyPoints, TABLE_CELL_NUMBER_CLASS, "px-4")}>
+                        <div className="flex items-center gap-1.5">
+                          <span>{item.loyaltyPoints.toLocaleString("vi-VN")}</span>
+                          {tier && (
+                            <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded-full", tier.cls)}>
+                              {tier.label}
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                    )
+                  }
+                  if (columnKey === "totalSpent") {
+                    const spent = item.totalSpent
+                    return (
+                      <TableCell key={columnKey} className={cn(CUSTOMER_TABLE_COL.totalSpent, TABLE_CELL_NUMBER_CLASS, "px-4 font-semibold", spent != null && spent > 0 ? "text-emerald-600" : "text-slate-400")}>
+                        {spent != null
+                          ? spent.toLocaleString("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 })
+                          : "-"}
+                      </TableCell>
+                    )
+                  }
                   if (columnKey === "orderCount") {
                     return <TableCell key={columnKey} className={cn(CUSTOMER_TABLE_COL.orders, TABLE_CELL_NUMBER_CLASS, "text-center px-4")}>{item.orderCount ?? 0}</TableCell>
                   }
                   return (
                     <TableCell key={columnKey} className={cn(CUSTOMER_TABLE_COL.status, "px-4")}>
-                      <Badge className={cn("text-xs font-normal border-none", item.status === "Active" ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-500")}>
+                      <Badge className={cn("text-xs font-semibold border shadow-none gap-1.5", item.status === "Active" ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-500 border-slate-200")}>
+                        <span className={cn("w-1.5 h-1.5 rounded-full inline-block", item.status === "Active" ? "bg-emerald-500" : "bg-slate-400")} />
                         {item.status === "Active" ? "Hoạt động" : "Ngừng"}
                       </Badge>
                     </TableCell>

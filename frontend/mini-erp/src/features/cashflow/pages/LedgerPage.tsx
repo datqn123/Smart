@@ -115,7 +115,7 @@ export function LedgerPage() {
   }
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 space-y-4 md:space-y-6 h-full flex flex-col">
+    <div className="p-4 md:p-6 lg:p-8 flex flex-col h-full min-h-0 gap-4 md:gap-5 overflow-hidden">
       <div className="shrink-0">
         <h1 className="text-xl md:text-2xl font-semibold text-slate-900 tracking-tight">Sổ cái tài chính</h1>
         <p className="text-sm text-slate-500 mt-1">
@@ -149,22 +149,26 @@ export function LedgerPage() {
                 Trang {page} / {totalPages} — {ledgerQuery.isFetching ? "…" : total} bản ghi
               </span>
               <div className="flex gap-2">
-                <button
+                <Button
                   type="button"
-                  className="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-3"
                   disabled={page <= 1 || ledgerQuery.isFetching}
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                 >
                   Trước
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  className="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-3"
                   disabled={page >= totalPages || ledgerQuery.isFetching}
                   onClick={() => setPage((p) => p + 1)}
                 >
                   Sau
-                </button>
+                </Button>
               </div>
             </div>
           ) : null}

@@ -31,7 +31,7 @@ interface SupplierTableProps {
 }
 
 const REQUIRED_COLUMNS = new Set(["supplierCode", "supplierName"])
-const DEFAULT_COLUMNS = ["supplierCode", "supplierName", "contactName", "email", "address", "status"]
+const DEFAULT_COLUMNS = ["supplierCode", "supplierName", "contactName", "receiptCount", "status"]
 
 export function SupplierTable({
   data,
@@ -68,11 +68,25 @@ export function SupplierTable({
       head: <TableHead className={cn(SUPPLIER_TABLE_COL.address, TABLE_HEAD_CLASS, "px-4 text-left")}>Địa chỉ</TableHead>,
       cell: (item: Supplier) => <TableCell className={cn(SUPPLIER_TABLE_COL.address, TABLE_CELL_SECONDARY_CLASS, "px-4 text-left truncate min-w-0")}>{item.address || "-"}</TableCell>,
     },
+    receiptCount: {
+      head: <TableHead className={cn(SUPPLIER_TABLE_COL.receiptCount, TABLE_HEAD_CLASS, "px-4 text-center")}>Phiếu nhập</TableHead>,
+      cell: (item: Supplier) => (
+        <TableCell className={cn(SUPPLIER_TABLE_COL.receiptCount, "px-4 text-center")}>
+          <span className={cn(
+            "inline-flex items-center justify-center min-w-7 h-6 px-2 rounded-full text-xs font-semibold",
+            (item.receiptCount ?? 0) > 0 ? "bg-blue-50 text-blue-700" : "bg-slate-100 text-slate-400",
+          )}>
+            {item.receiptCount ?? 0}
+          </span>
+        </TableCell>
+      ),
+    },
     status: {
       head: <TableHead className={cn(SUPPLIER_TABLE_COL.status, TABLE_HEAD_CLASS, "px-4")}>Trạng thái</TableHead>,
       cell: (item: Supplier) => (
         <TableCell className={cn(SUPPLIER_TABLE_COL.status, "px-4")}>
-          <Badge className={cn("text-xs font-normal border-none", item.status === "Active" ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-500")}>
+          <Badge className={cn("text-xs font-semibold border shadow-none gap-1.5", item.status === "Active" ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-500 border-slate-200")}>
+            <span className={cn("w-1.5 h-1.5 rounded-full inline-block", item.status === "Active" ? "bg-emerald-500" : "bg-slate-400")} />
             {item.status === "Active" ? "Hoạt động" : "Ngừng"}
           </Badge>
         </TableCell>
@@ -114,7 +128,7 @@ export function SupplierTable({
           data.map((item) => {
             const isSelected = selectedIds.includes(item.id)
             return (
-              <TableRow key={item.id} className={cn("group h-14", isSelected ? "bg-slate-50" : "hover:bg-slate-50/50")}>
+              <TableRow key={item.id} className={cn("group h-14 transition-colors", isSelected ? "bg-slate-100" : "hover:bg-slate-50/60")}>
                 <TableCell className="px-4 text-center">
                   <Checkbox
                     checked={isSelected}

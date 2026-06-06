@@ -1,6 +1,20 @@
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Search, Trash2, Edit2, Plus, Download } from "lucide-react"
+import { cn } from "@/lib/utils"
+
+const RETAIL_HISTORY_STATUS_FILTERS = [
+  { value: "all",       label: "Tất cả" },
+  { value: "Delivered", label: "Hoàn thành" },
+  { value: "Cancelled", label: "Đã huỷ" },
+] as const
+
+const RETAIL_HISTORY_PAYMENT_FILTERS = [
+  { value: "all",     label: "Tất cả" },
+  { value: "Paid",    label: "Đã TT" },
+  { value: "Unpaid",  label: "Chưa TT" },
+  { value: "Partial", label: "Một phần" },
+] as const
 
 interface OrderToolbarProps {
   searchStr: string
@@ -19,6 +33,14 @@ interface OrderToolbarProps {
   dateTo?: string
   onDateFromChange?: (val: string) => void
   onDateToChange?: (val: string) => void
+  /** SRS-020 — pill tabs cho variant retailHistory */
+  onStatusFilterChange?: (val: string) => void
+  onPaymentStatusFilterChange?: (val: string) => void
+  /** SRS-020 — sort tích hợp vào toolbar */
+  sort?: string
+  onSortChange?: (val: string) => void
+  sortWhitelist?: readonly string[]
+  getSortLabel?: (s: string) => string
 }
 
 export function OrderToolbar({
@@ -36,38 +58,97 @@ export function OrderToolbar({
   dateTo = "",
   onDateFromChange,
   onDateToChange,
+  onStatusFilterChange,
+  onPaymentStatusFilterChange,
+  sort,
+  onSortChange,
+  sortWhitelist,
+  getSortLabel,
 }: OrderToolbarProps) {
   const hasSelection = selectedIds.length > 0
 
   if (variant === "retailHistory") {
     return (
-      <div className="bg-white p-4 space-y-3 border-b md:border border-slate-200 md:rounded-t-md shrink-0">
+      <div className="bg-white p-4 border border-slate-200 rounded-lg shrink-0 shadow-sm flex flex-col gap-3">
+        {/* Dòng 1: search + date range */}
         <div className="flex flex-col lg:flex-row gap-3 w-full flex-wrap">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <div className="relative flex-1 min-w-50 group">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
             <Input
               placeholder="Tìm theo mã đơn hoặc tên KH..."
               value={searchStr}
               onChange={(e) => onSearch(e.target.value)}
-              className="pl-9 min-h-[44px] sm:min-h-[36px] w-full"
+              className="pl-10 h-10 border-slate-200 focus:border-slate-400 focus:ring-slate-100 transition-all rounded-md"
             />
           </div>
           <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-            <label className="text-xs text-slate-500 sm:sr-only">Từ ngày</label>
             <Input
               type="date"
               value={dateFrom}
               onChange={(e) => onDateFromChange?.(e.target.value)}
-              className="min-h-[44px] sm:min-h-[36px] w-full sm:w-[160px] border-slate-200"
+              className="h-10 w-full sm:w-40 border-slate-200 rounded-md"
             />
-            <label className="text-xs text-slate-500 sm:sr-only">Đến ngày</label>
+            <span className="text-slate-400 text-sm hidden sm:block">–</span>
             <Input
               type="date"
               value={dateTo}
               onChange={(e) => onDateToChange?.(e.target.value)}
-              className="min-h-[44px] sm:min-h-[36px] w-full sm:w-[160px] border-slate-200"
+              className="h-10 w-full sm:w-40 border-slate-200 rounded-md"
             />
           </div>
+        </div>
+
+        {/* Dòng 2: status pill tabs */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {RETAIL_HISTORY_STATUS_FILTERS.map((f) => (
+            <button
+              key={f.value}
+              type="button"
+              onClick={() => onStatusFilterChange?.(f.value)}
+              className={cn(
+                "h-8 px-3 rounded-full text-sm font-medium transition-colors border shrink-0",
+                (statusFilter ?? "all") === f.value
+                  ? "bg-slate-900 text-white border-slate-900"
+                  : "bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:text-slate-900",
+              )}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Dòng 3: payment pill tabs + sort */}
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {RETAIL_HISTORY_PAYMENT_FILTERS.map((f) => (
+              <button
+                key={f.value}
+                type="button"
+                onClick={() => onPaymentStatusFilterChange?.(f.value)}
+                className={cn(
+                  "h-8 px-3 rounded-full text-sm font-medium transition-colors border shrink-0",
+                  (paymentStatusFilter ?? "all") === f.value
+                    ? "bg-slate-900 text-white border-slate-900"
+                    : "bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:text-slate-900",
+                )}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+          {sortWhitelist && sort && onSortChange && (
+            <select
+              value={sort}
+              onChange={(e) => onSortChange(e.target.value)}
+              className="h-8 px-2 border border-slate-200 bg-white rounded-md text-sm text-slate-900 min-w-50"
+            >
+              {sortWhitelist.map((s) => (
+                <option key={s} value={s}>
+                  {getSortLabel?.(s) ?? s}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
       </div>
     )

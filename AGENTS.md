@@ -97,6 +97,18 @@ When the user says `Agent AUTO`, `AUTO_RUN`, `chạy tự động`, `tự làm h
 SRS_WRITER -> TECH_SPEC_WRITER -> QA_SPEC_WRITER -> CODING_AGENT -> CODE_REVIEW_AGENT
 ```
 
+When the user says `AUTO_DOCS`, `chỉ soạn docs`, `soạn tài liệu`, `auto run soạn docs`, or `chạy tự động soạn tài liệu`, run docs-only mode (stop before coding):
+
+```text
+SRS_WRITER -> TECH_SPEC_WRITER -> QA_SPEC_WRITER  [STOP]
+```
+
+When the user says `AUTO_CODE`, `chỉ code`, `triển khai code`, `auto run triển khai`, or `chạy tự động triển khai code`, read existing docs then run code-only mode:
+
+```text
+[read QA Spec + Tech Spec + SRS] -> CODING_AGENT -> CODE_REVIEW_AGENT  [STOP]
+```
+
 In automatic mode, do not wait for the user to call each next agent. Continue to the next stage until a blocker, required owner decision, unsafe risk, or final review result is reached.
 
 Examples:
@@ -108,6 +120,8 @@ Examples:
 - `Agent CODE_REVIEW_AGENT, review diff Task123 ...`
 - `Agent AUTO, chạy từ SRS đến coding cho Task123 ...`
 - `AUTO_RUN, làm hết workflow cho Task123 ...`
+- `AUTO_DOCS, soạn tài liệu cho Task123 ...`
+- `AUTO_CODE, triển khai code theo docs Task123 ...`
 
 Project rules:
 

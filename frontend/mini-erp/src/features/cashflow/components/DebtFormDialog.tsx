@@ -1,5 +1,5 @@
-import React, { useEffect } from "react"
-import { useForm } from "react-hook-form"
+import { useEffect } from "react"
+import { useForm, useWatch } from "react-hook-form"
 import { 
   Dialog, 
   DialogContent, 
@@ -38,7 +38,7 @@ import {
 interface DebtFormDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: any) => void;
+  onSubmit: (data: Record<string, unknown>) => void | Promise<void>;
   initialData?: Debt | null;
   mode: 'create' | 'edit';
 }
@@ -50,13 +50,12 @@ export function DebtFormDialog({
   initialData, 
   mode 
 }: DebtFormDialogProps) {
-  const { register, handleSubmit, reset, setValue, watch } = useForm({
+  const { register, handleSubmit, reset, setValue, control } = useForm<Record<string, unknown>>({
     defaultValues: initialData || {
-      debtCode: `DEBT-${Math.floor(Date.now() / 1000)}`,
       partnerName: '',
       partnerType: 'Customer' as const,
-      customerId: null as number | null,
-      supplierId: null as number | null,
+      customerId: undefined,
+      supplierId: undefined,
       totalAmount: 0,
       paidAmount: 0,
       dueDate: '',
@@ -67,11 +66,10 @@ export function DebtFormDialog({
   useEffect(() => {
     if (initialData) {
       reset({
-        debtCode: initialData.debtCode,
         partnerName: initialData.partnerName,
         partnerType: initialData.partnerType,
-        customerId: initialData.customerId ?? null,
-        supplierId: initialData.supplierId ?? null,
+        customerId: initialData.customerId ?? undefined,
+        supplierId: initialData.supplierId ?? undefined,
         totalAmount: initialData.totalAmount,
         paidAmount: initialData.paidAmount,
         dueDate: initialData.dueDate ?? '',
@@ -79,11 +77,10 @@ export function DebtFormDialog({
       })
     } else {
         reset({
-            debtCode: `DEBT-${Math.floor(Date.now() / 1000)}`,
             partnerName: '',
             partnerType: 'Customer',
-            customerId: null,
-            supplierId: null,
+            customerId: undefined,
+            supplierId: undefined,
             totalAmount: 0,
             paidAmount: 0,
             dueDate: '',
@@ -92,27 +89,37 @@ export function DebtFormDialog({
     }
   }, [initialData, reset, isOpen])
 
+  const partnerTypeValue = useWatch({ control, name: "partnerType" })
+
   const onFormSubmit = (data: Record<string, unknown>) => {
     const paid = Number(data.paidAmount)
     const total = Number(data.totalAmount)
+    const partnerType = data.partnerType as "Customer" | "Supplier"
+    const customerId = Number(data.customerId)
+    const supplierId = Number(data.supplierId)
     if (paid > total) {
         toast.error("Số tiền đã trả không được lớn hơn tổng nợ!");
         return;
     }
+    if (mode === "create" && partnerType === "Customer" && (!Number.isFinite(customerId) || customerId <= 0)) {
+        toast.error("Vui lòng nhập ID khách hàng hợp lệ");
+        return;
+    }
+    if (mode === "create" && partnerType === "Supplier" && (!Number.isFinite(supplierId) || supplierId <= 0)) {
+        toast.error("Vui lòng nhập ID nhà cung cấp hợp lệ");
+        return;
+    }
     const remainingAmount = total - paid
-    const partnerType = data.partnerType as "Customer" | "Supplier"
     const finalData = {
         ...data,
         remainingAmount,
         status: (remainingAmount <= 0 ? "Cleared" : "InDebt") as "Cleared" | "InDebt",
-        customerId: partnerType === "Customer" ? (data.customerId as number | null) ?? null : null,
-        supplierId: partnerType === "Supplier" ? (data.supplierId as number | null) ?? null : null,
+        customerId: partnerType === "Customer" && Number.isFinite(customerId) ? customerId : null,
+        supplierId: partnerType === "Supplier" && Number.isFinite(supplierId) ? supplierId : null,
         dueDate: (data.dueDate as string) || null,
         notes: (data.notes as string) || null,
     }
-    onSubmit(finalData);
-    toast.success(mode === 'create' ? "Đã lưu khoản nợ!" : "Đã cập nhật!");
-    onClose();
+    void onSubmit(finalData);
   }
 
   return (
@@ -142,6 +149,7 @@ export function DebtFormDialog({
               <Input 
                 {...register('partnerName')}
                 placeholder="Khách hàng hoặc NCC..."
+                disabled={mode === "edit"}
                 className={cn(FORM_INPUT_CLASS, "h-14 font-bold")}
               />
             </div>
@@ -151,7 +159,7 @@ export function DebtFormDialog({
                 <ShieldCheck size={12} className="inline mr-1" /> Phân loại
               </Label>
               <Select 
-                value={watch('partnerType')} 
+                value={String(partnerTypeValue ?? "Customer")}
                 onValueChange={(val) => setValue('partnerType', val as "Customer" | "Supplier")}
               >
                 <SelectTrigger className={cn(FORM_INPUT_CLASS, "h-14 font-bold")}>
@@ -165,6 +173,34 @@ export function DebtFormDialog({
             </div>
 
             {/* Row 2 */}
+            {partnerTypeValue !== "Supplier" ? (
+              <div className="space-y-2">
+                <Label className={FORM_LABEL_CLASS}>
+                  <User size={12} className="inline mr-1" /> ID khách hàng
+                </Label>
+                <Input
+                  type="number"
+                  {...register("customerId", { valueAsNumber: true })}
+                  disabled={mode === "edit"}
+                  placeholder="VD: 12"
+                  className={cn(FORM_INPUT_CLASS, "h-14 font-bold")}
+                />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label className={FORM_LABEL_CLASS}>
+                  <User size={12} className="inline mr-1" /> ID nhà cung cấp
+                </Label>
+                <Input
+                  type="number"
+                  {...register("supplierId", { valueAsNumber: true })}
+                  disabled={mode === "edit"}
+                  placeholder="VD: 3"
+                  className={cn(FORM_INPUT_CLASS, "h-14 font-bold")}
+                />
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label className={FORM_LABEL_CLASS}>
                 <DollarSign size={12} className="inline mr-1" /> Tổng giá trị nợ (VNĐ)
@@ -188,7 +224,7 @@ export function DebtFormDialog({
             </div>
 
             {/* Row 3 */}
-            <div className="space-y-2 col-span-2">
+            <div className="space-y-2">
               <Label className={FORM_LABEL_CLASS}>
                 <Timer size={12} className="inline mr-1" /> Thời hạn tất toán
               </Label>
@@ -222,7 +258,7 @@ export function DebtFormDialog({
               <Button variant="ghost" onClick={onClose} className="px-6 font-bold text-slate-400 hover:text-slate-900 rounded-xl">Hủy</Button>
               <Button 
                 onClick={handleSubmit(onFormSubmit)}
-                className="px-8 font-black uppercase tracking-widest bg-slate-900 hover:bg-slate-800 shadow-lg shadow-slate-200 rounded-xl text-white font-black"
+                className="px-8 font-semibold bg-slate-900 hover:bg-slate-800 rounded-lg text-white"
               >
                 {mode === 'edit' ? <Save className="mr-2" size={18} /> : <PlusCircle className="mr-2" size={18} />}
                 {mode === 'edit' ? "Lưu cập nhật" : "Ghi nhận nợ"}

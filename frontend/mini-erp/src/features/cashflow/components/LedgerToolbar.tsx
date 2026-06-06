@@ -37,7 +37,7 @@ export function LedgerToolbar({
   onAction,
 }: LedgerToolbarProps) {
   return (
-    <div className="flex flex-col gap-4 bg-white p-4 border border-slate-200 rounded-lg shrink-0 shadow-sm mb-4">
+    <div className="flex flex-col gap-4 bg-white p-4 border border-slate-200 rounded-lg shrink-0 shadow-sm">
       <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
         <div className="relative flex-1 w-full max-w-md group">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" />

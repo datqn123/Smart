@@ -30,6 +30,8 @@ export function useRetailSalesHistoryListQuery() {
   const [dateTo, setDateTo] = useState("")
   const [page, setPage] = useState(1)
   const [sort, setSort] = useState<RetailHistoryListSort>("createdAt:desc")
+  const [statusFilter, setStatusFilter] = useState<"all" | "Delivered" | "Cancelled">("all")
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState<"all" | "Paid" | "Unpaid" | "Partial">("all")
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS)
@@ -74,6 +76,14 @@ export function useRetailSalesHistoryListQuery() {
     [listPage],
   )
 
+  const filteredOrders = useMemo(
+    () =>
+      orders
+        .filter((o) => statusFilter === "all" || o.status === statusFilter)
+        .filter((o) => paymentStatusFilter === "all" || o.paymentStatus === paymentStatusFilter),
+    [orders, statusFilter, paymentStatusFilter],
+  )
+
   const total = listPage?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
@@ -89,7 +99,7 @@ export function useRetailSalesHistoryListQuery() {
   }, [isListError, listError])
 
   return {
-    orders,
+    orders: filteredOrders,
     search,
     setSearch,
     dateFrom,
@@ -101,6 +111,10 @@ export function useRetailSalesHistoryListQuery() {
     sort,
     setSort,
     sortWhitelist: RETAIL_HISTORY_SORT_WHITELIST,
+    statusFilter,
+    setStatusFilter,
+    paymentStatusFilter,
+    setPaymentStatusFilter,
     isListPending,
     isListFetching,
     isListError,

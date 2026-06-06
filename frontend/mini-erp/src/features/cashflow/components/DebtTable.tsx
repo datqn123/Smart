@@ -2,18 +2,19 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Eye, Edit2, Trash2 } from "lucide-react"
+import { Eye, Edit2 } from "lucide-react"
 import { formatCurrency } from "@/features/inventory/utils"
 import { 
   DATA_TABLE_ROOT_CLASS, 
-  DATA_TABLE_ACTION_HEAD_CLASS, 
-  DATA_TABLE_ACTION_CELL_CLASS,
+  DATA_TABLE_ACTION_SINGLE_HEAD_CLASS,
+  DATA_TABLE_ACTION_SINGLE_CELL_CLASS,
   DEBT_TABLE_COL,
   TABLE_HEAD_CLASS,
   TABLE_CELL_PRIMARY_CLASS,
   TABLE_CELL_SECONDARY_CLASS,
   TABLE_CELL_MONO_CLASS,
   TABLE_CELL_NUMBER_CLASS,
+  DATA_TABLE_CHECKBOX_CLASS,
 } from "@/lib/data-table-layout"
 import { cn } from "@/lib/utils"
 import type { Debt } from "../types"
@@ -25,22 +26,36 @@ interface DebtTableProps {
   onSelectAll: (checked: boolean) => void
   onView: (item: Debt) => void
   onEdit: (item: Debt) => void
-  onDelete: (item: Debt) => void
 }
 
 function StatusBadge({ status }: { status: string }) {
-  if (status === 'Cleared') return <Badge className="bg-green-50 text-green-700 text-xs border-none font-normal">Đã tất toán</Badge>;
-  return <Badge className="bg-rose-50 text-rose-700 text-xs border-none font-normal">Còn nợ</Badge>;
+  if (status === "Cleared") return <Badge className="bg-green-50 text-green-700 text-xs border-none font-medium">Đã tất toán</Badge>
+  return <Badge className="bg-rose-50 text-rose-700 text-xs border-none font-medium">Còn nợ</Badge>
 }
 
 function PartnerTypeBadge({ type }: { type: string }) {
-  if (type === 'Customer') return <Badge className="bg-blue-50 text-blue-700 text-[10px] font-bold border-blue-200 h-5 px-1.5 uppercase tracking-tight">Khách hàng</Badge>;
-  return <Badge className="bg-purple-50 text-purple-700 text-[10px] font-bold border-purple-200 h-5 px-1.5 uppercase tracking-tight">Nhà cung cấp</Badge>;
+  const base = "bg-white text-slate-700 text-[10px] font-semibold border-slate-200 h-5 px-1.5 uppercase tracking-tight shadow-none"
+  if (type === "Customer") return <Badge className={base}>Khách hàng</Badge>
+  return <Badge className={base}>Nhà cung cấp</Badge>
 }
 
-export function DebtTable({ data, selectedIds, onSelect, onSelectAll, onView, onEdit, onDelete }: DebtTableProps) {
-  const allSelected = data.length > 0 && selectedIds.length === data.length;
-  const someSelected = selectedIds.length > 0 && selectedIds.length < data.length;
+function formatDueDate(item: Debt) {
+  if (!item.dueDate) return "—"
+  return new Date(item.dueDate).toLocaleDateString("vi-VN")
+}
+
+function isOverdue(item: Debt) {
+  if (!item.dueDate || item.status === "Cleared") return false
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const due = new Date(item.dueDate)
+  due.setHours(0, 0, 0, 0)
+  return due < today
+}
+
+export function DebtTable({ data, selectedIds, onSelect, onSelectAll, onView, onEdit }: DebtTableProps) {
+  const allSelected = data.length > 0 && selectedIds.length === data.length
+  const someSelected = selectedIds.length > 0 && selectedIds.length < data.length
 
   return (
     <Table className={DATA_TABLE_ROOT_CLASS}>
@@ -50,7 +65,7 @@ export function DebtTable({ data, selectedIds, onSelect, onSelectAll, onView, on
             <Checkbox 
               checked={allSelected ? true : someSelected ? "indeterminate" : false} 
               onCheckedChange={(checked) => onSelectAll(checked as boolean)}
-              className="border-slate-300 data-[state=checked]:bg-white data-[state=checked]:text-blue-600 data-[state=checked]:border-blue-600"
+              className={DATA_TABLE_CHECKBOX_CLASS}
             />
           </TableHead>
           <TableHead className={cn(DEBT_TABLE_COL.code, TABLE_HEAD_CLASS, "px-4")}>Mã nợ</TableHead>
@@ -59,14 +74,15 @@ export function DebtTable({ data, selectedIds, onSelect, onSelectAll, onView, on
           <TableHead className={cn(DEBT_TABLE_COL.total, TABLE_HEAD_CLASS, "text-right px-4")}>Tổng nợ</TableHead>
           <TableHead className={cn(DEBT_TABLE_COL.paid, TABLE_HEAD_CLASS, "text-right px-4")}>Đã trả</TableHead>
           <TableHead className={cn(DEBT_TABLE_COL.remaining, TABLE_HEAD_CLASS, "text-right px-4")}>Còn lại</TableHead>
+          <TableHead className={cn(DEBT_TABLE_COL.dueDate, TABLE_HEAD_CLASS, "px-4")}>Hạn tất toán</TableHead>
           <TableHead className={cn(DEBT_TABLE_COL.status, TABLE_HEAD_CLASS, "text-center px-4")}>Trạng thái</TableHead>
-          <TableHead className={cn(DATA_TABLE_ACTION_HEAD_CLASS, TABLE_HEAD_CLASS)}>Thao tác</TableHead>
+          <TableHead className={cn(DATA_TABLE_ACTION_SINGLE_HEAD_CLASS, TABLE_HEAD_CLASS)}>Thao tác</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody className="divide-y divide-slate-100">
         {data.length === 0 ? (
           <TableRow>
-            <TableCell colSpan={9} className="h-64 text-center">
+            <TableCell colSpan={10} className="h-64 text-center">
               <div className="flex flex-col items-center justify-center text-slate-400 gap-2">
                 <p className="text-sm">Không tìm thấy khoản nợ nào</p>
               </div>
@@ -74,14 +90,15 @@ export function DebtTable({ data, selectedIds, onSelect, onSelectAll, onView, on
           </TableRow>
         ) : (
           data.map((item) => {
-            const isSelected = selectedIds.includes(item.id);
+            const isSelected = selectedIds.includes(item.id)
+            const overdue = isOverdue(item)
             return (
               <TableRow key={item.id} className={cn("group h-16", isSelected ? "bg-slate-50" : "hover:bg-slate-50/50")}>
                 <TableCell className="px-4 text-center">
                   <Checkbox 
                     checked={isSelected}
                     onCheckedChange={() => onSelect(item.id)}
-                    className="border-slate-300 data-[state=checked]:bg-white data-[state=checked]:text-blue-600 data-[state=checked]:border-blue-600"
+                    className={DATA_TABLE_CHECKBOX_CLASS}
                   />
                 </TableCell>
                 <TableCell className={cn(DEBT_TABLE_COL.code, TABLE_CELL_MONO_CLASS, "px-4")}>{item.debtCode}</TableCell>
@@ -100,19 +117,19 @@ export function DebtTable({ data, selectedIds, onSelect, onSelectAll, onView, on
                 <TableCell className={cn(DEBT_TABLE_COL.remaining, TABLE_CELL_NUMBER_CLASS, "text-right px-4 text-rose-600 font-bold")}>
                   {formatCurrency(item.remainingAmount)}
                 </TableCell>
+                <TableCell className={cn(DEBT_TABLE_COL.dueDate, TABLE_CELL_SECONDARY_CLASS, "px-4", overdue && "text-rose-600 font-semibold")}>
+                  {formatDueDate(item)}
+                </TableCell>
                 <TableCell className="px-4 text-center">
                   <StatusBadge status={item.status} />
                 </TableCell>
-                <TableCell className={DATA_TABLE_ACTION_CELL_CLASS}>
+                <TableCell className={DATA_TABLE_ACTION_SINGLE_CELL_CLASS}>
                   <div className="flex items-center justify-center gap-1">
                     <Button variant="ghost" size="icon" onClick={() => onView(item)} title="Xem chi tiết" className="h-8 w-8 text-slate-400 hover:text-slate-900 transition-colors">
                       <Eye className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" onClick={() => onEdit(item)} title="Thanh toán nợ" className="h-8 w-8 text-blue-500 hover:text-blue-700 transition-colors">
+                    <Button variant="ghost" size="icon" onClick={() => onEdit(item)} title="Cập nhật công nợ" className="h-8 w-8 text-slate-400 hover:text-slate-900 transition-colors">
                       <Edit2 className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => onDelete(item)} title="Xóa" className="h-8 w-8 text-slate-400 hover:text-red-600 transition-colors">
-                      <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                 </TableCell>

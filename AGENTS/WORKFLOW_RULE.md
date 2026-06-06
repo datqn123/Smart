@@ -126,6 +126,38 @@ Also enter automatic mode when the user says any of:
 - `các Agent tự gọi nhau`
 - an equivalent instruction that the workflow should continue without separate agent calls
 
+### Docs-Only Mode (`AUTO_DOCS`)
+
+Trigger when the user says `AUTO_DOCS`, `DOCS_ONLY`, `chỉ soạn docs`, `soạn tài liệu`, `auto run soạn docs`, or `chạy tự động soạn tài liệu`.
+
+Partial chain:
+
+```text
+SRS_WRITER -> TECH_SPEC_WRITER -> QA_SPEC_WRITER  [STOP]
+```
+
+Rules:
+- Start at the first missing artifact (same resolution rule as AUTO).
+- Stop immediately after QA_SPEC_WRITER completes — do NOT proceed to CODING_AGENT.
+- Report the three artifact paths and state explicitly: "Docs complete. Coding stage skipped per AUTO_DOCS mode."
+
+### Code-Only Mode (`AUTO_CODE`)
+
+Trigger when the user says `AUTO_CODE`, `CODE_ONLY`, `chỉ code`, `triển khai code`, `auto run triển khai`, or `chạy tự động triển khai code`.
+
+Partial chain:
+
+```text
+CODING_AGENT -> CODE_REVIEW_AGENT  [STOP]
+```
+
+Rules:
+- Before running CODING_AGENT, locate and read the most recent matching docs in this order: QA Spec → Tech Spec → SRS. Use the task/feature name from the user message to find the right files.
+- If no docs are found, stop and ask the user to provide the SRS/Tech Spec path or run AUTO_DOCS first.
+- Run CODING_AGENT using the docs as the implementation handoff.
+- Run CODE_REVIEW_AGENT after coding completes.
+- Report review findings and stop.
+
 ### Explicit Bypass
 
 The workflow can be bypassed only when the user explicitly says one of:

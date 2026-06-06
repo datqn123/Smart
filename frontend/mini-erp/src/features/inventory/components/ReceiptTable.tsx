@@ -82,7 +82,7 @@ export function ReceiptTable({ receipts, visibleColumnKeys, onAction, onEdit, on
     },
     totalAmount: {
       head: <TableHead className={cn(RECEIPT_TABLE_COL.totalAmount, "text-right", TABLE_HEAD_CLASS)}>Tổng tiền</TableHead>,
-      cell: (receipt: StockReceipt) => <TableCell className={cn(RECEIPT_TABLE_COL.totalAmount, "text-right", TABLE_CELL_NUMBER_CLASS)}>{formatCurrency(receipt.totalAmount)}</TableCell>,
+      cell: (receipt: StockReceipt) => <TableCell className={cn(RECEIPT_TABLE_COL.totalAmount, "text-right font-semibold text-emerald-600", TABLE_CELL_NUMBER_CLASS)}>{formatCurrency(receipt.totalAmount)}</TableCell>,
     },
     status: {
       head: <TableHead className={cn(RECEIPT_TABLE_COL.status, "text-center", TABLE_HEAD_CLASS)}>Trạng thái</TableHead>,
@@ -113,7 +113,7 @@ export function ReceiptTable({ receipts, visibleColumnKeys, onAction, onEdit, on
           return (
           <TableRow
             key={receipt.id}
-            className="group hover:bg-slate-50/50 cursor-pointer h-14"
+            className="group hover:bg-slate-50/60 transition-colors cursor-pointer h-14"
             onClick={() => onAction(receipt)}
           >
             {orderedColumns.map((column) => <React.Fragment key={column.key}>{column.renderer.cell(receipt)}</React.Fragment>)}

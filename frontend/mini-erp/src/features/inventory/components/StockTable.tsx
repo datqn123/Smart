@@ -69,7 +69,7 @@ export function StockTable({
               <span className="flex w-3.5 shrink-0 justify-start" aria-hidden>
                 <Package className="h-3 w-3 text-slate-400" />
               </span>
-              <span className="tabular-nums text-left font-medium text-slate-900">{item.quantity}</span>
+              <span className={cn("tabular-nums text-left font-semibold", item.quantity === 0 ? "text-rose-600" : item.quantity < 10 ? "text-amber-600" : "text-slate-700")}>{item.quantity}</span>
               <span className="truncate text-left text-xs font-normal text-slate-500" title={item.unitName}>
                 {item.unitName}
               </span>
@@ -92,7 +92,8 @@ export function StockTable({
         const status = getInventoryRowStatusDisplay(item)
         return (
           <TableCell className={cn(STOCK_TABLE_COL.status, "px-4 text-left")}>
-            <Badge variant="secondary" className={`${status.badgeClass} text-xs font-normal border-none`}>
+            <Badge className={`${status.badgeClass} text-xs font-semibold shadow-none gap-1.5`}>
+              <span className={`w-1.5 h-1.5 rounded-full inline-block shrink-0 ${status.dotClass}`} />
               {status.label}
             </Badge>
           </TableCell>
@@ -136,7 +137,7 @@ export function StockTable({
             return (
               <TableRow
                 key={item.id}
-                className={cn("group h-14 cursor-pointer", isSelected ? "bg-slate-50" : "hover:bg-slate-50/50")}
+                className={cn("group h-14 cursor-pointer transition-colors", isSelected ? "bg-slate-100" : "hover:bg-slate-50/60")}
                 onClick={() => onSelect(item.id)}
               >
                 <TableCell className={cn(STOCK_TABLE_COL.select, "px-4 text-left")} onClick={(e) => e.stopPropagation()}>

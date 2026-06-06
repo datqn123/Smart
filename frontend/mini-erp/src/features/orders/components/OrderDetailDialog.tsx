@@ -1,14 +1,15 @@
 import React from "react"
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
   DialogTitle,
-  DialogDescription 
+  DialogDescription
 } from "@/components/ui/dialog"
 import { formatDate } from "../../inventory/utils"
 import type { Order, OrderItem } from "../types"
-import { ShoppingBag, User, Calendar, Activity, CreditCard, Receipt, MapPin, Package, Trash2, Edit, CheckCircle2, Truck, Timer, XCircle, BarChart3 } from "lucide-react"
+import type { SalesOrderDetailDto } from "../api/salesOrdersApi"
+import { ShoppingBag, User, Calendar, Activity, CreditCard, Receipt, MapPin, Package, Trash2, Edit, CheckCircle2, Truck, Timer, XCircle, BarChart3, Tag, Store } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "../../inventory/components/StatusBadge"
 import { Label } from "@/components/ui/label"
@@ -26,6 +27,8 @@ interface OrderDetailDialogProps {
   readOnly?: boolean
   /** Khi truyền: hiển thị dòng hàng từ API (thay mock). */
   detailLines?: OrderItem[]
+  /** SRS-020 — DTO đầy đủ để hiển thị shippingAddress, cancelledAt, voucherCode, posShiftRef. */
+  detailDto?: SalesOrderDetailDto
 }
 
 // Mock items for detail display
@@ -42,6 +45,7 @@ export function OrderDetailDialog({
   onEditOrder,
   readOnly = false,
   detailLines,
+  detailDto,
 }: OrderDetailDialogProps) {
   if (!order) return null
 
@@ -71,7 +75,7 @@ export function OrderDetailDialog({
                     <p className={cn(
                         "text-sm font-black",
                         order.paymentStatus === "Paid" ? "text-green-600" : "text-amber-500"
-                    )}>{order.paymentStatus}</p>
+                    )}>{{ Paid: "Đã thanh toán", Unpaid: "Chưa thanh toán", Partial: "Một phần" }[order.paymentStatus] ?? order.paymentStatus}</p>
                 </div>
                 <div className="text-right">
                     <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Tổng thanh toán</p>
@@ -82,21 +86,35 @@ export function OrderDetailDialog({
         </DialogHeader>
 
         <div className="p-8 pt-6">
-          {/* Progress Tracker */}
-          <div className="mb-12 pt-4">
-              <div className="flex justify-between relative px-2">
-                  <div className="absolute top-1/2 left-0 w-full h-1 bg-slate-100 -translate-y-1/2 z-0 rounded-full" />
-                  <div className={cn("absolute top-1/2 left-0 h-1 bg-slate-900 -translate-y-1/2 z-0 transition-all duration-1000 ease-in-out rounded-full", 
-                    order.status === "Pending" ? "w-0" : 
-                    order.status === "Processing" ? "w-1/3" : 
-                    order.status === "Shipped" ? "w-2/3" : "w-full"
-                  )} />
-                  <Step icon={Timer} label="Tiếp nhận" active />
-                  <Step icon={Activity} label="Xử lý" active={["Processing", "Shipped", "Delivered", "Completed"].includes(order.status)} />
-                  <Step icon={Truck} label="Giao hàng" active={["Shipped", "Delivered", "Completed"].includes(order.status)} />
-                  <Step icon={CheckCircle2} label="Hoàn tất" active={["Delivered", "Completed"].includes(order.status)} />
+          {/* Progress Tracker / Cancelled Banner */}
+          {order.status === "Cancelled" ? (
+            <div className="flex items-center gap-3 bg-red-50 border border-red-100 rounded-xl p-4 mb-12">
+              <XCircle size={20} className="text-red-500 shrink-0" />
+              <div>
+                <p className="font-semibold text-sm text-red-700">Đơn hàng đã bị huỷ</p>
+                {detailDto?.cancelledAt && (
+                  <p className="text-xs text-red-500 mt-0.5">
+                    Thời điểm huỷ: {formatDate(detailDto.cancelledAt)}
+                  </p>
+                )}
               </div>
-          </div>
+            </div>
+          ) : (
+            <div className="mb-12 pt-4">
+              <div className="flex justify-between relative px-2">
+                <div className="absolute top-1/2 left-0 w-full h-1 bg-slate-100 -translate-y-1/2 z-0 rounded-full" />
+                <div className={cn("absolute top-1/2 left-0 h-1 bg-slate-900 -translate-y-1/2 z-0 transition-all duration-1000 ease-in-out rounded-full",
+                  order.status === "Pending" ? "w-0" :
+                  order.status === "Processing" ? "w-1/3" :
+                  order.status === "Shipped" ? "w-2/3" : "w-full"
+                )} />
+                <Step icon={Timer} label="Tiếp nhận" active />
+                <Step icon={Activity} label="Xử lý" active={["Processing", "Shipped", "Delivered", "Completed"].includes(order.status)} />
+                <Step icon={Truck} label="Giao hàng" active={["Shipped", "Delivered", "Completed"].includes(order.status)} />
+                <Step icon={CheckCircle2} label="Hoàn tất" active={["Delivered", "Completed"].includes(order.status)} />
+              </div>
+            </div>
+          )}
 
           <div className="space-y-10">
             {/* Row 1: Basic Info Grid */}
@@ -126,18 +144,40 @@ export function OrderDetailDialog({
                             <MapPin size={12} /> Địa điểm giao hàng
                         </Label>
                         <div className="h-14 bg-slate-50 border border-slate-100 rounded-2xl flex items-center px-5 font-bold text-slate-900 shadow-sm truncate">
-                            123 Đường ABC, Quận X, TP. Hồ Chí Minh
+                            {detailDto?.shippingAddress?.trim() || "Tại cửa hàng (POS)"}
                         </div>
                     </div>
 
                     <div className="space-y-2">
                         <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2 px-1">
-                            <CreditCard size={12} /> Phương thức thanh toán
+                            <CreditCard size={12} /> Trạng thái thanh toán
                         </Label>
                         <div className="h-14 bg-slate-50 border border-slate-100 rounded-2xl flex items-center px-5 font-bold text-slate-900 shadow-sm">
-                            Chuyển khoản ngân hàng (Bank Transfer)
+                            {{ Paid: "Đã thanh toán", Unpaid: "Chưa thanh toán", Partial: "Thanh toán một phần" }[order.paymentStatus] ?? order.paymentStatus}
                         </div>
                     </div>
+
+                    {detailDto?.voucherCode && (
+                      <div className="space-y-2">
+                        <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2 px-1">
+                          <Tag size={12} /> Voucher áp dụng
+                        </Label>
+                        <div className="h-14 bg-slate-50 border border-slate-100 rounded-2xl flex items-center px-5 font-bold text-slate-900 shadow-sm font-mono">
+                          {detailDto.voucherCode}
+                        </div>
+                      </div>
+                    )}
+
+                    {detailDto?.posShiftRef && (
+                      <div className="space-y-2">
+                        <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2 px-1">
+                          <Store size={12} /> Ca POS
+                        </Label>
+                        <div className="h-14 bg-slate-50 border border-slate-100 rounded-2xl flex items-center px-5 font-bold text-slate-900 shadow-sm font-mono text-sm">
+                          {detailDto.posShiftRef}
+                        </div>
+                      </div>
+                    )}
                 </div>
             </div>
 

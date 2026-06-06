@@ -105,6 +105,8 @@ export const CUSTOMER_TABLE_COL = {
   name: "w-[200px] min-w-0",
   phone: "w-[128px]",
   email: "w-[220px] min-w-0",
+  loyaltyPoints: "w-[148px]",
+  totalSpent: "w-[156px]",
   orders: "w-[116px]",
   status: "w-[120px]",
 } as const
@@ -117,6 +119,7 @@ export const SUPPLIER_TABLE_COL = {
   contact: "w-[148px] min-w-0",
   email: "w-[220px] min-w-0",
   address: "w-[220px] min-w-0",
+  receiptCount: "w-[108px]",
   status: "w-[112px]",
 } as const
 
@@ -160,12 +163,12 @@ export const TRANSACTION_TABLE_COL = {
 export const DEBT_TABLE_COL = {
   select: "w-[48px]",
   code: "w-[116px]",
-  partner: "min-w-[180px]",
+  partner: "w-[180px] min-w-0",
   type: "w-[100px]",
   total: "w-[124px]",
   paid: "w-[124px]",
   remaining: "w-[124px]",
-  lastUpdate: "w-[120px]",
+  dueDate: "w-[120px]",
   status: "w-[112px]",
 } as const
 

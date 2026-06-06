@@ -85,7 +85,6 @@ function App() {
         <Route element={<MainLayout />}>
           {/* Dashboard */}
           <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/dashboard/ai-insights" element={<PlaceholderPage title="AI Insights" />} />
 
           {/* Inventory Routes */}
           <Route path="/inventory/stock" element={<StockPage />} />

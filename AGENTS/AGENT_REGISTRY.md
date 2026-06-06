@@ -30,6 +30,8 @@ The only allowed bypass is an explicit user instruction such as `bỏ qua workfl
 | `CODING_AGENT` | `DEV`, `DEVELOPER`, `CODE_AGENT`, `CODER` | `AGENTS/skills/coding-agent/SKILL.md` | Code changes, tests, verification summary | `CODE_REVIEW_AGENT` after implementation and verification |
 | `CODE_REVIEW_AGENT` | `REVIEWER`, `CR`, `CODE_REVIEW`, `REVIEW_AGENT` | `AGENTS/skills/code-review-agent/SKILL.md` | Review findings, test gaps, residual risks | Stop and report result |
 | `AUTO` | `AUTO_AGENT`, `AUTO_RUN`, `ORCHESTRATE`, `RUN_WORKFLOW`, `chạy tự động`, `tự làm hết workflow` | `AGENTS/WORKFLOW_RULE.md` | Runs all unblocked stages in order | Depends on current stage |
+| `AUTO_DOCS` | `DOCS_ONLY`, `chỉ soạn docs`, `soạn tài liệu`, `auto run soạn docs`, `chạy tự động soạn tài liệu` | `AGENTS/WORKFLOW_RULE.md` | Runs SRS → Tech Spec → QA only; stops before CODING_AGENT | Stop after QA_SPEC_WRITER |
+| `AUTO_CODE` | `CODE_ONLY`, `chỉ code`, `triển khai code`, `auto run triển khai`, `chạy tự động triển khai code` | `AGENTS/WORKFLOW_RULE.md` | Reads existing docs then runs CODING_AGENT → CODE_REVIEW_AGENT | Stop after CODE_REVIEW_AGENT |
 
 ## Architecture Reference
 

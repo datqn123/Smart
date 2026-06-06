@@ -8,7 +8,6 @@ import { ProductTable } from "../components/ProductTable"
 import { ProductDetailDialog } from "../components/ProductDetailDialog"
 import { ProductForm, ProductFormSubmitAborted, type ProductFormData } from "../components/ProductForm"
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog"
-import { mockCategories } from "../mockData"
 import { toast } from "sonner"
 import { ApiRequestError } from "@/lib/api/http"
 import {
@@ -414,10 +413,7 @@ export function ProductsPage() {
     bulkDeleteMutation.mutate(ids)
   }
 
-  const formCategoryOptions = useMemo(
-    () => (categoryOptions.length > 0 ? categoryOptions : mockCategories.map((c) => ({ id: c.id, name: c.name }))),
-    [categoryOptions],
-  )
+  const formCategoryOptions = useMemo(() => categoryOptions, [categoryOptions])
 
   const handleProductImageAdded = (d: ProductImageDto) => {
     void queryClient.invalidateQueries({ queryKey: ["product-management", "products", "list"] })

@@ -121,7 +121,8 @@ export function StockBatchDetailsDialog({
                   SKU: {sku}
                 </span>
               </DialogDescription>
-              <Badge variant="secondary" className={`h-7 shrink-0 px-3 text-xs font-normal border-none ${rowStatus.badgeClass}`}>
+              <Badge className={`h-7 shrink-0 px-3 text-xs font-semibold shadow-none gap-1.5 ${rowStatus.badgeClass}`}>
+                <span className={`w-1.5 h-1.5 rounded-full inline-block shrink-0 ${rowStatus.dotClass}`} />
                 {rowStatus.label}
               </Badge>
             </div>

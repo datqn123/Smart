@@ -29,7 +29,6 @@ import { toast } from "sonner"
 
 const PAGE_TITLE_VI: Record<string, string> = {
   dashboard: "Bảng điều khiển",
-  "ai-insights": "Phân tích AI",
   stock: "Tồn kho",
   inbound: "Phiếu nhập kho",
   dispatch: "Phiếu xuất kho",

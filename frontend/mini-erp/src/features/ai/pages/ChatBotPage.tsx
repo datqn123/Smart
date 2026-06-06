@@ -1,6 +1,23 @@
 import { useState, useRef, useEffect } from "react"
 import { usePageTitle } from "@/context/PageTitleContext"
-import { Send, Image as ImageIcon, Mic, Paperclip, MessageSquare, Bot, User, Loader2, Volume2, StopCircle } from "lucide-react"
+import {
+  Send,
+  Mic,
+  Bot,
+  User,
+  Loader2,
+  Volume2,
+  StopCircle,
+  Sparkles,
+  Database,
+  Table2,
+  BarChart2,
+  ClipboardList,
+  PackagePlus,
+  RotateCcw,
+  Copy,
+  Check,
+} from "lucide-react"
 import type { AiInteractionMode, ChatMessage } from "../types"
 import { Button } from "@/components/ui/button"
 import {
@@ -28,13 +45,17 @@ import type { QueryTablePayload } from "../api/aiQueryTableTypes"
 import { cn } from "@/lib/utils"
 import { useTextToSpeech } from "../hooks/useTextToSpeech"
 
-const INTERACTION_MODES: { id: AiInteractionMode; label: string }[] = [
-  { id: "auto", label: "Tự động" },
-  { id: "data_query", label: "Hỏi dữ liệu" },
-  { id: "data_table", label: "Bảng kết quả" },
-  { id: "chart", label: "Biểu đồ" },
-  { id: "catalog_draft", label: "Tạo bảng nhập" },
-  { id: "inventory_draft", label: "Phiếu nhập kho" },
+const AI_CHAT_CONVERSATION_ID_KEY = "ai_chat_conversation_id"
+
+const WELCOME_MESSAGE = "Xin chào. Tôi là trợ lý AI Mini ERP — trả lời qua Spring và dịch vụ Python (dữ liệu SQL read-only khi bạn hỏi số liệu). Hãy nhập câu hỏi bằng chữ."
+
+const INTERACTION_MODES: { id: AiInteractionMode; label: string; icon: typeof Sparkles }[] = [
+  { id: "auto", label: "Tự động", icon: Sparkles },
+  { id: "data_query", label: "Hỏi dữ liệu", icon: Database },
+  { id: "data_table", label: "Bảng kết quả", icon: Table2 },
+  { id: "chart", label: "Biểu đồ", icon: BarChart2 },
+  { id: "catalog_draft", label: "Tạo bảng nhập", icon: ClipboardList },
+  { id: "inventory_draft", label: "Phiếu nhập kho", icon: PackagePlus },
 ]
 
 type ClarifyContinuation = {
@@ -44,44 +65,52 @@ type ClarifyContinuation = {
   suggestedRewrite?: string
 }
 
+function createWelcomeMessage(): ChatMessage {
+  return {
+    id: "1",
+    role: "assistant",
+    content: WELCOME_MESSAGE,
+    timestamp: new Date().toISOString(),
+    type: "text",
+  }
+}
+
+function ensureConversationId(reset = false) {
+  if (reset) {
+    window.sessionStorage.removeItem(AI_CHAT_CONVERSATION_ID_KEY)
+  } else {
+    const fromStorage = window.sessionStorage.getItem(AI_CHAT_CONVERSATION_ID_KEY)
+    if (fromStorage && fromStorage.trim().length > 0) return fromStorage
+  }
+  const cid = crypto.randomUUID()
+  window.sessionStorage.setItem(AI_CHAT_CONVERSATION_ID_KEY, cid)
+  return cid
+}
+
 export function ChatBotPage() {
   const { setTitle } = usePageTitle()
   useEffect(() => { setTitle("Trợ lý ảo AI") }, [setTitle])
 
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: "1",
-      role: "assistant",
-      content:
-        "Xin chào. Tôi là trợ lý AI Mini ERP — trả lời qua Spring và dịch vụ Python (dữ liệu SQL read-only khi bạn hỏi số liệu). Hãy nhập câu hỏi bằng chữ.",
-      timestamp: new Date().toISOString(),
-      type: "text"
-    }
-  ])
+  const [messages, setMessages] = useState<ChatMessage[]>([createWelcomeMessage()])
   const [inputValue, setInputValue] = useState("")
   const [interactionMode, setInteractionMode] = useState<AiInteractionMode>("auto")
   const [isTyping, setIsTyping] = useState(false)
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null)
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
   const { speak, stop, isSpeaking, isLoading: isTtsLoading, supported: ttsSupported } = useTextToSpeech()
   const [isRecording, setIsRecording] = useState(false)
   const [isTranscribing, setIsTranscribing] = useState(false)
   const [progressText, setProgressText] = useState("")
   const [recordingSeconds, setRecordingSeconds] = useState(0)
-  const [conversationId] = useState(() => {
-    const fromStorage = window.sessionStorage.getItem("ai_chat_conversation_id")
-    if (fromStorage && fromStorage.trim().length > 0) return fromStorage
-    const cid = crypto.randomUUID()
-    window.sessionStorage.setItem("ai_chat_conversation_id", cid)
-    return cid
-  })
+  const [conversationId, setConversationId] = useState(() => ensureConversationId())
   const chatEndRef = useRef<HTMLDivElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const streamRef = useRef<AiChatStreamHandle | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const micStreamRef = useRef<MediaStream | null>(null)
   const recordingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const recordingTickRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const copyResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const scrollToBottom = () => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -112,6 +141,7 @@ export function ChatBotPage() {
       streamRef.current = null
       if (recordingTimerRef.current) clearTimeout(recordingTimerRef.current)
       if (recordingTickRef.current) clearInterval(recordingTickRef.current)
+      if (copyResetTimerRef.current) clearTimeout(copyResetTimerRef.current)
       mediaRecorderRef.current?.stop()
       micStreamRef.current?.getTracks().forEach((t) => t.stop())
     }
@@ -313,6 +343,44 @@ export function ChatBotPage() {
     }
   }
 
+  const handleCopyMessage = async (msg: ChatMessage) => {
+    const text = msg.content.trim()
+    if (!text) return
+    await navigator.clipboard.writeText(text)
+    setCopiedMessageId(msg.id)
+    if (copyResetTimerRef.current) clearTimeout(copyResetTimerRef.current)
+    copyResetTimerRef.current = setTimeout(() => {
+      setCopiedMessageId((current) => (current === msg.id ? null : current))
+    }, 1500)
+  }
+
+  const handleClearChat = () => {
+    if (!window.confirm("Bắt đầu cuộc hội thoại mới?")) return
+    audioChunksRef.current = []
+    streamRef.current?.abort()
+    streamRef.current = null
+    mediaRecorderRef.current?.stop()
+    mediaRecorderRef.current = null
+    micStreamRef.current?.getTracks().forEach((t) => t.stop())
+    micStreamRef.current = null
+    stopRecordingTimers()
+    if (copyResetTimerRef.current) {
+      clearTimeout(copyResetTimerRef.current)
+      copyResetTimerRef.current = null
+    }
+    stop()
+    setSpeakingMessageId(null)
+    setCopiedMessageId(null)
+    setIsTyping(false)
+    setIsRecording(false)
+    setIsTranscribing(false)
+    setProgressText("")
+    setRecordingSeconds(0)
+    setInputValue("")
+    setMessages([createWelcomeMessage()])
+    setConversationId(ensureConversationId(true))
+  }
+
   const toggleRecording = async () => {
     if (isTranscribing || isTyping) return
 
@@ -413,26 +481,15 @@ export function ChatBotPage() {
     }
   }
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      // In a real app, you would upload to server and get URL
-      const reader = new FileReader()
-      reader.onload = (event) => {
-        handleSend("Gửi kèm hóa đơn", "image", { imageUrl: event.target?.result })
-      }
-      reader.readAsDataURL(file)
-    }
-  }
-
   const inputBusy = isTyping || isTranscribing || isRecording
+  const lastAssistantId = [...messages].reverse().find((msg) => msg.role === "assistant")?.id ?? null
 
   return (
     <div className="flex flex-col h-full bg-slate-50 overflow-hidden relative">
       {/* Chat Header */}
       <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-slate-200 z-10 shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-200">
+          <div className="h-10 w-10 rounded-2xl flex items-center justify-center bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-200/80">
             <Bot className="h-6 w-6 text-white" />
           </div>
           <div>
@@ -444,8 +501,16 @@ export function ChatBotPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="rounded-full hover:bg-slate-100">
-            <MessageSquare className="h-5 w-5 text-slate-400" />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="rounded-full hover:bg-slate-100"
+            onClick={handleClearChat}
+            title="Cuộc hội thoại mới"
+            aria-label="Cuộc hội thoại mới"
+          >
+            <RotateCcw className="h-5 w-5 text-slate-400" />
           </Button>
         </div>
       </div>
@@ -453,6 +518,9 @@ export function ChatBotPage() {
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 scroll-smooth scrollbar-hide">
         {messages.map((msg) => {
+          // Ẩn bubble assistant đang stream với content rỗng — typing indicator sẽ hiển thị thay
+          if (msg.role === "assistant" && isTyping && !msg.content && !msg.metadata) return null
+
           const hasChart = msg.role === "assistant" && Boolean(msg.metadata?.chartSpec)
           const hasDraft = msg.role === "assistant" && Boolean(msg.metadata?.draftTable)
           const hasInventoryDraft = msg.role === "assistant" && Boolean(msg.metadata?.inventoryDraft)
@@ -463,17 +531,26 @@ export function ChatBotPage() {
           const fullBleedArtifact =
             msg.role === "assistant" &&
             (hasDraft || hasInventoryDraft || hasQueryTable || hasChart)
+          const isWelcomeMessage = msg.id === "1" && msg.role === "assistant"
           const layoutClass = fullBleedArtifact
             ? "w-full max-w-[min(1100px,100%)]"
             : hasArtifact
               ? "max-w-[96%] sm:max-w-[min(720px,92%)]"
               : "max-w-[85%] sm:max-w-[70%]"
+          const canShowAssistantActions =
+            msg.role === "assistant" &&
+            !isWelcomeMessage &&
+            !hasClarify &&
+            msg.content.trim().length > 0 &&
+            (!isTyping || msg.id !== lastAssistantId)
           return (
           <div key={msg.id} className={`flex w-full ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
             <div className={`flex gap-3 min-w-0 ${layoutClass} ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
-              {!fullBleedArtifact ? (
+              {!fullBleedArtifact && !isWelcomeMessage ? (
               <div className={`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
-                msg.role === "assistant" ? "bg-blue-600 text-white" : "bg-slate-200 text-slate-600"
+                msg.role === "assistant"
+                  ? "rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-blue-200"
+                  : "bg-gradient-to-br from-slate-600 to-slate-800 text-white"
               }`}>
                 {msg.role === "assistant" ? <Bot className="h-5 w-5" /> : <User className="h-5 w-5" />}
               </div>
@@ -481,10 +558,23 @@ export function ChatBotPage() {
 
               {/* Message Content */}
               <div className="min-w-0 flex-1 space-y-2">
+                {isWelcomeMessage ? (
+                  <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-indigo-50 p-5 shadow-sm">
+                    <div className="flex items-start gap-4">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-200/70">
+                        <Bot className="h-6 w-6" />
+                      </div>
+                      <div className="space-y-2">
+                        <h3 className="text-base font-semibold text-slate-900">Xin chào! 👋</h3>
+                        <p className="text-[15px] leading-relaxed text-slate-600">{msg.content}</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
                 <div className={`px-4 py-3 rounded-2xl text-[15px] leading-relaxed shadow-sm ${
                   msg.role === "user" 
-                    ? "bg-blue-600 text-white rounded-tr-none" 
-                    : "bg-white text-slate-700 border border-slate-100 rounded-tl-none"
+                    ? "rounded-tr-none border border-white/10 bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-md shadow-blue-200/50"
+                    : "rounded-tl-none border border-slate-100 border-l-2 border-l-blue-200 bg-white text-slate-700 shadow-sm"
                 }`}>
                   {msg.type === "image" && msg.metadata?.imageUrl && (
                     <div className="mb-3 overflow-hidden rounded-xl border border-white/20">
@@ -503,44 +593,69 @@ export function ChatBotPage() {
                   {msg.role === "assistant" && !hasClarify ? (
                     <div className="flex items-start justify-between gap-2">
                       <AiChatMessageText text={msg.content ?? ""} />
-                      {ttsSupported && msg.content.trim() && !isTyping ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleSpeak(msg)}
-                          disabled={isTtsLoading && speakingMessageId !== msg.id}
-                          className={cn(
-                            "shrink-0 min-h-[44px] min-w-[44px] rounded-lg",
-                            speakingMessageId === msg.id && (isSpeaking || isTtsLoading)
-                              ? "bg-blue-100 text-blue-600 animate-pulse"
-                              : "text-slate-400 hover:bg-slate-100 hover:text-blue-600"
-                          )}
-                          title={
-                            speakingMessageId === msg.id && (isSpeaking || isTtsLoading)
-                              ? "Dừng đọc"
-                              : "Đọc tin nhắn"
-                          }
-                          aria-label={
-                            speakingMessageId === msg.id && (isSpeaking || isTtsLoading)
-                              ? "Dừng đọc"
-                              : "Đọc tin nhắn"
-                          }
-                        >
-                          {speakingMessageId === msg.id && isTtsLoading ? (
-                            <Loader2 className="h-5 w-5 animate-spin" />
-                          ) : speakingMessageId === msg.id && isSpeaking ? (
-                            <StopCircle className="h-5 w-5" />
-                          ) : (
-                            <Volume2 className="h-5 w-5" />
-                          )}
-                        </Button>
+                      {canShowAssistantActions ? (
+                        <div className="flex shrink-0 items-center gap-1">
+                          {ttsSupported ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleSpeak(msg)}
+                              disabled={isTtsLoading && speakingMessageId !== msg.id}
+                              className={cn(
+                                "min-h-[44px] min-w-[44px] rounded-lg",
+                                speakingMessageId === msg.id && (isSpeaking || isTtsLoading)
+                                  ? "bg-blue-100 text-blue-600 animate-pulse"
+                                  : "text-slate-400 hover:bg-slate-100 hover:text-blue-600"
+                              )}
+                              title={
+                                speakingMessageId === msg.id && (isSpeaking || isTtsLoading)
+                                  ? "Dừng đọc"
+                                  : "Đọc tin nhắn"
+                              }
+                              aria-label={
+                                speakingMessageId === msg.id && (isSpeaking || isTtsLoading)
+                                  ? "Dừng đọc"
+                                  : "Đọc tin nhắn"
+                              }
+                            >
+                              {speakingMessageId === msg.id && isTtsLoading ? (
+                                <Loader2 className="h-5 w-5 animate-spin" />
+                              ) : speakingMessageId === msg.id && isSpeaking ? (
+                                <StopCircle className="h-5 w-5" />
+                              ) : (
+                                <Volume2 className="h-5 w-5" />
+                              )}
+                            </Button>
+                          ) : null}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => void handleCopyMessage(msg)}
+                            className={cn(
+                              "min-h-[44px] min-w-[44px] rounded-lg",
+                              copiedMessageId === msg.id
+                                ? "bg-emerald-100 text-emerald-600"
+                                : "text-slate-400 hover:bg-slate-100 hover:text-emerald-600"
+                            )}
+                            title={copiedMessageId === msg.id ? "Đã sao chép" : "Sao chép tin nhắn"}
+                            aria-label={copiedMessageId === msg.id ? "Đã sao chép" : "Sao chép tin nhắn"}
+                          >
+                            {copiedMessageId === msg.id ? (
+                              <Check className="h-5 w-5" />
+                            ) : (
+                              <Copy className="h-5 w-5" />
+                            )}
+                          </Button>
+                        </div>
                       ) : null}
                     </div>
                   ) : msg.role === "assistant" && hasClarify ? null : (
                     msg.content
                   )}
                 </div>
+                )}
                 {hasChart ? (
                   <AiChatChartCard spec={msg.metadata!.chartSpec as Record<string, unknown>} />
                 ) : null}
@@ -567,9 +682,11 @@ export function ChatBotPage() {
                     }}
                   />
                 ) : null}
-                <div className={`text-[10px] font-bold uppercase tracking-widest text-slate-400 ${msg.role === "user" ? "text-right" : "text-left"}`}>
-                  {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </div>
+                {!isWelcomeMessage ? (
+                  <div className={`mt-1 text-[11px] text-slate-400 ${msg.role === "user" ? "text-right" : "text-left"}`}>
+                    {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>
@@ -578,13 +695,18 @@ export function ChatBotPage() {
         {isTyping && (
           <div className="flex justify-start">
             <div className="flex gap-3">
-              <div className="h-8 w-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-sm">
+              <div className="flex h-8 w-8 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-sm shadow-blue-200/70">
                 <Bot className="h-5 w-5" />
               </div>
-              <div className="bg-white border border-slate-100 px-4 py-3 rounded-2xl rounded-tl-none shadow-sm flex items-center gap-1.5">
-                <div className="h-1.5 w-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
-                <div className="h-1.5 w-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
-                <div className="h-1.5 w-1.5 bg-slate-400 rounded-full animate-bounce" />
+              <div className="rounded-2xl rounded-tl-none border border-slate-100 border-l-2 border-l-blue-200 bg-white px-4 py-3 shadow-sm">
+                <div className="flex items-center gap-1.5">
+                  <div className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-bounce [animation-delay:-0.3s]" />
+                  <div className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-bounce [animation-delay:-0.15s]" />
+                  <div className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-bounce" />
+                </div>
+                {progressText ? (
+                  <div className="mt-2 text-[11px] text-slate-500">{progressText}</div>
+                ) : null}
               </div>
             </div>
           </div>
@@ -603,12 +725,13 @@ export function ChatBotPage() {
                  disabled={inputBusy}
                  onClick={() => setInteractionMode(mode.id)}
                  className={cn(
-                   "rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
+                   "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
                    interactionMode === mode.id
                      ? "border-blue-600 bg-blue-600 text-white shadow-sm"
                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
                  )}
                >
+                 <mode.icon className="h-3.5 w-3.5" />
                  {mode.label}
                </button>
              ))}
@@ -632,41 +755,7 @@ export function ChatBotPage() {
                  </span>
                </div>
             )}
-            {progressText && (
-               <div className="flex items-center gap-3 px-4 py-2 bg-amber-50 border border-amber-100 rounded-xl">
-                 <Loader2 className="h-4 w-4 text-amber-600 animate-spin" />
-                 <span className="text-xs font-semibold text-amber-700">
-                   {progressText}
-                 </span>
-               </div>
-            )}
-           
            <div className="flex items-end gap-2 bg-slate-50 border border-slate-200 rounded-2xl p-2 focus-within:ring-1 focus-within:ring-blue-500/20 focus-within:border-blue-400/50 transition-all duration-300">
-            <div className="flex items-center">
-               <input 
-                 type="file" 
-                 accept="image/*" 
-                 className="hidden" 
-                 ref={fileInputRef}
-                 onChange={handleFileUpload}
-               />
-               <Button 
-                 variant="ghost" 
-                 size="icon" 
-                 className="h-10 w-10 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl"
-                 onClick={() => fileInputRef.current?.click()}
-               >
-                 <ImageIcon className="h-5 w-5" />
-               </Button>
-               <Button 
-                variant="ghost" 
-                size="icon" 
-                className="h-10 w-10 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl"
-               >
-                 <Paperclip className="h-5 w-5" />
-               </Button>
-            </div>
-            
             <textarea
               className="flex-1 max-h-32 min-h-[40px] bg-transparent border-none focus:ring-0 text-[15px] py-2 px-3 text-slate-700 placeholder:text-slate-400 resize-none leading-relaxed transition-all"
               placeholder="Hỏi trợ lý bằng chữ (ví dụ: thống kê đơn hàng, tồn kho)..."
@@ -715,6 +804,8 @@ export function ChatBotPage() {
                  }`}
                  onClick={() => handleSend()}
                  disabled={!inputValue.trim() || inputBusy}
+                 title="Gửi tin nhắn"
+                 aria-label="Gửi tin nhắn"
                >
                  <Send className="h-5 w-5" />
                </Button>

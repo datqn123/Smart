@@ -61,7 +61,6 @@ const navConfig: NavItemConfig[] = [
     icon: <LayoutDashboard className="h-[18px] w-[18px]" />,
     subItems: [
       { label: "Dashboard", path: "/dashboard", perm: "can_view_dashboard" },
-      { label: "AI Insights", path: "/dashboard/ai-insights", perm: "can_use_ai" },
     ],
   },
   {

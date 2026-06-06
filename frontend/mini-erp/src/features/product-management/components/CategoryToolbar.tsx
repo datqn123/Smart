@@ -1,6 +1,13 @@
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Search, Trash2, Edit2, Plus } from "lucide-react"
+import { Search, Trash2, Plus } from "lucide-react"
+import { cn } from "@/lib/utils"
+
+const CATEGORY_STATUS_FILTERS = [
+  { value: "all",      label: "Tất cả" },
+  { value: "Active",   label: "Đang dùng" },
+  { value: "Inactive", label: "Vô hiệu" },
+] as const
 
 interface CategoryToolbarProps {
   searchStr: string
@@ -17,30 +24,19 @@ export function CategoryToolbar({
   searchStr, onSearch, statusFilter, onStatusChange,
   selectedIds, onAction, canBulkDelete,
 }: CategoryToolbarProps) {
-  const hasSelection = selectedIds.length > 0;
+  const hasSelection = selectedIds.length > 0
 
   return (
-    <div className="bg-white p-4 border border-slate-200 rounded-lg shrink-0 shadow-sm">
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto flex-1 max-w-2xl">
-          <div className="relative flex-1 w-full sm:min-w-[300px] group">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
-            <Input 
-              placeholder="Tìm theo tên hoặc mã danh mục..." 
-              value={searchStr}
-              onChange={(e) => onSearch(e.target.value)}
-              className="pl-10 h-10 border-slate-200 focus:border-slate-400 focus:ring-slate-100 transition-all rounded-md"
-            />
-          </div>
-          <select 
-            value={statusFilter} 
-            onChange={(e) => onStatusChange(e.target.value)}
-            className="h-10 px-3 border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-100 w-full sm:min-w-[160px] rounded-md"
-          >
-            <option value="all">Tất cả trạng thái</option>
-            <option value="Active">Hoạt động</option>
-            <option value="Inactive">Ngừng</option>
-          </select>
+    <div className="bg-white p-4 border border-slate-200 rounded-lg shrink-0 shadow-sm flex flex-col gap-3">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="relative flex-1 w-full sm:min-w-75 group">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
+          <Input
+            placeholder="Tìm theo tên hoặc mã danh mục..."
+            value={searchStr}
+            onChange={(e) => onSearch(e.target.value)}
+            className="pl-10 h-10 border-slate-200 focus:border-slate-400 focus:ring-slate-100 transition-all rounded-md"
+          />
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -51,11 +47,28 @@ export function CategoryToolbar({
               </Button>
             </div>
           )}
-          
           <Button onClick={() => onAction("create")} className="h-10 bg-slate-900 hover:bg-slate-800 text-white rounded-md shadow-sm">
             <Plus className="h-4 w-4 mr-1.5" /> Tạo danh mục
           </Button>
         </div>
+      </div>
+
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {CATEGORY_STATUS_FILTERS.map((f) => (
+          <button
+            key={f.value}
+            type="button"
+            onClick={() => onStatusChange(f.value)}
+            className={cn(
+              "h-8 px-3 rounded-full text-sm font-medium transition-colors border shrink-0",
+              statusFilter === f.value
+                ? "bg-slate-900 text-white border-slate-900"
+                : "bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:text-slate-900",
+            )}
+          >
+            {f.label}
+          </button>
+        ))}
       </div>
     </div>
   )

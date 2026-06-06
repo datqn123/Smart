@@ -33,49 +33,60 @@ interface OrderTableProps {
   showCheckbox?: boolean
   /** Task102 — ẩn cột trạng thái trên list lịch sử bán lẻ. */
   hideStatusColumn?: boolean
+  /** SRS-020 — ẩn TypeBadge kênh bán khi endpoint chỉ trả 1 loại (Retail). */
+  hideTypeBadge?: boolean
 }
 
 function StatusBadge({ status }: { status: string }) {
   switch (status) {
     case 'Completed':
     case 'Delivered':
-      return <Badge className="bg-green-50 text-green-700 text-xs border-none font-normal">Hoàn thành</Badge>;
+      return <Badge className="text-xs font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200 shadow-none gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />Hoàn thành</Badge>
     case 'Shipped':
-      return <Badge className="bg-blue-50 text-blue-700 text-xs border-none font-normal">Đang giao</Badge>;
+      return <Badge className="text-xs font-semibold bg-blue-50 text-blue-600 border border-blue-200 shadow-none gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block" />Đang giao</Badge>
     case 'Processing':
-      return <Badge className="bg-indigo-50 text-indigo-700 text-xs border-none font-normal">Đang xử lý</Badge>;
+      return <Badge className="text-xs font-semibold bg-indigo-50 text-indigo-600 border border-indigo-200 shadow-none gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-indigo-400 inline-block" />Đang xử lý</Badge>
     case 'Partial':
-      return <Badge className="bg-amber-50 text-amber-700 text-xs border-none font-normal">Giao một phần</Badge>;
+      return <Badge className="text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-200 shadow-none gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />Giao một phần</Badge>
     case 'Pending':
-      return <Badge className="bg-amber-100 text-amber-900 icon-xs border-none font-normal">Chờ duyệt</Badge>;
+      return <Badge className="text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-200 shadow-none gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />Chờ duyệt</Badge>
     case 'Cancelled':
-      return <Badge className="bg-red-50 text-red-700 text-xs border-none font-normal">Đã huỷ</Badge>;
+      return <Badge className="text-xs font-semibold bg-rose-100 text-rose-600 border border-rose-200 shadow-none gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-rose-400 inline-block" />Đã huỷ</Badge>
     default:
-      return <Badge className="bg-slate-50 text-slate-700 text-xs border-none font-normal">{status}</Badge>;
+      return <Badge className="text-xs font-semibold bg-slate-50 text-slate-600 border border-slate-200 shadow-none">{status}</Badge>
   }
 }
 
 function TypeBadge({ type }: { type: string }) {
-  if (type === 'Wholesale') return <Badge className="h-5 border-slate-200 bg-slate-50 px-1.5 text-[10px] font-semibold uppercase tracking-normal text-slate-600">Bán buôn</Badge>;
-  if (type === 'Retail') return <Badge className="h-5 border-slate-200 bg-slate-50 px-1.5 text-[10px] font-semibold uppercase tracking-normal text-slate-600">Bán lẻ</Badge>;
-  return <Badge className="h-5 border-slate-200 bg-slate-50 px-1.5 text-[10px] font-semibold uppercase tracking-normal text-slate-600">Trả hàng</Badge>;
+  if (type === 'Wholesale') return <Badge className="h-5 border border-violet-200 bg-violet-50 px-1.5 text-[10px] font-bold uppercase tracking-normal text-violet-600">Bán buôn</Badge>
+  if (type === 'Retail') return <Badge className="h-5 border border-sky-200 bg-sky-50 px-1.5 text-[10px] font-bold uppercase tracking-normal text-sky-600">Bán lẻ</Badge>
+  return <Badge className="h-5 border border-orange-200 bg-orange-50 px-1.5 text-[10px] font-bold uppercase tracking-normal text-orange-600">Trả hàng</Badge>
 }
 
-export function OrderTable({ 
-  data, 
-  selectedIds, 
-  onSelect, 
-  onSelectAll, 
-  onView, 
-  onEdit, 
+function PaymentBadge({ status }: { status: string }) {
+  if (status === 'Paid')
+    return <Badge className="text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-none">Đã TT</Badge>
+  if (status === 'Partial')
+    return <Badge className="text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 shadow-none">Một phần</Badge>
+  return <Badge className="text-xs font-semibold bg-rose-50 text-rose-600 border border-rose-200 shadow-none">Chưa TT</Badge>
+}
+
+export function OrderTable({
+  data,
+  selectedIds,
+  onSelect,
+  onSelectAll,
+  onView,
+  onEdit,
   onDelete,
   renderCustomActions,
   showCheckbox = true,
   hideStatusColumn = false,
+  hideTypeBadge = false,
 }: OrderTableProps) {
   const allSelected = data.length > 0 && selectedIds.length === data.length;
   const someSelected = selectedIds.length > 0 && selectedIds.length < data.length;
-  const colCount = (showCheckbox ? 1 : 0) + 4 + (hideStatusColumn ? 0 : 1) + 1;
+  const colCount = (showCheckbox ? 1 : 0) + 4 + 1 + (hideStatusColumn ? 0 : 1) + 1;
   const singleViewAction = !renderCustomActions && !onEdit && !onDelete;
 
   return (
@@ -94,7 +105,8 @@ export function OrderTable({
           <TableHead className={cn(ORDER_TABLE_COL.code, TABLE_HEAD_CLASS, "px-4")}>Mã hóa đơn</TableHead>
           <TableHead className={cn(ORDER_TABLE_COL.customer, TABLE_HEAD_CLASS, "px-4")}>Khách hàng</TableHead>
           <TableHead className={cn(ORDER_TABLE_COL.date, TABLE_HEAD_CLASS, "px-4")}>Ngày lập</TableHead>
-          <TableHead className={cn(ORDER_TABLE_COL.total, TABLE_HEAD_CLASS, "text-right px-4")}>Thành tiền</TableHead>
+          <TableHead className={cn(ORDER_TABLE_COL.total, TABLE_HEAD_CLASS, "px-4")}>Thành tiền</TableHead>
+          <TableHead className={cn(ORDER_TABLE_COL.payment, TABLE_HEAD_CLASS, "px-4")}>Thanh toán</TableHead>
           {!hideStatusColumn && (
             <TableHead className={cn(ORDER_TABLE_COL.status, TABLE_HEAD_CLASS, "text-center px-4")}>Trạng thái</TableHead>
           )}
@@ -114,7 +126,14 @@ export function OrderTable({
           data.map((item) => {
             const isSelected = selectedIds.includes(item.id);
             return (
-              <TableRow key={item.id} className={cn("group h-16", isSelected ? "bg-slate-50" : "hover:bg-slate-50/50")}>
+              <TableRow key={item.id} className={cn(
+                "group h-16 transition-colors",
+                isSelected
+                  ? "bg-slate-100"
+                  : item.status === "Cancelled"
+                    ? "bg-rose-50/30 hover:bg-rose-50/60"
+                    : "hover:bg-slate-50/60"
+              )}>
                 {showCheckbox && (
                   <TableCell className="px-4 text-center">
                     <Checkbox 
@@ -131,16 +150,21 @@ export function OrderTable({
                   <div className="flex min-w-0 flex-col gap-1">
                     <span className={cn(TABLE_CELL_PRIMARY_CLASS, "block min-w-0 truncate")}>{item.customerName}</span>
                     <div className="flex gap-1 items-center">
-                      <TypeBadge type={item.type} />
-                      <span className={cn(TABLE_CELL_MONO_CLASS, "text-[10px] text-slate-400")}>• {item.itemsCount} mặt hàng</span>
+                      {!hideTypeBadge && <TypeBadge type={item.type} />}
+                      <span className={cn(TABLE_CELL_MONO_CLASS, "text-[10px] text-slate-400")}>
+                        {!hideTypeBadge && "• "}{item.itemsCount} mặt hàng
+                      </span>
                     </div>
                   </div>
                 </TableCell>
                 <TableCell className={cn(ORDER_TABLE_COL.date, TABLE_CELL_SECONDARY_CLASS, "px-4")}>
                   {new Date(item.date).toLocaleDateString('vi-VN')}
                 </TableCell>
-                <TableCell className={cn(ORDER_TABLE_COL.total, TABLE_CELL_NUMBER_CLASS, "text-right px-4")}>
+                <TableCell className={cn(ORDER_TABLE_COL.total, TABLE_CELL_NUMBER_CLASS, "px-4 font-semibold text-emerald-600")}>
                   {formatCurrency(item.finalAmount)}
+                </TableCell>
+                <TableCell className={cn(ORDER_TABLE_COL.payment, "px-4")}>
+                  <PaymentBadge status={item.paymentStatus} />
                 </TableCell>
                 {!hideStatusColumn && (
                   <TableCell className={cn(ORDER_TABLE_COL.status, "px-4 text-center min-w-0")}>

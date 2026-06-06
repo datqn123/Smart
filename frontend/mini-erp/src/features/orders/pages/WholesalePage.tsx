@@ -30,6 +30,10 @@ export function WholesalePage() {
     sort,
     setSort,
     sortWhitelist,
+    statusFilter,
+    setStatusFilter,
+    paymentStatusFilter,
+    setPaymentStatusFilter,
     isListPending,
     isListFetching,
     isListError,
@@ -73,23 +77,6 @@ export function WholesalePage() {
         </p>
       </div>
 
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0 text-sm">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-slate-500 whitespace-nowrap">Sắp xếp</span>
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value as RetailHistoryListSort)}
-            className="h-9 px-2 border border-slate-200 bg-white rounded-md text-slate-900 min-w-[200px]"
-          >
-            {sortWhitelist.map((s) => (
-              <option key={s} value={s}>
-                {getRetailHistoryListSortLabel(s)}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
       <div className={DATA_TABLE_SHELL_CLASS}>
         {isListPending ? (
           <div className="p-8 text-center text-slate-500 flex-1" role="status">
@@ -105,7 +92,7 @@ export function WholesalePage() {
               variant="retailHistory"
               searchStr={search}
               onSearch={setSearch}
-              statusFilter="all"
+              statusFilter={statusFilter}
               onStatusChange={() => {}}
               selectedIds={[]}
               onAction={() => {}}
@@ -113,6 +100,13 @@ export function WholesalePage() {
               dateTo={dateTo}
               onDateFromChange={setDateFrom}
               onDateToChange={setDateTo}
+              onStatusFilterChange={setStatusFilter}
+              paymentStatusFilter={paymentStatusFilter}
+              onPaymentStatusFilterChange={setPaymentStatusFilter}
+              sort={sort}
+              onSortChange={(v) => setSort(v as RetailHistoryListSort)}
+              sortWhitelist={sortWhitelist}
+              getSortLabel={getRetailHistoryListSortLabel}
             />
 
             <div className={DATA_TABLE_SCROLL_CLASS}>
@@ -123,7 +117,7 @@ export function WholesalePage() {
                 onSelectAll={() => {}}
                 onView={handleView}
                 showCheckbox={false}
-                hideStatusColumn
+                hideTypeBadge
               />
             </div>
             <div className="flex items-center justify-between flex-wrap gap-2 px-3 py-2 border-t border-slate-200 bg-slate-50/80 text-sm text-slate-600 min-h-11 shrink-0">
@@ -163,6 +157,7 @@ export function WholesalePage() {
         onClose={() => setIsDetailOpen(false)}
         readOnly
         detailLines={detailLines}
+        detailDto={detailQuery.data ?? undefined}
       />
     </div>
   )

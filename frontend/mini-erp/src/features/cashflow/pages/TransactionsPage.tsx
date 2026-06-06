@@ -7,7 +7,8 @@ import { TransactionTable } from "../components/TransactionTable"
 import { TransactionDetailDialog } from "../components/TransactionDetailDialog"
 import { TransactionFormDialog } from "../components/TransactionFormDialog"
 import { toast } from "sonner"
-import { TrendingUp, TrendingDown, DollarSign } from "lucide-react"
+import { TrendingUp, TrendingDown, DollarSign, Info } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { ApiRequestError } from "@/lib/api/http"
 import {
   CASH_TRANSACTIONS_LIST_QUERY_KEY,
@@ -72,6 +73,8 @@ export function TransactionsPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [typeFilter, setTypeFilter] = useState("all")
+  const [dateFrom, setDateFrom] = useState("")
+  const [dateTo, setDateTo] = useState("")
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [page, setPage] = useState(1)
 
@@ -90,8 +93,9 @@ export function TransactionsPage() {
   }, [search])
 
   useEffect(() => {
-    setPage(1)
-  }, [debouncedSearch, statusFilter, typeFilter])
+    const t = window.setTimeout(() => setPage(1), 0)
+    return () => window.clearTimeout(t)
+  }, [debouncedSearch, statusFilter, typeFilter, dateFrom, dateTo])
 
   const filters = useMemo(
     () => ({
@@ -102,10 +106,12 @@ export function TransactionsPage() {
         statusFilter === "all"
           ? undefined
           : (statusFilter as "Pending" | "Completed" | "Cancelled"),
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo || undefined,
       page,
       limit: PAGE_SIZE,
     }),
-    [debouncedSearch, typeFilter, statusFilter, page],
+    [debouncedSearch, typeFilter, statusFilter, dateFrom, dateTo, page],
   )
 
   const txQuery = useQuery({
@@ -170,7 +176,7 @@ export function TransactionsPage() {
         }
         break
       case "delete":
-        void deleteByIds(selectedIds)
+        requestDeleteByIds(selectedIds)
         break
       case "export":
         toast.info("Đang xuất dữ liệu Excel...")
@@ -189,16 +195,25 @@ export function TransactionsPage() {
     setIsFormOpen(true)
   }
 
-  const deleteByIds = async (ids: number[]) => {
+  const requestDeleteByIds = (ids: number[]) => {
     if (ids.length === 0) {
       toast.error("Chưa chọn giao dịch")
       return
     }
-    const ok = window.confirm(
-      ids.length === 1 ? "Xóa giao dịch này? Chỉ phiếu Chờ xử lý / Đã hủy và chưa ghi sổ mới xóa được." : `Xóa ${ids.length} giao dịch đã chọn?`,
+    toast.warning(
+      ids.length === 1
+        ? "Xóa giao dịch này? Chỉ phiếu chờ xử lý hoặc đã huỷ và chưa ghi sổ mới xóa được."
+        : `Xóa ${ids.length} giao dịch đã chọn?`,
+      {
+        action: {
+          label: "Xóa",
+          onClick: () => void deleteByIds(ids),
+        },
+      },
     )
-    if (!ok) return
+  }
 
+  const deleteByIds = async (ids: number[]) => {
     const successfulIds: number[] = []
     for (const id of ids) {
       try {
@@ -339,7 +354,7 @@ export function TransactionsPage() {
     <div className="p-4 md:p-6 lg:p-8 flex flex-col h-full min-h-0 gap-4 md:gap-5 overflow-hidden">
       <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-6">
         <div>
-          <h1 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight uppercase">Giao dịch thu chi</h1>
+          <h1 className="text-xl md:text-2xl font-semibold text-slate-900 tracking-tight">Giao dịch thu chi</h1>
           <p className="text-sm text-slate-500 mt-1 font-medium">Quản lý thu chi và luân chuyển tiền mặt</p>
         </div>
 
@@ -349,9 +364,12 @@ export function TransactionsPage() {
             <StatCard label="Tổng chi" amount={totalExpense} icon={TrendingDown} />
             <StatCard label="Số dư" amount={balance} icon={DollarSign} />
           </div>
-          <p className="text-[10px] text-slate-400 font-medium xl:text-right">
-            Thống kê theo các dòng đang hiển thị (trang {page}, tối đa {PAGE_SIZE} bản ghi).
-          </p>
+          <div
+            className="ml-auto flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-400"
+            title={`Thống kê theo các dòng đang hiển thị (trang ${page}, tối đa ${PAGE_SIZE} bản ghi).`}
+          >
+            <Info size={12} />
+          </div>
         </div>
       </div>
 
@@ -363,6 +381,10 @@ export function TransactionsPage() {
           onStatusChange={setStatusFilter}
           typeFilter={typeFilter}
           onTypeChange={setTypeFilter}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onDateFromChange={setDateFrom}
+          onDateToChange={setDateTo}
           selectedIds={selectedIds}
           onAction={handleToolbarAction}
         />
@@ -381,7 +403,7 @@ export function TransactionsPage() {
               onSelectAll={handleSelectAll}
               onView={handleView}
               onEdit={handleEdit}
-              onDelete={(item) => void deleteByIds([item.id])}
+              onDelete={(item) => requestDeleteByIds([item.id])}
             />
           </div>
           {total > PAGE_SIZE ? (
@@ -390,22 +412,26 @@ export function TransactionsPage() {
                 Trang {page} / {totalPages} — {txQuery.isFetching ? "…" : total} bản ghi
               </span>
               <div className="flex gap-2">
-                <button
+                <Button
                   type="button"
-                  className="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-3"
                   disabled={page <= 1 || txQuery.isFetching}
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                 >
                   Trước
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  className="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-3"
                   disabled={page >= totalPages || txQuery.isFetching}
                   onClick={() => setPage((p) => p + 1)}
                 >
                   Sau
-                </button>
+                </Button>
               </div>
             </div>
           ) : null}
@@ -443,7 +469,7 @@ function StatCard({
   icon: typeof TrendingUp
 }) {
   return (
-    <div className="px-5 py-3 rounded-xl border border-slate-200 flex items-center gap-4 bg-white min-w-[200px]">
+    <div className="px-5 py-3 rounded-xl border border-slate-200 flex items-center gap-4 bg-white min-w-50">
       <div className="h-10 w-10 rounded-lg flex items-center justify-center bg-slate-100 text-slate-600">
         <Icon size={18} strokeWidth={2} />
       </div>

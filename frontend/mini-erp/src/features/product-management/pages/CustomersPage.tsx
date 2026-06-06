@@ -29,6 +29,7 @@ import {
   mapCustomerListItemDtoToCustomer,
   patchCustomer,
   postCustomer,
+  postCustomersBulkDelete,
   type CustomerListSort,
   type GetCustomerListParams,
 } from "../api/customersApi"
@@ -73,7 +74,6 @@ function toastCustomerDeleteError(e: ApiRequestError) {
 export function CustomersPage() {
   const { setTitle } = usePageTitle()
   const queryClient = useQueryClient()
-  const isAdmin = useAuthStore((s) => s.user?.role === "Admin")
   const isStaff = useAuthStore((s) => s.user?.role === "Staff")
   const canEditLoyaltyPoints = !isStaff
   const scrollRootRef = useRef<HTMLDivElement>(null)
@@ -94,6 +94,7 @@ export function CustomersPage() {
   const [selectedIds, setSelectedIds] = useState<number[]>([])
 
   const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null)
+  const [isDeletingBulk, setIsDeletingBulk] = useState(false)
 
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
@@ -271,6 +272,36 @@ export function CustomersPage() {
     },
   })
 
+  const bulkDeleteCustomersMutation = useMutation({
+    mutationFn: (ids: number[]) => postCustomersBulkDelete(ids),
+    onSuccess: (data) => {
+      void queryClient.invalidateQueries({ queryKey: [...CUSTOMER_LIST_QUERY_KEY] })
+      for (const id of data.deletedIds) {
+        void queryClient.invalidateQueries({ queryKey: ["product-management", "customers", "detail", id] })
+      }
+      setSelectedIds([])
+      setIsDeletingBulk(false)
+      setSelectedCustomer((p) => {
+        if (p && data.deletedIds.includes(p.id)) { setIsDetailOpen(false); return null }
+        return p
+      })
+      setEditingCustomer((p) => {
+        if (p && data.deletedIds.includes(p.id)) { setIsFormOpen(false); return undefined }
+        return p
+      })
+      toast.success(data.deletedCount > 0 ? `Đã xóa ${data.deletedCount} khách hàng` : "Đã xóa khách hàng")
+    },
+    onError: (e) => {
+      setIsDeletingBulk(false)
+      if (e instanceof ApiRequestError) {
+        if (e.status === 409) { toastCustomerDeleteError(e); return }
+        if (e.status === 403) { toast.error(e.body?.message ?? e.message); return }
+        if (e.status === 400) { errToast(e); return }
+      }
+      errToast(e)
+    },
+  })
+
   const createCustomerMutation = useMutation({
     mutationFn: (data: CustomerFormData) => postCustomer(buildCustomerCreateBody(data)),
     onSuccess: () => {
@@ -302,13 +333,24 @@ export function CustomersPage() {
         toast.info(`Chỉnh sửa ${selectedIds.length} khách hàng`)
         break
       case "delete":
-        toast.info("Xóa hàng loạt tạm không dùng trên giao diện này.")
+        if (isStaff) {
+          toast.error("Chỉ Owner hoặc Admin mới được xóa hàng loạt khách hàng.")
+          return
+        }
+        setIsDeletingBulk(true)
         break
       case "create":
         setEditingCustomer(undefined)
         setIsFormOpen(true)
         break
     }
+  }
+
+  const confirmBulkDelete = () => {
+    if (isStaff) { setIsDeletingBulk(false); return }
+    const ids = [...new Set(selectedIds)]
+    if (ids.length === 0) { setIsDeletingBulk(false); return }
+    void bulkDeleteCustomersMutation.mutateAsync(ids)
   }
 
   const handleView = (item: Customer) => {
@@ -322,8 +364,8 @@ export function CustomersPage() {
   }
 
   const handleDelete = (item: Customer) => {
-    if (!isAdmin) {
-      toast.error("Chỉ tài khoản Admin mới được xóa khách hàng.")
+    if (isStaff) {
+      toast.error("Chỉ Owner hoặc Admin mới được xóa khách hàng.")
       return
     }
     setDeleteTarget(item)
@@ -351,7 +393,7 @@ export function CustomersPage() {
         onStatusChange={setStatusFilter}
         selectedIds={selectedIds}
         onAction={handleToolbarAction}
-        canBulkDelete={false}
+        canBulkDelete={!isStaff}
       />
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0 text-sm">
@@ -396,7 +438,7 @@ export function CustomersPage() {
                 onView={handleView}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
-                canDelete={isAdmin}
+                canDelete={!isStaff}
               />
               <div ref={loadMoreSentinelRef} className="h-1 w-full shrink-0" aria-hidden />
             </div>
@@ -427,6 +469,14 @@ export function CustomersPage() {
             ? `Bạn có chắc chắn muốn xóa khách hàng "${deleteTarget.name}"? Khách sẽ được ẩn khỏi danh sách (xóa mềm).`
             : undefined
         }
+      />
+
+      <ConfirmDialog
+        open={isDeletingBulk}
+        onOpenChange={setIsDeletingBulk}
+        onConfirm={confirmBulkDelete}
+        title="Xác nhận xóa nhiều"
+        description={`Bạn có chắc chắn muốn xóa ${selectedIds.length} khách hàng đã chọn? (Xóa mềm)`}
       />
 
       <CustomerDetailDialog

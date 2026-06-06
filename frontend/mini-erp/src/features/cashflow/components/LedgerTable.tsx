@@ -1,4 +1,4 @@
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { formatCurrency } from "@/features/inventory/utils"
 import {
@@ -14,17 +14,16 @@ import { cn } from "@/lib/utils"
 import type { LedgerEntry } from "../types"
 import { ledgerReferenceTypeLabel, ledgerTransactionTypeLabel } from "../lib/ledgerDisplayLabels"
 
+const TRANSACTION_TYPE_BADGE_CLASS: Record<string, string> = {
+  SalesRevenue:     "bg-emerald-50 text-emerald-700 border-emerald-200",
+  PurchaseCost:     "bg-rose-50 text-rose-600 border-rose-200",
+  OperatingExpense: "bg-orange-50 text-orange-600 border-orange-200",
+  Refund:           "bg-blue-50 text-blue-600 border-blue-200",
+}
+import { calculateLedgerTotals, signedLedgerAmount } from "../lib/ledgerTotals"
+
 interface LedgerTableProps {
   data: LedgerEntry[]
-}
-
-function signedLedgerAmount(entry: LedgerEntry): number | null {
-  if (typeof entry.amount === "number" && !Number.isNaN(entry.amount)) {
-    return entry.amount
-  }
-  if (entry.credit > 0) return entry.credit
-  if (entry.debit > 0) return -entry.debit
-  return null
 }
 
 function formatSignedLedgerAmount(entry: LedgerEntry): string {
@@ -38,6 +37,8 @@ function formatSignedLedgerAmount(entry: LedgerEntry): string {
 }
 
 export function LedgerTable({ data }: LedgerTableProps) {
+  const totals = calculateLedgerTotals(data)
+
   return (
     <Table className={DATA_TABLE_ROOT_CLASS}>
       <TableHeader className="sticky top-0 z-30 bg-slate-50 border-b shadow-sm">
@@ -71,7 +72,12 @@ export function LedgerTable({ data }: LedgerTableProps) {
                   {new Date(item.date).toLocaleDateString("vi-VN")}
                 </TableCell>
                 <TableCell className="px-4">
-                  <Badge variant="outline" className="font-medium text-xs border-slate-200 bg-white text-slate-700">
+                  <Badge className={cn(
+                    "font-semibold text-xs border shadow-none",
+                    item.transactionType
+                      ? (TRANSACTION_TYPE_BADGE_CLASS[item.transactionType] ?? "bg-slate-50 text-slate-600 border-slate-200")
+                      : "bg-slate-50 text-slate-400 border-slate-200"
+                  )}>
                     {ledgerTransactionTypeLabel(item.transactionType)}
                   </Badge>
                 </TableCell>
@@ -89,8 +95,8 @@ export function LedgerTable({ data }: LedgerTableProps) {
                   className={cn(
                     TABLE_CELL_NUMBER_CLASS,
                     "text-right px-4 font-semibold tabular-nums",
-                    rawAmt != null && rawAmt > 0 && "text-emerald-700",
-                    rawAmt != null && rawAmt < 0 && "text-rose-700",
+                    rawAmt != null && rawAmt > 0 && "text-emerald-600",
+                    rawAmt != null && rawAmt < 0 && "text-rose-600",
                     rawAmt === 0 && "text-slate-600",
                   )}
                 >
@@ -110,6 +116,35 @@ export function LedgerTable({ data }: LedgerTableProps) {
           })
         )}
       </TableBody>
+      {data.length > 0 ? (
+        <TableFooter className="sticky bottom-0 z-20 bg-slate-50 border-t border-slate-200">
+          <TableRow className="hover:bg-slate-50">
+            <TableCell colSpan={5} className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-slate-500">
+              Tổng trang hiện tại
+            </TableCell>
+            <TableCell
+              className={cn(
+                TABLE_CELL_NUMBER_CLASS,
+                "text-right px-4 font-bold",
+                totals.amount > 0 && "text-emerald-700",
+                totals.amount < 0 && "text-rose-700",
+              )}
+            >
+              {totals.amount > 0 ? "+" : totals.amount < 0 ? "−" : ""}
+              {formatCurrency(Math.abs(totals.amount))}
+            </TableCell>
+            <TableCell className={cn(TABLE_CELL_NUMBER_CLASS, "text-right px-4 font-bold text-rose-700")}>
+              {formatCurrency(totals.debit)}
+            </TableCell>
+            <TableCell className={cn(TABLE_CELL_NUMBER_CLASS, "text-right px-4 font-bold text-emerald-700")}>
+              {formatCurrency(totals.credit)}
+            </TableCell>
+            <TableCell className={cn(TABLE_CELL_NUMBER_CLASS, "text-right px-4 font-bold text-slate-950")}>
+              {formatCurrency(totals.finalBalance)}
+            </TableCell>
+          </TableRow>
+        </TableFooter>
+      ) : null}
     </Table>
   )
 }

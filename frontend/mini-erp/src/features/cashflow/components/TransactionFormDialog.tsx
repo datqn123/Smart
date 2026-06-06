@@ -90,7 +90,6 @@ export function TransactionFormDialog({
 }: TransactionFormDialogProps) {
   const { register, handleSubmit, reset, setValue, watch } = useForm<Record<string, unknown>>({
     defaultValues: initialData || {
-      transactionCode: `TRANS-${Math.floor(Date.now() / 1000)}`,
       direction: 'Income',
       category: '',
       amount: 0,
@@ -123,7 +122,6 @@ export function TransactionFormDialog({
     if (!isOpen) return
     if (mode === "create") {
       reset({
-        transactionCode: `TRANS-${Math.floor(Date.now() / 1000)}`,
         direction: "Income",
         category: "",
         amount: 0,

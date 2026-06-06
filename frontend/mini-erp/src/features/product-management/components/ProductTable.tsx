@@ -64,12 +64,19 @@ export function ProductTable({
     },
     stock: {
       head: <TableHead className={cn(PRODUCT_TABLE_COL.stock, TABLE_HEAD_CLASS, "text-right px-4")}>Tồn kho</TableHead>,
-      cell: (item: Product) => <TableCell className={cn(PRODUCT_TABLE_COL.stock, TABLE_CELL_NUMBER_CLASS, "text-right px-4")}>{item.currentStock ?? 0}</TableCell>,
+      cell: (item: Product) => {
+        const stock = item.currentStock ?? 0
+        return (
+          <TableCell className={cn(PRODUCT_TABLE_COL.stock, TABLE_CELL_NUMBER_CLASS, "text-right px-4 font-semibold",
+            stock === 0 ? "text-rose-600" : stock < 10 ? "text-amber-600" : "text-slate-700"
+          )}>{stock}</TableCell>
+        )
+      },
     },
     price: {
       head: <TableHead className={cn(PRODUCT_TABLE_COL.price, TABLE_HEAD_CLASS, "text-right px-4")}>Giá bán</TableHead>,
       cell: (item: Product) => (
-        <TableCell className={cn(PRODUCT_TABLE_COL.price, TABLE_CELL_NUMBER_CLASS, "text-right px-4")}>
+        <TableCell className={cn(PRODUCT_TABLE_COL.price, TABLE_CELL_NUMBER_CLASS, "text-right px-4 font-semibold text-emerald-600")}>
           {item.currentPrice ? formatCurrency(item.currentPrice) : "-"}
         </TableCell>
       ),
@@ -78,7 +85,8 @@ export function ProductTable({
       head: <TableHead className={cn(PRODUCT_TABLE_COL.status, TABLE_HEAD_CLASS, "px-4")}>Trạng thái</TableHead>,
       cell: (item: Product) => (
         <TableCell className={cn(PRODUCT_TABLE_COL.status, "px-4")}>
-          <Badge className={cn("text-xs font-normal border-none", item.status === "Active" ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-500")}>
+          <Badge className={cn("text-xs font-semibold border shadow-none gap-1.5", item.status === "Active" ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-500 border-slate-200")}>
+            <span className={cn("w-1.5 h-1.5 rounded-full inline-block", item.status === "Active" ? "bg-emerald-500" : "bg-slate-400")} />
             {item.status === "Active" ? "Hoạt động" : "Ngừng"}
           </Badge>
         </TableCell>
@@ -120,7 +128,7 @@ export function ProductTable({
           data.map((item) => {
             const isSelected = selectedIds.includes(item.id)
             return (
-              <TableRow key={item.id} className={cn("group h-14", isSelected ? "bg-slate-50" : "hover:bg-slate-50/50")}>
+              <TableRow key={item.id} className={cn("group h-14 transition-colors", isSelected ? "bg-slate-100" : "hover:bg-slate-50/60")}>
                 <TableCell className="px-4 text-center">
                   <Checkbox
                     checked={isSelected}

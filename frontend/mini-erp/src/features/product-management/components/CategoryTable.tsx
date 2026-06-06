@@ -56,7 +56,7 @@ function CategoryRow({
 
   return (
     <>
-      <TableRow className={cn("group h-14", isSelected ? "bg-slate-50" : "hover:bg-slate-50/50")}>
+      <TableRow className={cn("group h-14 transition-colors", isSelected ? "bg-slate-100" : "hover:bg-slate-50/60")}>
         <TableCell className="px-4 text-center">
           <Checkbox checked={isSelected} onCheckedChange={() => onSelect(category.id)} className={DATA_TABLE_CHECKBOX_CLASS} />
         </TableCell>
@@ -88,7 +88,8 @@ function CategoryRow({
           }
           return (
             <TableCell key={columnKey} className="px-4">
-              <Badge className={`${category.status === "Active" ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-500"} text-xs font-normal border-none`}>
+              <Badge className={cn("text-xs font-semibold border shadow-none gap-1.5", category.status === "Active" ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-500 border-slate-200")}>
+                <span className={cn("w-1.5 h-1.5 rounded-full inline-block", category.status === "Active" ? "bg-emerald-500" : "bg-slate-400")} />
                 {category.status === "Active" ? "Hoạt động" : "Ngưng"}
               </Badge>
             </TableCell>

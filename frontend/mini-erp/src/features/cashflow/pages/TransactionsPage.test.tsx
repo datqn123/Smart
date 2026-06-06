@@ -22,6 +22,7 @@ vi.mock("lucide-react", () => ({
   TrendingUp: () => <div data-testid="trending-up-icon" />,
   TrendingDown: () => <div data-testid="trending-down-icon" />,
   DollarSign: () => <div data-testid="dollar-sign-icon" />,
+  Info: () => <div data-testid="info-icon" />,
 }))
 
 // Mock components

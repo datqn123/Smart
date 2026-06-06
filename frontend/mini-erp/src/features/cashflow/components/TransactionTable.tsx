@@ -29,17 +29,37 @@ interface TransactionTableProps {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const base = "text-xs font-medium border border-slate-200 bg-slate-50 text-slate-700 shadow-none"
-  if (status === "Completed") return <Badge className={base}>Hoàn thành</Badge>
-  if (status === "Pending") return <Badge className={base}>Chờ xử lý</Badge>
-  return <Badge className={base}>Đã huỷ</Badge>
+  if (status === "Completed") return (
+    <Badge className="text-xs font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200 shadow-none gap-1.5">
+      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+      Hoàn thành
+    </Badge>
+  )
+  if (status === "Pending") return (
+    <Badge className="text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-200 shadow-none gap-1.5">
+      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
+      Chờ xử lý
+    </Badge>
+  )
+  return (
+    <Badge className="text-xs font-semibold bg-rose-100 text-rose-600 border border-rose-200 shadow-none gap-1.5">
+      <span className="w-1.5 h-1.5 rounded-full bg-rose-400 inline-block" />
+      Đã huỷ
+    </Badge>
+  )
 }
 
 function DirectionBadge({ direction }: { direction: string }) {
-  const base =
-    "text-[10px] font-semibold border border-slate-200 bg-white text-slate-700 h-5 px-1.5 uppercase tracking-tight shadow-none"
-  if (direction === "Income") return <Badge className={base}>Thu tiền</Badge>
-  return <Badge className={base}>Chi tiền</Badge>
+  if (direction === "Income") return (
+    <Badge className="text-[10px] font-bold border border-emerald-200 bg-emerald-50 text-emerald-700 h-5 px-1.5 uppercase tracking-tight shadow-none">
+      ↑ Thu
+    </Badge>
+  )
+  return (
+    <Badge className="text-[10px] font-bold border border-rose-200 bg-rose-50 text-rose-600 h-5 px-1.5 uppercase tracking-tight shadow-none">
+      ↓ Chi
+    </Badge>
+  )
 }
 
 export function TransactionTable({ data, selectedIds, onSelect, onSelectAll, onView, onEdit, onDelete }: TransactionTableProps) {
@@ -79,7 +99,12 @@ export function TransactionTable({ data, selectedIds, onSelect, onSelectAll, onV
           data.map((item) => {
             const isSelected = selectedIds.includes(item.id);
             return (
-              <TableRow key={item.id} className={cn("group h-16", isSelected ? "bg-slate-50" : "hover:bg-slate-50/50")}>
+              <TableRow key={item.id} className={cn(
+                "group h-16 transition-colors",
+                isSelected
+                  ? "bg-slate-100"
+                  : "hover:bg-slate-50/60"
+              )}>
                 <TableCell className="px-4 text-center">
                   <Checkbox 
                     checked={isSelected}
@@ -97,7 +122,7 @@ export function TransactionTable({ data, selectedIds, onSelect, onSelectAll, onV
                     <span className={cn(TABLE_CELL_SECONDARY_CLASS, "text-xs truncate max-w-[140px]")}>{item.description ?? ""}</span>
                   </div>
                 </TableCell>
-                <TableCell className={cn(TRANSACTION_TABLE_COL.amount, TABLE_CELL_NUMBER_CLASS, "text-right px-4 text-slate-900")}>
+                <TableCell className={cn(TRANSACTION_TABLE_COL.amount, TABLE_CELL_NUMBER_CLASS, "text-right px-4 font-semibold", item.direction === 'Income' ? 'text-emerald-600' : 'text-rose-600')}>
                   {item.direction === 'Income' ? '+' : '-'}{formatCurrency(item.amount)}
                 </TableCell>
                 <TableCell className={cn(TRANSACTION_TABLE_COL.date, TABLE_CELL_SECONDARY_CLASS, "px-4")}>
