@@ -10,6 +10,7 @@ interface OrderState {
   customerName: string;
   discount: number;
   voucherCode: string | null;
+  notes: string;
   
   // Actions
   addItem: (item: CartItem) => void;
@@ -18,6 +19,7 @@ interface OrderState {
   setCustomer: (id: number | null, name: string) => void;
   setDiscount: (amount: number) => void;
   setVoucher: (code: string | null) => void;
+  setNotes: (notes: string) => void;
   clearCart: () => void;
   
   // Selectors/Computed
@@ -32,6 +34,7 @@ export const useOrderStore = create<OrderState>()(
       customerId: null,
       customerName: "Khách lẻ",
       discount: 0,
+      notes: "",
 
       addItem: (item) => set((state) => {
         const existing = state.cart.find(
@@ -77,7 +80,9 @@ export const useOrderStore = create<OrderState>()(
 
       setVoucher: (code) => set({ voucherCode: code }),
 
-      clearCart: () => set({ cart: [], customerId: null, customerName: "Khách lẻ", discount: 0, voucherCode: null }),
+      setNotes: (notes) => set({ notes }),
+
+      clearCart: () => set({ cart: [], customerId: null, customerName: "Khách lẻ", discount: 0, voucherCode: null, notes: "" }),
 
       getTotal: () => {
         return get().cart.reduce((sum, item) => sum + item.lineTotal, 0);

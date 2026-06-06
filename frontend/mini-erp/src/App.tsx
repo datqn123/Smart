@@ -27,6 +27,10 @@ import { TransactionsPage } from "./features/cashflow/pages/TransactionsPage"
 import { DebtPage } from "./features/cashflow/pages/DebtPage"
 import { LedgerPage } from "./features/cashflow/pages/LedgerPage"
 
+// Approvals
+import PendingApprovalsPage from "./features/approvals/pages/PendingApprovalsPage"
+import ApprovalHistoryPage from "./features/approvals/pages/ApprovalHistoryPage"
+
 // Analytics
 import { RevenuePage } from "./features/analytics/pages/RevenuePage"
 import { TopProductsPage } from "./features/analytics/pages/TopProductsPage"
@@ -102,8 +106,8 @@ function App() {
           <Route path="/orders/returns" element={<ReturnsPage />} />
 
           {/* Approvals hub removed — old URLs redirect */}
-          <Route path="/approvals/pending" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/approvals/history" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/approvals/pending" element={<PendingApprovalsPage />} />
+          <Route path="/approvals/history" element={<ApprovalHistoryPage />} />
 
           {/* Cashflow Routes */}
           <Route path="/cashflow/transactions" element={<TransactionsPage />} />

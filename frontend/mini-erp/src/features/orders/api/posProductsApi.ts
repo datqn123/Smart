@@ -23,6 +23,7 @@ export type SearchPosProductsParams = {
   search?: string
   categoryId?: number
   locationId?: number
+  page?: number
   /** Mặc định 40, tối đa 100 (BE clamp). */
   limit?: number
 }
@@ -42,6 +43,9 @@ export function searchPosProducts(params: SearchPosProductsParams = {}) {
   }
   if (params.locationId != null && params.locationId > 0) {
     q.set("locationId", String(params.locationId))
+  }
+  if (params.page != null && params.page > 0) {
+    q.set("page", String(params.page))
   }
   const lim = params.limit ?? 40
   q.set("limit", String(Math.min(100, Math.max(1, lim))))
