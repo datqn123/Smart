@@ -597,7 +597,7 @@ function FieldLogicSettings({
       )}
 
       <div className="mt-3 rounded-md border border-slate-200 bg-white p-3">
-        <div className="flex flex-col gap-3 lg:grid lg:grid-cols-[1fr_160px_1fr_140px_auto]">
+        <div className="flex flex-col gap-3 lg:grid lg:grid-cols-[1fr_160px_1fr_140px_auto] lg:items-end [&_[data-slot=select-trigger]]:w-full">
           <div>
             <Label>Điều kiện theo field</Label>
             <Select
@@ -635,7 +635,7 @@ function FieldLogicSettings({
             </Select>
           </div>
           <div>
-            <Label>Giá trị</Label>
+            <Label className="whitespace-nowrap">Giá trị</Label>
             <Input
               className="mt-1.5"
               value={conditional?.value ?? ""}
@@ -1030,7 +1030,17 @@ function LogicConnectorBuilder({
                 </Button>
               </div>
 
-              <div className="mt-3 grid gap-3 lg:grid-cols-5">
+              <div className="mt-3 flex flex-wrap items-center gap-1 text-xs text-slate-500">
+                {(["1. Trigger", "2. Source", "3. Operation", "4. Target"] as const).map((step, index) => (
+                  <span key={step} className="flex items-center gap-1">
+                    {index > 0 && <span className="text-slate-300">-&gt;</span>}
+                    <span className="rounded bg-slate-100 px-2 py-0.5 font-medium text-slate-700">{step}</span>
+                  </span>
+                ))}
+                <span className="ml-2 text-slate-400">-&gt; xem kết quả ở Review bên dưới</span>
+              </div>
+
+              <div className="mt-3 grid grid-cols-2 items-end gap-3 sm:grid-cols-4 [&_[data-slot=select-trigger]]:w-full">
                 <div>
                   <Label>1. Trigger</Label>
                   <Select value={selectedRule.trigger} onValueChange={(value) => updateRule(selectedRule.id, { trigger: value as BuilderLogicConnectorTrigger })}>
@@ -1085,15 +1095,15 @@ function LogicConnectorBuilder({
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
-                  <Label>Giá trị set / hệ số</Label>
-                  <Input
-                    className="mt-1.5"
-                    value={selectedRule.value}
-                    onChange={(event) => updateRule(selectedRule.id, { value: event.target.value })}
-                    placeholder={selectedRule.operation === "set" ? "Giá trị cố định" : "Tùy chọn"}
-                  />
-                </div>
+              </div>
+              <div className="mt-3">
+                <Label>Giá trị</Label>
+                <Input
+                  className="mt-1.5"
+                  value={selectedRule.value}
+                  onChange={(event) => updateRule(selectedRule.id, { value: event.target.value })}
+                  placeholder={selectedRule.operation === "set" ? "Giá trị cố định" : "Tùy chọn"}
+                />
               </div>
 
               <div className="mt-3">
@@ -1105,19 +1115,13 @@ function LogicConnectorBuilder({
                 <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
                   <p className="text-sm font-semibold text-slate-950">5. Review dry-run mock</p>
                   {dryRun && (
-                    <div className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
-                      <div className="rounded-md border border-slate-200 bg-white p-3">
-                        <p className="text-xs text-slate-500">Source</p>
-                        <p className="mt-1 font-medium text-slate-950">{dryRun.sourceValue}</p>
-                      </div>
-                      <div className="rounded-md border border-slate-200 bg-white p-3">
-                        <p className="text-xs text-slate-500">Target trước</p>
-                        <p className="mt-1 font-medium text-slate-950">{dryRun.beforeValue}</p>
-                      </div>
-                      <div className="rounded-md border border-slate-200 bg-white p-3">
-                        <p className="text-xs text-slate-500">Target sau</p>
-                        <p className="mt-1 font-medium text-slate-950">{dryRun.afterValue}</p>
-                      </div>
+                    <div className="mt-3 grid grid-cols-3 gap-x-4 gap-y-1 text-sm">
+                      <p className="text-xs text-slate-500">Source</p>
+                      <p className="text-xs text-slate-500">Target trước</p>
+                      <p className="text-xs text-slate-500">Target sau</p>
+                      <p className="font-semibold text-slate-950">{dryRun.sourceValue}</p>
+                      <p className="font-semibold text-slate-950">{dryRun.beforeValue}</p>
+                      <p className="font-semibold text-slate-950">{dryRun.afterValue}</p>
                     </div>
                   )}
                   <p className="mt-3 text-xs text-slate-500">{dryRun?.description}</p>
@@ -1544,7 +1548,7 @@ function CreateInterfaceWizard({
                 </div>
                 <div className="space-y-3">
                   {fields.map((field) => (
-                    <div key={field.id} className="grid gap-3 rounded-md border border-slate-200 p-3 lg:grid-cols-[1fr_1fr_180px_120px_120px]">
+                    <div key={field.id} className="grid gap-3 rounded-md border border-slate-200 p-3 lg:grid-cols-[1fr_1fr_180px_120px_120px] [&_[data-slot=select-trigger]]:w-full">
                       <div>
                         <Label>Tên trường</Label>
                         <Input className="mt-1.5" value={field.label} onChange={(event) => updateField(field.id, { label: event.target.value })} />
@@ -1744,8 +1748,18 @@ function EditInterfaceSettings({
   const [section, setSection] = useState<EditSection>("overview")
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [previewMode, setPreviewMode] = useState<"table" | "form">("table")
+  const [dirtySections, setDirtySections] = useState<Set<EditSection>>(() => new Set())
   const summary = validateBundle(bundle)
   const firstErrorSection = firstValidationSection(summary)
+
+  useEffect(() => {
+    if (!dirty) setDirtySections(new Set())
+  }, [dirty])
+
+  const handleChange = (updater: (current: BuilderPageBundle) => BuilderPageBundle) => {
+    setDirtySections((current) => (current.has(section) ? current : new Set([...current, section])))
+    onChange(updater)
+  }
 
   const jumpTo = (target: string) => {
     if (target === "data" || target === "logic") setSection("data")
@@ -1755,7 +1769,7 @@ function EditInterfaceSettings({
   }
 
   const updateField = (fieldId: string, patch: Partial<BuilderFieldDefinition>) => {
-    onChange((current) => ({
+    handleChange((current) => ({
       ...current,
       fields: current.fields.map((field) => (field.id === fieldId ? { ...field, ...patch } : field)),
       views: patch.fieldKey
@@ -1781,7 +1795,7 @@ function EditInterfaceSettings({
   }
 
   const addField = () => {
-    onChange((current) => {
+    handleChange((current) => {
       const field = makeDraftField(current.fields.length)
       return {
         ...current,
@@ -1807,7 +1821,7 @@ function EditInterfaceSettings({
   })
 
   const toggleListColumn = (field: BuilderFieldDefinition, checked: boolean) => {
-    onChange((current) => ({
+    handleChange((current) => ({
       ...current,
       views: {
         ...current.views,
@@ -1819,7 +1833,7 @@ function EditInterfaceSettings({
   }
 
   const updateListColumn = (fieldKey: string, patch: Partial<BuilderViewColumn>) => {
-    onChange((current) => ({
+    handleChange((current) => ({
       ...current,
       views: {
         ...current.views,
@@ -1829,14 +1843,14 @@ function EditInterfaceSettings({
   }
 
   const updateDefaultSort = (fieldKey: string, direction: "asc" | "desc") => {
-    onChange((current) => ({
+    handleChange((current) => ({
       ...current,
       views: { ...current.views, defaultSort: `${fieldKey} ${direction}` },
     }))
   }
 
   const toggleFilterField = (fieldKey: string, checked: boolean) => {
-    onChange((current) => ({
+    handleChange((current) => ({
       ...current,
       views: {
         ...current.views,
@@ -1848,7 +1862,7 @@ function EditInterfaceSettings({
   }
 
   const addFormSection = () => {
-    onChange((current) => ({
+    handleChange((current) => ({
       ...current,
       views: {
         ...current.views,
@@ -1861,7 +1875,7 @@ function EditInterfaceSettings({
   }
 
   const updateFormSection = (sectionId: string, patch: Partial<BuilderPageBundle["views"]["formSections"][number]>) => {
-    onChange((current) => ({
+    handleChange((current) => ({
       ...current,
       views: {
         ...current.views,
@@ -1871,7 +1885,7 @@ function EditInterfaceSettings({
   }
 
   const moveFormSection = (sectionId: string, direction: -1 | 1) => {
-    onChange((current) => {
+    handleChange((current) => {
       const index = current.views.formSections.findIndex((item) => item.id === sectionId)
       const nextIndex = index + direction
       if (index < 0 || nextIndex < 0 || nextIndex >= current.views.formSections.length) return current
@@ -1883,7 +1897,7 @@ function EditInterfaceSettings({
   }
 
   const removeFormSection = (sectionId: string) => {
-    onChange((current) => ({
+    handleChange((current) => ({
       ...current,
       views: {
         ...current.views,
@@ -1893,7 +1907,7 @@ function EditInterfaceSettings({
   }
 
   const toggleFormSectionField = (sectionId: string, fieldKey: string, checked: boolean) => {
-    onChange((current) => ({
+    handleChange((current) => ({
       ...current,
       views: {
         ...current.views,
@@ -1938,7 +1952,7 @@ function EditInterfaceSettings({
       </header>
 
       <div className="grid min-w-0 gap-4 xl:grid-cols-[240px_minmax(0,1fr)_320px]">
-        <nav className="min-w-0 rounded-md border border-slate-200 bg-white p-2 xl:self-start">
+        <nav className="min-w-0 rounded-md border border-slate-200 bg-white p-2 xl:sticky xl:top-4 xl:self-start">
           {(Object.keys(sectionLabels) as EditSection[]).map((key) => (
             <button
               key={key}
@@ -1949,7 +1963,10 @@ function EditInterfaceSettings({
               )}
               onClick={() => setSection(key)}
             >
-              {sectionLabels[key]}
+              <span className="flex w-full items-center justify-between gap-2">
+                <span>{sectionLabels[key]}</span>
+                {dirtySections.has(key) && <span className="h-2 w-2 flex-shrink-0 rounded-full bg-amber-400" />}
+              </span>
             </button>
           ))}
         </nav>
@@ -1974,7 +1991,7 @@ function EditInterfaceSettings({
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
                   <Label>Tên giao diện</Label>
-                  <Input className="mt-1.5" value={bundle.menuPage.label} onChange={(event) => onChange((current) => ({ ...current, menuPage: { ...current.menuPage, label: event.target.value }, entityDefinition: { ...current.entityDefinition, label: event.target.value } }))} />
+                  <Input className="mt-1.5" value={bundle.menuPage.label} onChange={(event) => handleChange((current) => ({ ...current, menuPage: { ...current.menuPage, label: event.target.value }, entityDefinition: { ...current.entityDefinition, label: event.target.value } }))} />
                 </div>
                 <div>
                   <Label>Route</Label>
@@ -1982,7 +1999,7 @@ function EditInterfaceSettings({
                 </div>
                 <div className="md:col-span-2">
                   <Label>Mô tả</Label>
-                  <Textarea className="mt-1.5 min-h-20" value={bundle.entityDefinition.description} onChange={(event) => onChange((current) => ({ ...current, entityDefinition: { ...current.entityDefinition, description: event.target.value }, menuPage: { ...current.menuPage, description: event.target.value } }))} />
+                  <Textarea className="mt-1.5 min-h-20" value={bundle.entityDefinition.description} onChange={(event) => handleChange((current) => ({ ...current, entityDefinition: { ...current.entityDefinition, description: event.target.value }, menuPage: { ...current.menuPage, description: event.target.value } }))} />
                 </div>
               </div>
             </div>
@@ -2002,7 +2019,7 @@ function EditInterfaceSettings({
               </div>
               <div className="space-y-3">
                 {bundle.fields.map((field) => (
-                  <div key={field.id} className="grid gap-3 rounded-md border border-slate-200 p-3 md:grid-cols-[1fr_1fr_180px_120px]">
+                  <div key={field.id} className="grid gap-3 rounded-md border border-slate-200 p-3 md:grid-cols-[1fr_1fr_180px_120px] [&_[data-slot=select-trigger]]:w-full">
                     <div>
                       <Label>Tên field</Label>
                       <Input className="mt-1.5" value={field.label} onChange={(event) => updateField(field.id, { label: event.target.value })} />
@@ -2110,7 +2127,7 @@ function EditInterfaceSettings({
                           {checked && <Badge variant="outline">{columnFormatLabels[column!.format]}</Badge>}
                         </div>
                         {checked && column && (
-                          <div className="mt-3 grid gap-3 md:grid-cols-[140px_1fr_1fr]">
+                          <div className="mt-3 grid gap-3 md:grid-cols-[140px_1fr_1fr] [&_[data-slot=select-trigger]]:w-full">
                             <div>
                               <Label>Width</Label>
                               <Input
@@ -2155,7 +2172,7 @@ function EditInterfaceSettings({
               <div className="grid gap-4 lg:grid-cols-2">
                 <div className="rounded-md border border-slate-200 p-4">
                   <h3 className="text-sm font-semibold text-slate-950">Default sort</h3>
-                  <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_150px]">
+                  <div className="mt-3 grid items-end gap-3 sm:grid-cols-[1fr_150px] [&_[data-slot=select-trigger]]:w-full">
                     <div>
                       <Label>Field sort mặc định</Label>
                       <Select value={sortFieldKey || "__none"} onValueChange={(value) => updateDefaultSort(value === "__none" ? activeFields[0]?.fieldKey ?? "" : value, sortDirection === "desc" ? "desc" : "asc")}>
@@ -2258,7 +2275,7 @@ function EditInterfaceSettings({
                         <Checkbox
                           checked={bundle.permissions[action].includes(role)}
                           onCheckedChange={(checked) =>
-                            onChange((current) => ({
+                            handleChange((current) => ({
                               ...current,
                               permissions: {
                                 ...current.permissions,
@@ -2309,12 +2326,12 @@ function EditInterfaceSettings({
                 <div className="space-y-3">
                   <WorkflowDesigner
                     workflow={bundle.workflow}
-                    onChange={(workflow) => onChange((current) => ({ ...current, workflow }))}
+                    onChange={(workflow) => handleChange((current) => ({ ...current, workflow }))}
                   />
                   <LogicConnectorBuilder
                     logicConnector={bundle.logicConnector}
                     bundle={bundle}
-                    onChange={(logicConnector) => onChange((current) => ({ ...current, logicConnector }))}
+                    onChange={(logicConnector) => handleChange((current) => ({ ...current, logicConnector }))}
                   />
                   <div className="grid gap-3 md:grid-cols-2">
                   {["Inventory effect", "AI copilot"].map((item) => (
@@ -2331,7 +2348,7 @@ function EditInterfaceSettings({
           )}
         </main>
 
-        <aside className="rounded-md border border-slate-200 bg-white p-4 xl:self-start">
+        <aside className="rounded-md border border-slate-200 bg-white p-4 xl:sticky xl:top-4 xl:self-start">
           <ValidationSummaryPanel summary={summary} onJump={jumpTo} compact />
           <div className="mt-4 rounded-md border border-slate-200 p-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
@@ -2500,7 +2517,7 @@ export function CustomBuilderPage() {
 
   return (
     <div className="h-full overflow-y-auto bg-slate-50 p-4 md:p-6">
-      <div className="mx-auto max-w-7xl">
+      <div className={mode === "edit" ? "w-full" : "mx-auto max-w-7xl"}>
         {mode === "list" && (
           <BuilderListPage
             interfaces={interfaces}
