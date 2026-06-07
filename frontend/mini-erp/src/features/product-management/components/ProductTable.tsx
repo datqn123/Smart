@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Eye, Edit2, Trash2 } from "lucide-react"
 import { formatCurrency } from "@/features/inventory/utils"
+import { StatusBadge } from "@/components/shared/StatusBadge"
 import { cn } from "@/lib/utils"
 import type { Product } from "../types"
 import {
@@ -85,10 +86,7 @@ export function ProductTable({
       head: <TableHead className={cn(PRODUCT_TABLE_COL.status, TABLE_HEAD_CLASS, "px-4")}>Trạng thái</TableHead>,
       cell: (item: Product) => (
         <TableCell className={cn(PRODUCT_TABLE_COL.status, "px-4")}>
-          <Badge className={cn("text-xs font-semibold border shadow-none gap-1.5", item.status === "Active" ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-500 border-slate-200")}>
-            <span className={cn("w-1.5 h-1.5 rounded-full inline-block", item.status === "Active" ? "bg-emerald-500" : "bg-slate-400")} />
-            {item.status === "Active" ? "Hoạt động" : "Ngừng"}
-          </Badge>
+          <StatusBadge status={item.status} />
         </TableCell>
       ),
     },

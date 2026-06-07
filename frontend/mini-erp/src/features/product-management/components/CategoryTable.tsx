@@ -1,9 +1,9 @@
 import { useState } from "react"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Eye, Edit2, Trash2, ChevronDown, ChevronRight, PlusCircle } from "lucide-react"
+import { StatusBadge } from "@/components/shared/StatusBadge"
 import type { Category } from "../types"
 import { cn } from "@/lib/utils"
 import {
@@ -88,10 +88,7 @@ function CategoryRow({
           }
           return (
             <TableCell key={columnKey} className="px-4">
-              <Badge className={cn("text-xs font-semibold border shadow-none gap-1.5", category.status === "Active" ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-500 border-slate-200")}>
-                <span className={cn("w-1.5 h-1.5 rounded-full inline-block", category.status === "Active" ? "bg-emerald-500" : "bg-slate-400")} />
-                {category.status === "Active" ? "Hoạt động" : "Ngưng"}
-              </Badge>
+              <StatusBadge status={category.status} />
             </TableCell>
           )
         })}

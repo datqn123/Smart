@@ -1,6 +1,6 @@
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Search, Trash2, Edit2, Plus } from "lucide-react"
+import { Search, Trash2, Plus } from "lucide-react"
 
 export type ProductCategoryFilterOption = { id: number; name: string }
 
@@ -71,9 +71,6 @@ export function ProductToolbar({
         <div className="flex items-center gap-2 w-full sm:w-auto">
           {hasSelection && (
             <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-1">
-              <Button variant="outline" size="sm" onClick={() => onAction("edit")} className="h-10 px-3 rounded-md">
-                <Edit2 className="h-4 w-4 mr-1.5" /> Sửa
-              </Button>
               {canBulkDelete && (
                 <Button variant="destructive" size="sm" onClick={() => onAction("delete")} className="h-10 px-3 rounded-md bg-red-600 hover:bg-red-700" title="Xóa hàng loạt (Owner)">
                   <Trash2 className="h-4 w-4 mr-1.5" /> Xoá

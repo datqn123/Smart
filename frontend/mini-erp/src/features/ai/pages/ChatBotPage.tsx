@@ -755,6 +755,12 @@ export function ChatBotPage() {
                  </span>
                </div>
             )}
+           {progressText && (
+              <div className="flex items-center gap-3 px-4 py-2 bg-amber-50 border border-amber-100 rounded-xl">
+                <Loader2 className="h-4 w-4 text-amber-600 animate-spin shrink-0" />
+                <span className="text-xs font-semibold text-amber-700">{progressText}</span>
+              </div>
+           )}
            <div className="flex items-end gap-2 bg-slate-50 border border-slate-200 rounded-2xl p-2 focus-within:ring-1 focus-within:ring-blue-500/20 focus-within:border-blue-400/50 transition-all duration-300">
             <textarea
               className="flex-1 max-h-32 min-h-[40px] bg-transparent border-none focus:ring-0 text-[15px] py-2 px-3 text-slate-700 placeholder:text-slate-400 resize-none leading-relaxed transition-all"

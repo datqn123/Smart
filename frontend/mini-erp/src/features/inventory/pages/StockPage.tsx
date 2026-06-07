@@ -28,6 +28,7 @@ import {
   type GetInventoryListParams,
 } from "../api/inventoryApi"
 import { ApiRequestError } from "@/lib/api/http"
+import { toastApiError } from "@/lib/api/toastApiError"
 import { postStockReceipt, type StockReceiptCreateBody } from "../api/stockReceiptsApi"
 import { postStockDispatch, type StockDispatchCreateBody } from "../api/dispatchApi"
 import { DATA_TABLE_SHELL_CLASS, DATA_TABLE_SCROLL_CLASS } from "@/lib/data-table-layout"
@@ -267,12 +268,7 @@ export function StockPage() {
         navigate(`/inventory/inbound?highlight=${created.id}`)
       }
       catch (e) {
-        if (e instanceof ApiRequestError) {
-          toast.error(e.body?.message ?? "Không tạo được phiếu nhập")
-        }
-        else {
-          toast.error("Không tạo được phiếu nhập")
-        }
+        toastApiError(e, "Không tạo được phiếu nhập")
         throw e
       }
     },
@@ -291,12 +287,7 @@ export function StockPage() {
         navigate(`/inventory/dispatch?highlight=${created.id}`)
       }
       catch (e) {
-        if (e instanceof ApiRequestError) {
-          toast.error(e.body?.message ?? "Không tạo được phiếu xuất")
-        }
-        else {
-          toast.error("Không tạo được phiếu xuất")
-        }
+        toastApiError(e, "Không tạo được phiếu xuất")
         throw e
       }
     },
@@ -335,12 +326,7 @@ export function StockPage() {
         setSelectedIds([])
       }
       catch (e) {
-        if (e instanceof ApiRequestError) {
-          toast.error(e.body?.message ?? "Không lưu được")
-        }
-        else {
-          toast.error("Không lưu được")
-        }
+        toastApiError(e, "Không lưu được")
       }
       return
     }
@@ -373,11 +359,7 @@ export function StockPage() {
       setSelectedIds([])
       setPendingBulkItems([])
     } catch (e) {
-      if (e instanceof ApiRequestError) {
-        toast.error(e.body?.message ?? "Không lưu được")
-      } else {
-        toast.error("Không lưu được")
-      }
+      toastApiError(e, "Không lưu được")
     } finally {
       setIsBulkSaving(false)
     }

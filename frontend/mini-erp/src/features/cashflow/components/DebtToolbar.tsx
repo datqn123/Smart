@@ -1,6 +1,6 @@
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Search, Plus, Filter, Download, CreditCard, Calendar } from "lucide-react"
+import { Search, Plus, Filter, CreditCard, Calendar } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 interface DebtToolbarProps {
@@ -106,15 +106,6 @@ export function DebtToolbar({
           </div>
         ) : (
           <>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="h-11 px-4 text-slate-600 border-slate-200 hover:bg-slate-50 rounded-lg"
-              onClick={() => onAction("export")}
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Xuất Excel
-            </Button>
             <Button 
               className="h-11 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-lg ml-auto"
               onClick={() => onAction("create")}

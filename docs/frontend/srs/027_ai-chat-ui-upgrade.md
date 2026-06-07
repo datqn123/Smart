@@ -74,7 +74,8 @@ Tất cả thay đổi nằm trong `ChatBotPage.tsx`:
 
 ### R-04: Typing indicator — cải thiện animation
 - 3 chấm đổi màu: chấm 1 = `bg-blue-400`, chấm 2 = `bg-indigo-400`, chấm 3 = `bg-violet-400`
-- Thêm progress text nhỏ bên dưới nếu `progressText` có giá trị (hiện text đang xử lý ngay trong typing bubble thay vì banner riêng ở input area)
+- Thêm progress text nhỏ bên dưới 3 chấm trong typing bubble (phụ)
+- **GIỮ NGUYÊN** banner amber `progressText` ở input area — banner này là UX quan trọng, luôn visible dù chat scroll lên; không xoá (**correction từ review thực tế**)
 
 ### R-05: Mode pills — thêm icon
 Mỗi mode có icon lucide-react tương ứng:

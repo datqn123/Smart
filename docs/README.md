@@ -9,17 +9,17 @@ docs/
 ├── dev/                          # Phát triển tính năng MỚI
 │   ├── ai-python/                #   PRD, SRS, ADR, Tasks AI (Task001-006)
 │   ├── backend/                  #   SRS backend, task artifacts, Postman
-│   └── frontend/                 #   SRS, API contracts, ADR, BA, database...
+│   └── frontend/                 #   SRS, API contracts, ADR, database...
 │
 ├── fix-bug/                      # SỬA LỖI
 │   ├── ai-python/                #   Progress bar fix plan
 │   ├── backend/                  #   Bug reports
 │   └── frontend/                 #   Bug reports, SRS fix, QA fix
 │
-├── upgrade/                      # NÂNG CẤP TÍNH NĂNG
-│   ├── ai-python/                #   SQL factory upgrade, improvement plans
-│   ├── backend/                  #   (chưa có)
-│   └── frontend/                 #   UI enhancement, standardization, sync
+├── upgrade/                      # NÂNG CẤP TÍNH NĂNG (AI-Python)
+│   └── ai-python/                #   SQL factory upgrade (Task007)
+│
+├── frontend/                     # Workflow chính (S/RS, Tech Lead, QA, Code Review)
 │
 ├── guides/                       # Hướng dẫn nghiệp vụ (GUID_ERP.md)
 ├── table-description/            # Schema database (30 tables)
@@ -30,6 +30,6 @@ docs/
 
 | Category | Định nghĩa | Ví dụ |
 |----------|-----------|-------|
-| `dev/` | Xây dựng tính năng mới | Task017 (stock interface), Task039 (inbound dispatch CRUD), backend APIs |
-| `fix-bug/` | Sửa lỗi | Task016 (fix dropdown), Task030 (fix parse error), Task079 (fix white screen) |
-| `upgrade/` | Cải tiến / chuẩn hóa | Task033 (standardization), Task036 (polish), AI improvement plans |
+| `dev/` | Xây dựng tính năng mới | Backend SRS, frontend API contracts, database docs |
+| `fix-bug/` | Sửa lỗi | Bug reports, SRS fix, QA fix |
+| `upgrade/` | Cải tiến / chuẩn hóa | AI-Python SQL factory upgrade |

@@ -4,10 +4,12 @@ import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Eye, Edit2, Trash2 } from "lucide-react"
 import { formatCurrency } from "@/features/inventory/utils"
+import { StatusBadge } from "@/components/shared/StatusBadge"
 import { 
   DATA_TABLE_ROOT_CLASS, 
   DATA_TABLE_ACTION_HEAD_CLASS, 
   DATA_TABLE_ACTION_CELL_CLASS,
+  DATA_TABLE_CHECKBOX_CLASS,
   TRANSACTION_TABLE_COL,
   TABLE_HEAD_CLASS,
   TABLE_CELL_PRIMARY_CLASS,
@@ -26,27 +28,6 @@ interface TransactionTableProps {
   onView: (item: Transaction) => void
   onEdit: (item: Transaction) => void
   onDelete: (item: Transaction) => void
-}
-
-function StatusBadge({ status }: { status: string }) {
-  if (status === "Completed") return (
-    <Badge className="text-xs font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200 shadow-none gap-1.5">
-      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
-      Hoàn thành
-    </Badge>
-  )
-  if (status === "Pending") return (
-    <Badge className="text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-200 shadow-none gap-1.5">
-      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
-      Chờ xử lý
-    </Badge>
-  )
-  return (
-    <Badge className="text-xs font-semibold bg-rose-100 text-rose-600 border border-rose-200 shadow-none gap-1.5">
-      <span className="w-1.5 h-1.5 rounded-full bg-rose-400 inline-block" />
-      Đã huỷ
-    </Badge>
-  )
 }
 
 function DirectionBadge({ direction }: { direction: string }) {
@@ -74,7 +55,7 @@ export function TransactionTable({ data, selectedIds, onSelect, onSelectAll, onV
             <Checkbox 
               checked={allSelected ? true : someSelected ? "indeterminate" : false} 
               onCheckedChange={(checked) => onSelectAll(checked as boolean)}
-              className="border-slate-300 data-[state=checked]:bg-slate-800 data-[state=checked]:text-white data-[state=checked]:border-slate-800"
+              className={DATA_TABLE_CHECKBOX_CLASS}
             />
           </TableHead>
           <TableHead className={cn(TRANSACTION_TABLE_COL.code, TABLE_HEAD_CLASS, "px-4")}>Mã GD</TableHead>
@@ -109,7 +90,7 @@ export function TransactionTable({ data, selectedIds, onSelect, onSelectAll, onV
                   <Checkbox 
                     checked={isSelected}
                     onCheckedChange={() => onSelect(item.id)}
-                    className="border-slate-300 data-[state=checked]:bg-slate-800 data-[state=checked]:text-white data-[state=checked]:border-slate-800"
+                    className={DATA_TABLE_CHECKBOX_CLASS}
                   />
                 </TableCell>
                 <TableCell className={cn(TRANSACTION_TABLE_COL.code, TABLE_CELL_MONO_CLASS, "px-4")}>{item.transactionCode}</TableCell>
@@ -129,7 +110,7 @@ export function TransactionTable({ data, selectedIds, onSelect, onSelectAll, onV
                   {new Date(item.transactionDate).toLocaleDateString('vi-VN')}
                 </TableCell>
                 <TableCell className="px-4 text-center">
-                  <StatusBadge status={item.status} />
+                  <StatusBadge status={item.status} context="finance" />
                 </TableCell>
                 <TableCell className={DATA_TABLE_ACTION_CELL_CLASS}>
                   <div className="flex items-center justify-center gap-1">

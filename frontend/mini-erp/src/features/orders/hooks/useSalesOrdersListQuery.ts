@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { ApiRequestError } from "@/lib/api/http"
 import { toast } from "sonner"
+import { toastApiError } from "@/lib/api/toastApiError"
 import type { Order } from "../types"
 import {
   getSalesOrderList,
@@ -14,14 +15,6 @@ import {
 
 const SEARCH_DEBOUNCE_MS = 400
 const PAGE_SIZE = 20
-
-function errToast(e: unknown) {
-  if (e instanceof ApiRequestError) {
-    toast.error(e.body?.message ?? e.message)
-  } else {
-    toast.error(e instanceof Error ? e.message : "Đã xảy ra lỗi")
-  }
-}
 
 type Options = {
   /** Luôn gửi lên BE để Staff không bị 403 (OQ-8a). */
@@ -100,7 +93,7 @@ export function useSalesOrdersListQuery({ orderChannel }: Options) {
       )
       return
     }
-    errToast(listError)
+    toastApiError(listError)
   }, [isListError, listError])
 
   useEffect(() => {

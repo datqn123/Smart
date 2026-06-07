@@ -7,22 +7,22 @@ describe('StatusBadge UI - Màu sắc & Layout (Task004-007)', () => {
     it('nên có màu xanh cho "Còn hàng"', () => {
       const { container } = render(<StatusBadge status="in-stock" type="inventory" />);
       const badge = container.firstChild;
-      expect(badge).toHaveClass('bg-green-50');
-      expect(badge).toHaveClass('text-green-700');
+      expect(badge).toHaveClass('bg-emerald-100');
+      expect(badge).toHaveClass('text-emerald-700');
     });
 
     it('nên có màu đỏ cho "Sắp hết"', () => {
       const { container } = render(<StatusBadge status="low-stock" type="inventory" />);
       const badge = container.firstChild;
-      expect(badge).toHaveClass('bg-red-50');
-      expect(badge).toHaveClass('text-red-700');
+      expect(badge).toHaveClass('bg-amber-100');
+      expect(badge).toHaveClass('text-amber-700');
     });
 
     it('nên có màu đỏ đậm cho "Hết hàng"', () => {
       const { container } = render(<StatusBadge status="out-of-stock" type="inventory" />);
       const badge = container.firstChild;
-      expect(badge).toHaveClass('bg-red-100');
-      expect(badge).toHaveClass('text-red-800');
+      expect(badge).toHaveClass('bg-rose-100');
+      expect(badge).toHaveClass('text-rose-600');
     });
   });
 
@@ -34,47 +34,47 @@ describe('StatusBadge UI - Màu sắc & Layout (Task004-007)', () => {
 
     it('nên có màu vàng cho Pending', () => {
       const { container } = render(<StatusBadge status="Pending" type="receipt" />);
-      expect(container.firstChild).toHaveClass('bg-amber-50');
+      expect(container.firstChild).toHaveClass('bg-amber-100');
     });
 
     it('nên có màu xanh lá cho Approved', () => {
       const { container } = render(<StatusBadge status="Approved" type="receipt" />);
-      expect(container.firstChild).toHaveClass('bg-green-50');
+      expect(container.firstChild).toHaveClass('bg-emerald-100');
     });
 
     it('nên có màu đỏ cho Rejected', () => {
       const { container } = render(<StatusBadge status="Rejected" type="receipt" />);
-      expect(container.firstChild).toHaveClass('bg-red-50');
+      expect(container.firstChild).toHaveClass('bg-rose-100');
     });
   });
 
   describe('Dispatch Status Colors (Task006)', () => {
     it('nên có màu vàng cho Pending', () => {
       const { container } = render(<StatusBadge status="Pending" type="dispatch" />);
-      expect(container.firstChild).toHaveClass('bg-amber-50');
+      expect(container.firstChild).toHaveClass('bg-amber-100');
     });
 
     it('nên có màu xanh lá cho Full', () => {
       const { container } = render(<StatusBadge status="Full" type="dispatch" />);
-      expect(container.firstChild).toHaveClass('bg-green-50');
+      expect(container.firstChild).toHaveClass('bg-emerald-100');
     });
 
-    it('nên có màu xanh dương cho Partial', () => {
+    it('nên có màu vàng cho Partial', () => {
       const { container } = render(<StatusBadge status="Partial" type="dispatch" />);
-      expect(container.firstChild).toHaveClass('bg-blue-50');
+      expect(container.firstChild).toHaveClass('bg-amber-100');
     });
 
-    it('Partial + shortageWarning → nhãn thiếu hàng (cam)', () => {
+    it('Partial + shortageWarning → nhãn thiếu hàng (rose)', () => {
       const { container } = render(<StatusBadge status="Partial" type="dispatch" shortageWarning />);
-      expect(container.firstChild).toHaveClass('bg-orange-50');
-      expect(container.firstChild).toHaveClass('text-orange-800');
+      expect(container.firstChild).toHaveClass('bg-rose-100');
+      expect(container.firstChild).toHaveClass('text-rose-600');
     });
   });
 
   describe('Audit Status Colors (Task007)', () => {
     it('nên có màu vàng cho Pending', () => {
       const { container } = render(<StatusBadge status="Pending" type="audit" />);
-      expect(container.firstChild).toHaveClass('bg-amber-50');
+      expect(container.firstChild).toHaveClass('bg-amber-100');
     });
 
     it('nên có màu xanh dương cho In Progress', () => {
@@ -84,14 +84,14 @@ describe('StatusBadge UI - Màu sắc & Layout (Task004-007)', () => {
 
     it('nên có màu xanh lá cho Completed', () => {
       const { container } = render(<StatusBadge status="Completed" type="audit" />);
-      expect(container.firstChild).toHaveClass('bg-green-50');
+      expect(container.firstChild).toHaveClass('bg-emerald-100');
     });
   });
 
   describe('Typography & Spacing', () => {
-    it('nên có font-medium', () => {
+    it('nên có font-semibold', () => {
       const { container } = render(<StatusBadge status="Approved" type="receipt" />);
-      expect(container.firstChild).toHaveClass('font-medium');
+      expect(container.firstChild).toHaveClass('font-semibold');
     });
 
     it('nên có text-xs (12px)', () => {
@@ -99,10 +99,10 @@ describe('StatusBadge UI - Màu sắc & Layout (Task004-007)', () => {
       expect(container.firstChild).toHaveClass('text-xs');
     });
 
-    it('nên có padding px-2.5 py-1', () => {
+    it('nên có padding badge mặc định', () => {
       const { container } = render(<StatusBadge status="Approved" type="receipt" />);
-      expect(container.firstChild).toHaveClass('px-2.5');
-      expect(container.firstChild).toHaveClass('py-1');
+      expect(container.firstChild).toHaveClass('px-2');
+      expect(container.firstChild).toHaveClass('py-0.5');
     });
   });
 });

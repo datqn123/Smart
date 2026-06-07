@@ -10,7 +10,8 @@ import { toast } from "sonner"
 import { Users, Truck, AlertCircle, type LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { ApiRequestError } from "@/lib/api/http"
+import { DATA_TABLE_SCROLL_CLASS, DATA_TABLE_SHELL_CLASS } from "@/lib/data-table-layout"
+import { toastApiError } from "@/lib/api/toastApiError"
 import { DEBTS_LIST_QUERY_KEY, patchDebt, postDebt, type DebtCreateBody } from "../api/debtsApi"
 import { useDebtsListQuery } from "../hooks/useDebtsListQuery"
 
@@ -69,12 +70,7 @@ export function DebtPage() {
 
   useEffect(() => {
     if (!debtsQuery.isError) return
-    const e = debtsQuery.error
-    if (e instanceof ApiRequestError) {
-      toast.error(e.body?.message ?? e.message)
-    } else {
-      toast.error(e instanceof Error ? e.message : "Không tải được sổ nợ")
-    }
+    toastApiError(debtsQuery.error, "Không tải được sổ nợ")
   }, [debtsQuery.isError, debtsQuery.error])
 
   useEffect(() => {
@@ -118,9 +114,6 @@ export function DebtPage() {
             toast.error("Vui lòng chọn duy nhất 1 khoản nợ để cập nhật thanh toán")
         }
         break;
-      case "export":
-        toast.info("Đang xuất dữ liệu Excel...")
-        break;
     }
   }
 
@@ -162,11 +155,7 @@ export function DebtPage() {
         await queryClient.invalidateQueries({ queryKey: [...DEBTS_LIST_QUERY_KEY] })
         setIsFormOpen(false)
       } catch (e) {
-        if (e instanceof ApiRequestError) {
-          toast.error(e.body?.message ?? e.message)
-        } else {
-          toast.error(e instanceof Error ? e.message : "Không tạo được khoản nợ")
-        }
+        toastApiError(e, "Không tạo được khoản nợ")
       }
       return
     }
@@ -181,11 +170,7 @@ export function DebtPage() {
       setSelectedItem(updated)
       setIsFormOpen(false)
     } catch (e) {
-      if (e instanceof ApiRequestError) {
-        toast.error(e.body?.message ?? e.message)
-      } else {
-        toast.error(e instanceof Error ? e.message : "Không cập nhật được khoản nợ")
-      }
+      toastApiError(e, "Không cập nhật được khoản nợ")
     }
   }
 
@@ -200,19 +185,19 @@ export function DebtPage() {
 
         <div className="flex flex-wrap items-center gap-4">
             <StatCard 
-                label="Nợ phải thu" 
+                label="Phải thu (trang này)" 
                 amount={totalReceivable} 
                 icon={Users} 
                 color="blue" 
             />
             <StatCard 
-                label="Nợ phải trả" 
+                label="Phải trả (trang này)" 
                 amount={totalPayable} 
                 icon={Truck} 
                 color="indigo" 
             />
             <StatCard 
-                label="Quá hạn" 
+                label="Quá hạn (trang này)" 
                 amount={overdueCount} 
                 icon={AlertCircle} 
                 color="rose"
@@ -238,8 +223,8 @@ export function DebtPage() {
           onAction={handleToolbarAction}
         />
         
-        <div className="flex-1 flex flex-col min-h-0 bg-white border border-slate-200/60 rounded-xl overflow-hidden shadow-md">
-          <div className="flex-1 overflow-y-auto relative scroll-smooth [scrollbar-gutter:stable] min-h-0">
+        <div className={DATA_TABLE_SHELL_CLASS}>
+          <div className={DATA_TABLE_SCROLL_CLASS}>
             {debtsQuery.isFetching ? (
               <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/60 text-sm font-medium text-slate-500">
                 Đang tải…
@@ -254,7 +239,7 @@ export function DebtPage() {
               onEdit={handleEdit}
             />
           </div>
-          <div className="flex items-center justify-between gap-2 border-t border-slate-100 px-4 py-2 text-xs font-bold text-slate-600">
+          <div className="flex items-center justify-between flex-wrap gap-2 px-3 py-2 border-t border-slate-200 bg-slate-50/80 text-sm text-slate-600 min-h-11 shrink-0">
             <span>
               Đang hiển thị {debtsQuery.debts.length} / {debtsQuery.isFetching ? "…" : debtsQuery.total} khoản nợ
             </span>

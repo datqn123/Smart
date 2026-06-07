@@ -8,8 +8,8 @@ import { History, Search, Calendar, RotateCcw, Filter } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ApiRequestError } from "@/lib/api/http"
-import { toast } from "sonner"
+import { DATA_TABLE_SCROLL_CLASS, DATA_TABLE_SHELL_CLASS } from "@/lib/data-table-layout"
+import { toastApiError } from "@/lib/api/toastApiError"
 import {
   APPROVALS_HISTORY_QUERY_KEY,
   getApprovalsHistory,
@@ -19,14 +19,6 @@ import { ApprovalHistoryTable } from "@/features/approvals/components/ApprovalHi
 
 const PAGE_SIZE = 20
 const SEARCH_DEBOUNCE_MS = 400
-
-function errToast(e: unknown) {
-  if (e instanceof ApiRequestError) {
-    toast.error(e.body?.message ?? e.message)
-  } else {
-    toast.error(e instanceof Error ? e.message : "Đã xảy ra lỗi")
-  }
-}
 
 function toNumber(v: number | string): number {
   return typeof v === "number" ? v : Number(v)
@@ -100,7 +92,7 @@ export default function ApprovalHistoryPage() {
   })
 
   useEffect(() => {
-    if (historyQuery.isError) errToast(historyQuery.error)
+    if (historyQuery.isError) toastApiError(historyQuery.error)
   }, [historyQuery.isError, historyQuery.error])
 
   const items = historyQuery.data?.items ?? []
@@ -229,8 +221,8 @@ export default function ApprovalHistoryPage() {
         </div>
       ) : null}
 
-      <div className="flex-1 flex flex-col min-h-0 bg-white border border-slate-200/60 rounded-xl overflow-hidden shadow-md">
-        <div className="flex-1 overflow-y-auto relative scroll-smooth [scrollbar-gutter:stable] min-h-0">
+      <div className={DATA_TABLE_SHELL_CLASS}>
+        <div className={DATA_TABLE_SCROLL_CLASS}>
           <ApprovalHistoryTable
             items={items}
             onView={(row) => {
@@ -240,7 +232,7 @@ export default function ApprovalHistoryPage() {
           />
         </div>
         {total > PAGE_SIZE ? (
-          <div className="flex items-center justify-between gap-2 border-t border-slate-100 px-4 py-2 text-xs font-bold text-slate-600">
+          <div className="flex items-center justify-between flex-wrap gap-2 px-3 py-2 border-t border-slate-200 bg-slate-50/80 text-sm text-slate-600 min-h-11 shrink-0">
             <span>
               Trang {page} / {totalPages} — {total} bản ghi
             </span>

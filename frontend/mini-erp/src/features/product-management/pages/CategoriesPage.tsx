@@ -10,6 +10,8 @@ import { CategoryDetailDialog } from "../components/CategoryDetailDialog"
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog"
 import { toast } from "sonner"
 import { ApiRequestError } from "@/lib/api/http"
+import { DATA_TABLE_SCROLL_CLASS, DATA_TABLE_SHELL_CLASS } from "@/lib/data-table-layout"
+import { toastApiError } from "@/lib/api/toastApiError"
 import {
   deleteCategory,
   getCategoryById,
@@ -36,21 +38,13 @@ function flattenCategories(categories: Category[]): Category[] {
   return result
 }
 
-function errToast(e: unknown) {
-  if (e instanceof ApiRequestError) {
-    toast.error(e.body?.message ?? e.message)
-  } else {
-    toast.error(e instanceof Error ? e.message : "Đã xảy ra lỗi")
-  }
-}
-
 /**
  * Toast theo envelope Task032: **409** / **400** (message + `details` khi không map form).
  * **400** + `details` có key: `CategoryForm` gọi `setError` — không toast (tránh trùng).
  */
 function toastCategoryMutationEnvelope(e: unknown) {
   if (!(e instanceof ApiRequestError)) {
-    errToast(e)
+    toastApiError(e)
     return
   }
   const { status, body } = e
@@ -75,7 +69,7 @@ function toastCategoryMutationEnvelope(e: unknown) {
     toast.error(body.message ?? e.message)
     return
   }
-  errToast(e)
+  toastApiError(e)
 }
 
 type CategoryFormData = {
@@ -337,7 +331,7 @@ export function CategoriesPage() {
         canBulkDelete={isOwner}
       />
 
-      <div className="flex-1 flex flex-col min-h-0 bg-white border border-slate-200/60 rounded-xl overflow-hidden shadow-md">
+      <div className={DATA_TABLE_SHELL_CLASS}>
         {isPending && !listData ? (
           <div className="p-8 text-center text-slate-500 flex-1" role="status">
             Đang tải danh sách…
@@ -346,9 +340,9 @@ export function CategoriesPage() {
           <div className="p-8 text-center text-red-600 flex-1" role="alert">
             {error instanceof ApiRequestError ? error.body.message : "Không tải được danh mục."}
           </div>
-        ) : (
+          ) : (
           <>
-            <div className="flex-1 overflow-y-auto relative scroll-smooth [scrollbar-gutter:stable] min-h-0">
+            <div className={DATA_TABLE_SCROLL_CLASS}>
               <CategoryTable
                 data={categories}
                 visibleColumnKeys={visibleColumnKeys}

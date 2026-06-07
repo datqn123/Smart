@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Eye, Edit2, Trash2 } from "lucide-react"
 import { formatCurrency } from "@/features/inventory/utils"
+import { StatusBadge } from "@/components/shared/StatusBadge"
 import { 
   DATA_TABLE_ROOT_CLASS, 
   DATA_TABLE_ACTION_HEAD_CLASS, 
@@ -35,26 +36,6 @@ interface OrderTableProps {
   hideStatusColumn?: boolean
   /** SRS-020 — ẩn TypeBadge kênh bán khi endpoint chỉ trả 1 loại (Retail). */
   hideTypeBadge?: boolean
-}
-
-function StatusBadge({ status }: { status: string }) {
-  switch (status) {
-    case 'Completed':
-    case 'Delivered':
-      return <Badge className="text-xs font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200 shadow-none gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />Hoàn thành</Badge>
-    case 'Shipped':
-      return <Badge className="text-xs font-semibold bg-blue-50 text-blue-600 border border-blue-200 shadow-none gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block" />Đang giao</Badge>
-    case 'Processing':
-      return <Badge className="text-xs font-semibold bg-indigo-50 text-indigo-600 border border-indigo-200 shadow-none gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-indigo-400 inline-block" />Đang xử lý</Badge>
-    case 'Partial':
-      return <Badge className="text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-200 shadow-none gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />Giao một phần</Badge>
-    case 'Pending':
-      return <Badge className="text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-200 shadow-none gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />Chờ duyệt</Badge>
-    case 'Cancelled':
-      return <Badge className="text-xs font-semibold bg-rose-100 text-rose-600 border border-rose-200 shadow-none gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-rose-400 inline-block" />Đã huỷ</Badge>
-    default:
-      return <Badge className="text-xs font-semibold bg-slate-50 text-slate-600 border border-slate-200 shadow-none">{status}</Badge>
-  }
 }
 
 function TypeBadge({ type }: { type: string }) {
@@ -168,7 +149,7 @@ export function OrderTable({
                 </TableCell>
                 {!hideStatusColumn && (
                   <TableCell className={cn(ORDER_TABLE_COL.status, "px-4 text-center min-w-0")}>
-                    <StatusBadge status={item.status} />
+                    <StatusBadge status={item.status} context="order" />
                   </TableCell>
                 )}
                 <TableCell className={singleViewAction ? DATA_TABLE_ACTION_SINGLE_CELL_CLASS : DATA_TABLE_ACTION_CELL_CLASS}>

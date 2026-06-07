@@ -5,10 +5,17 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { PageTitleProvider } from "@/context/PageTitleContext"
 import { ChatBotPage } from "./ChatBotPage"
 
-const mockStartAiChatPostStream = vi.fn()
-const mockSpeak = vi.fn(async () => {})
-const mockStop = vi.fn()
-const mockClipboardWriteText = vi.fn(async () => {})
+const {
+  mockStartAiChatPostStream,
+  mockSpeak,
+  mockStop,
+  mockClipboardWriteText,
+} = vi.hoisted(() => ({
+  mockStartAiChatPostStream: vi.fn(),
+  mockSpeak: vi.fn(async () => {}),
+  mockStop: vi.fn(),
+  mockClipboardWriteText: vi.fn(async () => {}),
+}))
 
 vi.mock("../api/aiChatSse", () => ({
   startAiChatPostStream: mockStartAiChatPostStream,
@@ -65,12 +72,27 @@ describe("ChatBotPage", () => {
     mockClipboardWriteText.mockClear()
     vi.restoreAllMocks()
     window.sessionStorage.clear()
-    vi.spyOn(window.navigator, "clipboard", "get").mockReturnValue({
-      writeText: mockClipboardWriteText,
-    } as unknown as Clipboard)
+    Object.defineProperty(Element.prototype, "scrollIntoView", {
+      configurable: true,
+      value: vi.fn(),
+    })
+    Object.defineProperty(window.navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: mockClipboardWriteText,
+      },
+    })
   })
 
   afterEach(() => {
+    Object.defineProperty(Element.prototype, "scrollIntoView", {
+      configurable: true,
+      value: undefined,
+    })
+    Object.defineProperty(window.navigator, "clipboard", {
+      configurable: true,
+      value: undefined,
+    })
     vi.unstubAllGlobals()
   })
 

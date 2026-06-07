@@ -78,6 +78,26 @@ export function WholesalePage() {
       </div>
 
       <div className={DATA_TABLE_SHELL_CLASS}>
+        <OrderToolbar
+          variant="retailHistory"
+          searchStr={search}
+          onSearch={setSearch}
+          statusFilter={statusFilter}
+          onStatusChange={() => {}}
+          selectedIds={[]}
+          onAction={() => {}}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onDateFromChange={setDateFrom}
+          onDateToChange={setDateTo}
+          onStatusFilterChange={setStatusFilter}
+          paymentStatusFilter={paymentStatusFilter}
+          onPaymentStatusFilterChange={setPaymentStatusFilter}
+          sort={sort}
+          onSortChange={(v) => setSort(v as RetailHistoryListSort)}
+          sortWhitelist={sortWhitelist}
+          getSortLabel={getRetailHistoryListSortLabel}
+        />
         {isListPending ? (
           <div className="p-8 text-center text-slate-500 flex-1" role="status">
             Đang tải lịch sử hóa đơn...
@@ -88,27 +108,6 @@ export function WholesalePage() {
           </div>
         ) : (
           <>
-            <OrderToolbar
-              variant="retailHistory"
-              searchStr={search}
-              onSearch={setSearch}
-              statusFilter={statusFilter}
-              onStatusChange={() => {}}
-              selectedIds={[]}
-              onAction={() => {}}
-              dateFrom={dateFrom}
-              dateTo={dateTo}
-              onDateFromChange={setDateFrom}
-              onDateToChange={setDateTo}
-              onStatusFilterChange={setStatusFilter}
-              paymentStatusFilter={paymentStatusFilter}
-              onPaymentStatusFilterChange={setPaymentStatusFilter}
-              sort={sort}
-              onSortChange={(v) => setSort(v as RetailHistoryListSort)}
-              sortWhitelist={sortWhitelist}
-              getSortLabel={getRetailHistoryListSortLabel}
-            />
-
             <div className={DATA_TABLE_SCROLL_CLASS}>
               <OrderTable
                 data={orders}

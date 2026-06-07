@@ -18,7 +18,8 @@ import {
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
-import { ApiRequestError } from "@/lib/api/http"
+import { DATA_TABLE_SCROLL_CLASS, DATA_TABLE_SHELL_CLASS } from "@/lib/data-table-layout"
+import { toastApiError } from "@/lib/api/toastApiError"
 import {
   APPROVALS_HISTORY_QUERY_KEY,
   APPROVALS_PENDING_QUERY_KEY,
@@ -30,18 +31,10 @@ import {
   STOCK_RECEIPT_APPROVE_LOCATION_OPTIONS,
 } from "@/features/inventory/api/stockReceiptsApi"
 
-const PAGE_SIZE = 50
+const PAGE_SIZE = 20
 const SEARCH_DEBOUNCE_MS = 400
 
 type PendingTableRow = Order & { entityType: string; entityId: number }
-
-function errToast(e: unknown) {
-  if (e instanceof ApiRequestError) {
-    toast.error(e.body?.message ?? e.message)
-  } else {
-    toast.error(e instanceof Error ? e.message : "Đã xảy ra lỗi")
-  }
-}
 
 function toNumber(v: number | string): number {
   return typeof v === "number" ? v : Number(v)
@@ -97,7 +90,7 @@ export default function PendingApprovalsPage() {
   })
 
   useEffect(() => {
-    if (pendingQuery.isError) errToast(pendingQuery.error)
+    if (pendingQuery.isError) toastApiError(pendingQuery.error)
   }, [pendingQuery.isError, pendingQuery.error])
 
   const approveMutation = useMutation({
@@ -109,7 +102,7 @@ export default function PendingApprovalsPage() {
       void queryClient.invalidateQueries({ queryKey: APPROVALS_PENDING_QUERY_KEY })
       void queryClient.invalidateQueries({ queryKey: APPROVALS_HISTORY_QUERY_KEY })
     },
-    onError: errToast,
+    onError: toastApiError,
   })
 
   const rejectMutation = useMutation({
@@ -122,7 +115,7 @@ export default function PendingApprovalsPage() {
       void queryClient.invalidateQueries({ queryKey: APPROVALS_PENDING_QUERY_KEY })
       void queryClient.invalidateQueries({ queryKey: APPROVALS_HISTORY_QUERY_KEY })
     },
-    onError: errToast,
+    onError: toastApiError,
   })
 
   const displayData: PendingTableRow[] = useMemo(() => {
@@ -281,8 +274,8 @@ export default function PendingApprovalsPage() {
         </div>
       ) : null}
 
-      <div className="flex-1 flex flex-col min-h-0 bg-white border border-slate-200/60 rounded-xl overflow-hidden shadow-md">
-        <div className="flex-1 overflow-y-auto relative scroll-smooth [scrollbar-gutter:stable] min-h-0">
+      <div className={DATA_TABLE_SHELL_CLASS}>
+        <div className={DATA_TABLE_SCROLL_CLASS}>
           <OrderTable
             data={displayData}
             selectedIds={[]}
@@ -329,7 +322,7 @@ export default function PendingApprovalsPage() {
           />
         </div>
         {total > PAGE_SIZE ? (
-          <div className="flex items-center justify-between gap-2 border-t border-slate-100 px-4 py-2 text-xs font-bold text-slate-600">
+          <div className="flex items-center justify-between flex-wrap gap-2 px-3 py-2 border-t border-slate-200 bg-slate-50/80 text-sm text-slate-600 min-h-11 shrink-0">
             <span>
               Trang {page} / {totalPages} — {total} bản ghi
             </span>

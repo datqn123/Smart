@@ -1,9 +1,9 @@
 import { Checkbox } from "@/components/ui/checkbox"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Eye, Edit2 } from "lucide-react"
 import { formatCurrency } from "@/features/inventory/utils"
+import { StatusBadge } from "@/components/shared/StatusBadge"
 import { 
   DATA_TABLE_ROOT_CLASS, 
   DATA_TABLE_ACTION_SINGLE_HEAD_CLASS,
@@ -26,11 +26,6 @@ interface DebtTableProps {
   onSelectAll: (checked: boolean) => void
   onView: (item: Debt) => void
   onEdit: (item: Debt) => void
-}
-
-function StatusBadge({ status }: { status: string }) {
-  if (status === "Cleared") return <Badge className="bg-green-50 text-green-700 text-xs border-none font-medium">Đã tất toán</Badge>
-  return <Badge className="bg-rose-50 text-rose-700 text-xs border-none font-medium">Còn nợ</Badge>
 }
 
 function PartnerTypeBadge({ type }: { type: string }) {
@@ -121,7 +116,7 @@ export function DebtTable({ data, selectedIds, onSelect, onSelectAll, onView, on
                   {formatDueDate(item)}
                 </TableCell>
                 <TableCell className="px-4 text-center">
-                  <StatusBadge status={item.status} />
+                  <StatusBadge status={item.status === "Active" ? "Active_debt" : item.status} />
                 </TableCell>
                 <TableCell className={DATA_TABLE_ACTION_SINGLE_CELL_CLASS}>
                   <div className="flex items-center justify-center gap-1">

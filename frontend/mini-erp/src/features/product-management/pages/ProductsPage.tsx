@@ -9,7 +9,8 @@ import { ProductDetailDialog } from "../components/ProductDetailDialog"
 import { ProductForm, ProductFormSubmitAborted, type ProductFormData } from "../components/ProductForm"
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog"
 import { toast } from "sonner"
-import { ApiRequestError } from "@/lib/api/http"
+import { DATA_TABLE_SCROLL_CLASS, DATA_TABLE_SHELL_CLASS } from "@/lib/data-table-layout"
+import { toastApiError, toastMutationEnvelope } from "@/lib/api/toastApiError"
 import {
   getCategoryList,
   mapNodeDtoToCategory,
@@ -52,44 +53,6 @@ function flattenCategories(categories: Category[]): Category[] {
     }
   })
   return result
-}
-
-function errToast(e: unknown) {
-  if (e instanceof ApiRequestError) {
-    toast.error(e.body?.message ?? e.message)
-  } else {
-    toast.error(e instanceof Error ? e.message : "Đã xảy ra lỗi")
-  }
-}
-
-/**
- * Task037 / Task032-style: **409** và **400** không có `details` → toast.
- * **400** + `details`: `ProductForm` map field + toast khi có `details` không thuộc form (vd. `file` kích thước) — onError bên dưới bỏ qua để tránh toast trùng với field validation.
- */
-function toastProductMutationEnvelope(e: unknown) {
-  if (!(e instanceof ApiRequestError)) {
-    errToast(e)
-    return
-  }
-  const { status, body } = e
-  const detailKeys = body.details ? Object.keys(body.details) : []
-  if (status === 400 && detailKeys.length > 0) {
-    return
-  }
-  if (status === 409) {
-    // Chỉ hiển thị message từ server (đã là tiếng Việt, theo từng reason). Không nối failedId/reason thô — tránh toast kỹ thuật.
-    toast.error(body.message ?? e.message)
-    return
-  }
-  if (status === 403) {
-    toast.error(body.message ?? e.message)
-    return
-  }
-  if (status === 400 && detailKeys.length === 0) {
-    toast.error(body.message ?? e.message)
-    return
-  }
-  errToast(e)
 }
 
 export function ProductsPage() {
@@ -248,7 +211,7 @@ export function ProductsPage() {
 
   useEffect(() => {
     if (!isProductDetailError) return
-    errToast(productDetailError)
+    toastApiError(productDetailError)
   }, [isProductDetailError, productDetailError])
 
   useEffect(() => {
@@ -285,7 +248,7 @@ export function ProductsPage() {
       void queryClient.invalidateQueries({ queryKey: ["product-management", "products", "list"] })
       toast.success("Đã tạo sản phẩm")
     },
-    onError: toastProductMutationEnvelope,
+    onError: toastMutationEnvelope,
   })
 
   const patchMutation = useMutation({
@@ -295,7 +258,7 @@ export function ProductsPage() {
       queryClient.invalidateQueries({ queryKey: ["product-management", "products", "detail", variables.id] })
       toast.success("Đã cập nhật sản phẩm")
     },
-    onError: toastProductMutationEnvelope,
+    onError: toastMutationEnvelope,
   })
 
   const bulkDeleteMutation = useMutation({
@@ -307,7 +270,7 @@ export function ProductsPage() {
         data.deletedCount > 0 ? `Đã xóa ${data.deletedCount} sản phẩm` : "Đã xóa sản phẩm",
       )
     },
-    onError: toastProductMutationEnvelope,
+    onError: toastMutationEnvelope,
   })
 
   const deleteProductMutation = useMutation({
@@ -332,7 +295,7 @@ export function ProductsPage() {
       })
       toast.success("Đã xóa sản phẩm")
     },
-    onError: toastProductMutationEnvelope,
+    onError: toastMutationEnvelope,
   })
 
   const products: Product[] = useMemo(
@@ -348,7 +311,7 @@ export function ProductsPage() {
 
   useEffect(() => {
     if (!isError) return
-    errToast(error)
+    toastApiError(error)
   }, [isError, error])
 
   const handleSelect = (id: number) => {
@@ -361,9 +324,6 @@ export function ProductsPage() {
 
   const handleToolbarAction = (action: string) => {
     switch (action) {
-      case "edit":
-        toast.info(`Chỉnh sửa ${selectedIds.length} sản phẩm`)
-        break
       case "delete":
         if (!isOwner) {
           toast.error("Chỉ tài khoản Owner mới được xóa hàng loạt sản phẩm.")
@@ -463,7 +423,7 @@ export function ProductsPage() {
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col min-h-0 bg-white border border-slate-200/60 rounded-xl overflow-hidden shadow-md">
+      <div className={DATA_TABLE_SHELL_CLASS}>
         {isPending && !listInfinite ? (
           <div className="p-8 text-center text-slate-500 flex-1" role="status">
             Đang tải danh sách…
@@ -476,7 +436,7 @@ export function ProductsPage() {
           <>
             <div
               ref={scrollRootRef}
-              className="flex-1 overflow-y-auto relative scroll-smooth [scrollbar-gutter:stable] min-h-0"
+              className={DATA_TABLE_SCROLL_CLASS}
             >
               <ProductTable
                 data={products}

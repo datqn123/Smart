@@ -7,9 +7,10 @@ import { TransactionTable } from "../components/TransactionTable"
 import { TransactionDetailDialog } from "../components/TransactionDetailDialog"
 import { TransactionFormDialog } from "../components/TransactionFormDialog"
 import { toast } from "sonner"
-import { TrendingUp, TrendingDown, DollarSign, Info } from "lucide-react"
+import { TrendingUp, TrendingDown, DollarSign } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { ApiRequestError } from "@/lib/api/http"
+import { DATA_TABLE_SCROLL_CLASS, DATA_TABLE_SHELL_CLASS } from "@/lib/data-table-layout"
+import { toastApiError } from "@/lib/api/toastApiError"
 import {
   CASH_TRANSACTIONS_LIST_QUERY_KEY,
   CASH_TRANSACTION_DETAIL_QUERY_KEY,
@@ -132,12 +133,7 @@ export function TransactionsPage() {
 
   useEffect(() => {
     if (!txQuery.isError) return
-    const e = txQuery.error
-    if (e instanceof ApiRequestError) {
-      toast.error(e.body?.message ?? e.message)
-    } else {
-      toast.error(e instanceof Error ? e.message : "Đã xảy ra lỗi")
-    }
+    toastApiError(txQuery.error)
   }, [txQuery.isError, txQuery.error])
 
   const transactions: Transaction[] = txQuery.data?.items ?? []
@@ -178,9 +174,6 @@ export function TransactionsPage() {
       case "delete":
         requestDeleteByIds(selectedIds)
         break
-      case "export":
-        toast.info("Đang xuất dữ liệu Excel...")
-        break
     }
   }
 
@@ -215,24 +208,27 @@ export function TransactionsPage() {
 
   const deleteByIds = async (ids: number[]) => {
     const successfulIds: number[] = []
+    let failedCount = 0
     for (const id of ids) {
       try {
         await deleteCashTransaction(id)
         successfulIds.push(id)
         queryClient.removeQueries({ queryKey: [...CASH_TRANSACTION_DETAIL_QUERY_KEY, id] })
       } catch (e) {
-        if (e instanceof ApiRequestError) {
-          toast.error(e.body?.message ?? e.message)
-        } else {
-          toast.error(e instanceof Error ? e.message : "Không xóa được giao dịch")
-        }
-        break
+        failedCount += 1
+        toastApiError(e, "Không xóa được giao dịch")
       }
     }
 
     if (successfulIds.length > 0) {
       await queryClient.invalidateQueries({ queryKey: [...CASH_TRANSACTIONS_LIST_QUERY_KEY] })
-      toast.success(successfulIds.length === 1 ? "Đã xóa giao dịch" : `Đã xóa ${successfulIds.length} giao dịch`)
+      const message =
+        failedCount > 0
+          ? `Đã xóa ${successfulIds.length} giao dịch, thất bại ${failedCount}`
+          : successfulIds.length === 1
+            ? "Đã xóa giao dịch"
+            : `Đã xóa ${successfulIds.length} giao dịch`
+      toast.success(message)
       const removed = new Set(successfulIds)
       setSelectedIds((prev) => prev.filter((id) => !removed.has(id)))
       if (selectedItem && removed.has(selectedItem.id)) {
@@ -279,11 +275,7 @@ export function TransactionsPage() {
         await queryClient.invalidateQueries({ queryKey: [...CASH_TRANSACTIONS_LIST_QUERY_KEY] })
         setIsFormOpen(false)
       } catch (e) {
-        if (e instanceof ApiRequestError) {
-          toast.error(e.body?.message ?? e.message)
-        } else {
-          toast.error(e instanceof Error ? e.message : "Không tạo được giao dịch")
-        }
+        toastApiError(e, "Không tạo được giao dịch")
       }
       return
     }
@@ -342,11 +334,7 @@ export function TransactionsPage() {
       setSelectedItem(updated)
       setIsFormOpen(false)
     } catch (e) {
-      if (e instanceof ApiRequestError) {
-        toast.error(e.body?.message ?? e.message)
-      } else {
-        toast.error(e instanceof Error ? e.message : "Không cập nhật được giao dịch")
-      }
+      toastApiError(e, "Không cập nhật được giao dịch")
     }
   }
 
@@ -359,16 +347,10 @@ export function TransactionsPage() {
         </div>
 
         <div className="flex flex-col gap-1">
-          <div className="flex flex-wrap items-center gap-4">
-            <StatCard label="Tổng thu" amount={totalIncome} icon={TrendingUp} />
-            <StatCard label="Tổng chi" amount={totalExpense} icon={TrendingDown} />
-            <StatCard label="Số dư" amount={balance} icon={DollarSign} />
-          </div>
-          <div
-            className="ml-auto flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-400"
-            title={`Thống kê theo các dòng đang hiển thị (trang ${page}, tối đa ${PAGE_SIZE} bản ghi).`}
-          >
-            <Info size={12} />
+        <div className="flex flex-wrap items-center gap-4">
+            <StatCard label="Thu (trang này)" amount={totalIncome} icon={TrendingUp} />
+            <StatCard label="Chi (trang này)" amount={totalExpense} icon={TrendingDown} />
+            <StatCard label="Chênh lệch (trang này)" amount={balance} icon={DollarSign} />
           </div>
         </div>
       </div>
@@ -389,8 +371,8 @@ export function TransactionsPage() {
           onAction={handleToolbarAction}
         />
 
-        <div className="flex-1 flex flex-col min-h-0 bg-white border border-slate-200 rounded-xl overflow-hidden">
-          <div className="flex-1 overflow-y-auto relative scroll-smooth [scrollbar-gutter:stable] min-h-0">
+        <div className={DATA_TABLE_SHELL_CLASS}>
+          <div className={DATA_TABLE_SCROLL_CLASS}>
             {txQuery.isFetching ? (
               <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/60 text-sm font-medium text-slate-500">
                 Đang tải…
@@ -407,7 +389,7 @@ export function TransactionsPage() {
             />
           </div>
           {total > PAGE_SIZE ? (
-            <div className="flex items-center justify-between gap-2 border-t border-slate-100 px-4 py-2 text-xs font-bold text-slate-600">
+            <div className="flex items-center justify-between flex-wrap gap-2 px-3 py-2 border-t border-slate-200 bg-slate-50/80 text-sm text-slate-600 min-h-11 shrink-0">
               <span>
                 Trang {page} / {totalPages} — {txQuery.isFetching ? "…" : total} bản ghi
               </span>
