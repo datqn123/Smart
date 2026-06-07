@@ -308,6 +308,24 @@ class GraphSettings(BaseSettings):
         default=None,
         description="Optional JSONL audit sink for beforeToolCall/afterToolCall events.",
     )
+    harness_loop_enabled: bool = Field(
+        default=False,
+        description="Enable Strangler route for harness-orchestrated agentic loop.",
+    )
+    harness_max_steps: int = Field(
+        default=6,
+        ge=1,
+        le=20,
+        description="Maximum LLM/tool decision steps per harness loop turn.",
+    )
+    harness_loop_intents: list[str] = Field(
+        default_factory=list,
+        description="Optional override for intents routed to harness loop.",
+    )
+    harness_planner_role: str = Field(
+        default="harness_planner",
+        description="LLM registry role used for harness next-action decisions.",
+    )
 
     @field_validator("ai_display_timezone", mode="before")
     @classmethod
@@ -393,6 +411,7 @@ class GraphSettings(BaseSettings):
         "schema_cache_enabled",
         "sql_review_skip_low_risk",
         "harness_enabled",
+        "harness_loop_enabled",
         mode="before",
     )
     @classmethod
@@ -420,6 +439,7 @@ class GraphSettings(BaseSettings):
         "sql_review_max_retries",
         "sql_repair_max_attempts",
         "planner_max_md_chars",
+        "harness_max_steps",
         mode="before",
     )
     @classmethod
@@ -430,6 +450,18 @@ class GraphSettings(BaseSettings):
                 return int(s)
             except ValueError:
                 return v
+        return v
+
+    @field_validator("harness_loop_intents", mode="before")
+    @classmethod
+    def coerce_harness_loop_intents(cls, v: object) -> object:
+        if isinstance(v, str):
+            s = v.strip()
+            if not s:
+                return []
+            if s.startswith("["):
+                return v
+            return [item.strip() for item in s.split(",") if item.strip()]
         return v
 
     @model_validator(mode="after")

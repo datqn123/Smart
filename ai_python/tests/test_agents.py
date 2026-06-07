@@ -432,8 +432,9 @@ class _EmptyExecutor:
         tenant_id: str | None,
         correlation_id: str | None = None,
         schema_version: str | None = None,
+        bearer_token: str | None = None,
     ) -> dict:
-        _ = correlation_id, schema_version
+        _ = tenant_id, correlation_id, schema_version, bearer_token
         return {"rows": [], "meta": {"mode": "empty"}}
 
 

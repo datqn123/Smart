@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 _TEXT_ROLES = ("chat", "summarize")
 _STRUCTURED_ROLES = (
+    "harness_planner",
     "planner",
     "intent",
     "domain_guard",

@@ -11,10 +11,14 @@
             "id": "12ba7b4107d35ccd",
             "type": "leaf",
             "state": {
-              "type": "empty",
-              "state": {},
+              "type": "markdown",
+              "state": {
+                "file": "dev/frontend/database/SEED_DATA_MOCK.md",
+                "mode": "source",
+                "source": false
+              },
               "icon": "lucide-file",
-              "title": "Tab mới"
+              "title": "SEED_DATA_MOCK"
             }
           }
         ]
@@ -181,6 +185,15 @@
   },
   "active": "12ba7b4107d35ccd",
   "lastOpenFiles": [
+    "upgrade/ai-python/qa/001_harness-orchestrated-agentic-loop.md",
+    "upgrade/ai-python/qa/001_harness-orchestrated-agentic-loop.md.tmp.16868.b1e81f8fc335",
+    "upgrade/ai-python/tech_lead/001_harness-orchestrated-agentic-loop.md",
+    "frontend/code-review/CODE_REVIEW_docs-cleanup-seed-data.md",
+    "upgrade/ai-python/qa",
+    "upgrade/ai-python/tech_lead",
+    "upgrade/ai-python/srs/002_harness-orchestrated-agentic-loop.md",
+    "dev/frontend/database/SEED_DATA_MOCK.md",
+    "upgrade/ai-python/srs/002_harness-orchestrated-agentic-loop.md.tmp.16868.142649fd19d8",
     "frontend/srs/026_cashflow-three-pages-upgrade.md",
     "frontend/srs/025_invoice-history-upgrade.md",
     "frontend/srs/024_product-management-upgrade.md",
@@ -202,20 +215,11 @@
     "frontend/qa/021_custom-builder-ux-improvements.md",
     "frontend/qa/020_custom-builder-layout-stability.md",
     "frontend/qa/019_custom-builder-wizard-conditional-ui-bugfix.md",
-    "frontend/qa/018_custom-builder-logic-connector-bugfix.md",
-    "frontend/qa/017_custom-builder-display-polish.md",
-    "frontend/qa/016_custom-builder-logic-connector-builder.md",
-    "frontend/qa/015_custom-builder-basic-workflow-designer.md",
-    "frontend/qa/014_custom-builder-stage-s5-usability-publish-readiness.md",
     "frontend/qa/029_management-screens-logic-audit.md.tmp.16868.322a2cd27df1",
     "frontend/tech_lead/027_management-screens-logic-audit.md.tmp.16868.372b24a853e1",
     "frontend/srs/023_management-screens-logic-audit.md.tmp.16868.f987dcaea1ad",
     "frontend/srs/023_management-screens-logic-audit.md.tmp.16868.7bf21f32f19c",
     "frontend/srs/023_management-screens-logic-audit.md.tmp.16868.4a6e454ae4f9",
-    "frontend/srs/023_management-screens-logic-audit.md.tmp.16868.3a5697e8e320",
-    "frontend/srs/022_ai-chat-ui-upgrade.md.tmp.8708.1430d7a22b60",
-    "frontend/qa/027_ai-chat-ui-upgrade.md.tmp.8708.d240aa2a9115",
-    "frontend/tech-spec/001_ai-chat-ui-upgrade.md.tmp.8708.9846712dbe1c",
-    "frontend/tech-spec"
+    "frontend/srs/023_management-screens-logic-audit.md.tmp.16868.3a5697e8e320"
   ]
 }

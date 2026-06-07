@@ -211,6 +211,7 @@ def _iter_chat_sse_events(
     final_error: dict[str, Any] | None = None
     had_stream_payload = False
     had_custom_payload = False
+    suppress_done = False
     set_correlation_id(correlation_id)
     try:
         for chunk in runtime.stream(
@@ -218,6 +219,11 @@ def _iter_chat_sse_events(
             correlation_id=correlation_id,
             bearer_token=bearer_token,
         ):
+            if isinstance(chunk, tuple) and len(chunk) == 2:
+                mode, payload = chunk
+                if mode == "harness_control" and isinstance(payload, dict):
+                    suppress_done = suppress_done or bool(payload.get("suppress_done"))
+                    continue
             custom_progress = _progress_from_custom_chunk(chunk)
             if custom_progress and custom_progress != progress_sent:
                 yield _sse_ui_event("progress", custom_progress)
@@ -328,7 +334,8 @@ def _iter_chat_sse_events(
         clarify_sent=clarify_sent,
     ):
         yield _sse_ui_event("error", _sse_user_facing_error(final_error))
-    yield _sse_ui_event("done", "")
+    if not suppress_done:
+        yield _sse_ui_event("done", "")
 
 
 @router.post("/stream")

@@ -98,6 +98,72 @@ class AgentState(TypedDict, total=False):
     progress_text: str | None
 
 
+_TRANSIENT_KEYS = frozenset(
+    {
+        "query_result",
+        "generated_sql",
+        "final_answer",
+        "error_payload",
+        "intent",
+        "route_source",
+        "sql_review_ok",
+        "sql_valid",
+        "result_ok",
+        "result_empty",
+        "runtime_schema_artifact",
+        "selected_tables",
+        "sql_gen_mode",
+        "sql_attempt_history",
+        "sql_local_pool",
+        "idea_data_request",
+        "idea_chart_idea",
+        "chart_spec_draft",
+        "chart_spec_final",
+        "schema_plan",
+        "ledger_metric_id",
+        "schema_join_hints",
+        "chart_brief",
+        "chart_thread_context",
+        "chart_data_ok",
+        "chart_data_issues",
+        "chart_warnings",
+        "chart_retry_hint",
+        "chart_result_profile",
+        "chart_degraded",
+        "catalog_entity_type",
+        "catalog_row_count_hint",
+        "catalog_draft_slots",
+        "catalog_draft_payload",
+        "catalog_draft_id",
+        "catalog_draft_sse",
+        "catalog_draft_existing_data",
+        "inventory_doc_type",
+        "inventory_line_count_hint",
+        "inventory_draft_slots",
+        "inventory_draft_payload",
+        "inventory_draft_id",
+        "inventory_draft_sse",
+        "domain_guard_action",
+        "normalized_user_question",
+        "domain_context",
+        "domain_clarify_sse",
+        "pending_clarification",
+        "clarification_applied_context",
+        "show_query_table",
+        "query_table_sse",
+        "planner_strategy",
+        "planner_reason",
+        "planner_confidence",
+        "planner_doc_refs",
+        "progress_text",
+    }
+)
+
+
+def fresh_turn_overlay() -> dict[str, None]:
+    return {key: None for key in _TRANSIENT_KEYS}
+
+
 def default_initial_state() -> AgentState:
     return {
         "context_compact_generation": 0,

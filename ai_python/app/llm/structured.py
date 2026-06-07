@@ -100,3 +100,72 @@ def structured_invoke(
                 ])
             tail = retry_tail
     raise ValueError(f"structured_invoke failed after {max_retries} retries") from last_err
+
+
+async def astructured_invoke(
+    chat: BaseChatModel,
+    messages: list[BaseMessage],
+    schema: type[T],
+    *,
+    max_retries: int = 3,
+    json_output_contract: str | None = None,
+) -> T:
+    """Async variant of :func:`structured_invoke` using ``chat.ainvoke``."""
+    hint = (
+        "Respond with ONLY a single JSON object matching this schema keys; "
+        "no markdown, no prose."
+    )
+    contract = (json_output_contract or "").strip()
+    schema_instruction = contract if contract else f"Schema: {schema.model_json_schema()}"
+    instruction = f"{hint} {schema_instruction}"
+
+    tail: list[BaseMessage] = list(messages)
+    if tail and isinstance(tail[-1], HumanMessage):
+        last_msg = tail[-1]
+        tail[-1] = HumanMessage(
+            content=f"{last_msg.content}\n\n{instruction}",
+            additional_kwargs=last_msg.additional_kwargs,
+            response_metadata=last_msg.response_metadata,
+            id=last_msg.id,
+        )
+    else:
+        tail.append(HumanMessage(content=instruction))
+
+    last_err: Exception | None = None
+    for _ in range(max_retries):
+        try:
+            msg: AIMessage = await chat.ainvoke(tail)  # type: ignore[assignment]
+            text = _extract_json_text(str(msg.content))
+            data = json.loads(text)
+            return schema.model_validate(data)
+        except (json.JSONDecodeError, ValidationError, TypeError) as e:
+            last_err = e
+            retry_tail: list[BaseMessage] = list(messages)
+            err_prefix = f"Parse error: {e}. "
+            if retry_tail and isinstance(retry_tail[-1], HumanMessage):
+                last_msg = retry_tail[-1]
+                retry_tail[-1] = HumanMessage(
+                    content=f"{last_msg.content}\n\n{err_prefix}{instruction}",
+                    additional_kwargs=last_msg.additional_kwargs,
+                    response_metadata=last_msg.response_metadata,
+                    id=last_msg.id,
+                )
+                retry_tail.insert(
+                    -1,
+                    SystemMessage(
+                        content="Your previous reply was not valid JSON for the schema. "
+                        "Output ONLY valid JSON."
+                    ),
+                )
+            else:
+                retry_tail.extend(
+                    [
+                        SystemMessage(
+                            content="Your previous reply was not valid JSON for the schema. "
+                            "Output ONLY valid JSON."
+                        ),
+                        HumanMessage(content=f"{err_prefix}{instruction}"),
+                    ]
+                )
+            tail = retry_tail
+    raise ValueError(f"astructured_invoke failed after {max_retries} retries") from last_err

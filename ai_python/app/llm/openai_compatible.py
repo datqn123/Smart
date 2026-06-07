@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterator, Sequence
+from collections.abc import AsyncIterator, Iterator, Sequence
 from typing import TypeVar
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
@@ -11,7 +11,7 @@ from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
 from app.config.settings import LlmSettings
-from app.llm.structured import structured_invoke
+from app.llm.structured import astructured_invoke, structured_invoke
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +48,28 @@ class OpenAICompatibleChatClient:
             if isinstance(raw, str) and raw:
                 yield raw
 
+    async def ainvoke_text(self, user: str, *, system: str | None = None) -> str:
+        messages: list[BaseMessage] = []
+        if system:
+            messages.append(SystemMessage(content=system))
+        messages.append(HumanMessage(content=user))
+        out: AIMessage = await self._chat.ainvoke(messages)  # type: ignore[assignment]
+        return str(out.content)
+
+    async def astream_text(self, user: str, *, system: str | None = None) -> AsyncIterator[str]:
+        messages: list[BaseMessage] = []
+        if system:
+            messages.append(SystemMessage(content=system))
+        messages.append(HumanMessage(content=user))
+        async for chunk in self._chat.astream(messages):
+            text = getattr(chunk, "text", None)
+            if isinstance(text, str) and text:
+                yield text
+                continue
+            raw = getattr(chunk, "content", None)
+            if isinstance(raw, str) and raw:
+                yield raw
+
     def structured_predict(
         self,
         messages: Sequence[BaseMessage],
@@ -57,6 +79,22 @@ class OpenAICompatibleChatClient:
         json_output_contract: str | None = None,
     ) -> T:
         return structured_invoke(
+            self._chat,
+            list(messages),
+            schema,
+            max_retries=max_retries,
+            json_output_contract=json_output_contract,
+        )
+
+    async def astructured_predict(
+        self,
+        messages: Sequence[BaseMessage],
+        schema: type[T],
+        *,
+        max_retries: int = 3,
+        json_output_contract: str | None = None,
+    ) -> T:
+        return await astructured_invoke(
             self._chat,
             list(messages),
             schema,

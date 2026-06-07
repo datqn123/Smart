@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import AsyncIterator, Iterator, Sequence
 from typing import Protocol, TypeVar
 
 from langchain_core.messages import BaseMessage
@@ -22,6 +22,14 @@ class LlmClient(Protocol):
         """Stream plain-text deltas (sync iterator)."""
         ...
 
+    async def ainvoke_text(self, user: str, *, system: str | None = None) -> str:
+        """Single-turn text completion (async)."""
+        ...
+
+    def astream_text(self, user: str, *, system: str | None = None) -> AsyncIterator[str]:
+        """Stream plain-text deltas (async iterator)."""
+        ...
+
     def structured_predict(
         self,
         messages: Sequence[BaseMessage],
@@ -35,4 +43,15 @@ class LlmClient(Protocol):
         When ``json_output_contract`` is set, it replaces the full Pydantic JSON Schema
         in the user instruction tail (lighter for small models like Gemma).
         """
+        ...
+
+    async def astructured_predict(
+        self,
+        messages: Sequence[BaseMessage],
+        schema: type[T],
+        *,
+        max_retries: int = 3,
+        json_output_contract: str | None = None,
+    ) -> T:
+        """Async structured prediction."""
         ...

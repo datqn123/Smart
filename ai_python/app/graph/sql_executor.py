@@ -27,6 +27,18 @@ class SqlExecutor(Protocol):
         """Return {'rows': [...], 'meta': {...}} or raise."""
         ...
 
+    async def aexecute(
+        self,
+        sql: str,
+        *,
+        tenant_id: str | None,
+        correlation_id: str | None = None,
+        schema_version: str | None = None,
+        bearer_token: str | None = None,
+    ) -> dict[str, Any]:
+        """Async variant for harness loop paths."""
+        ...
+
 
 class SqlExecutorError(RuntimeError):
     """Upstream / transport failure mapped for graph feedback (no secrets)."""
@@ -50,6 +62,23 @@ class StubSqlExecutor:
     ) -> dict[str, Any]:
         _ = tenant_id, correlation_id, schema_version, bearer_token
         return {"rows": [{"_stub": 1, "sql_ok": True}], "meta": {"mode": "stub"}}
+
+    async def aexecute(
+        self,
+        sql: str,
+        *,
+        tenant_id: str | None,
+        correlation_id: str | None = None,
+        schema_version: str | None = None,
+        bearer_token: str | None = None,
+    ) -> dict[str, Any]:
+        return self.execute(
+            sql,
+            tenant_id=tenant_id,
+            correlation_id=correlation_id,
+            schema_version=schema_version,
+            bearer_token=bearer_token,
+        )
 
 
 class HttpSpringSqlExecutor:
@@ -78,6 +107,65 @@ class HttpSpringSqlExecutor:
     def close(self) -> None:
         if self._owns_client:
             self._client.close()
+
+    async def aexecute(
+        self,
+        sql: str,
+        *,
+        tenant_id: str | None,
+        correlation_id: str | None = None,
+        schema_version: str | None = None,
+        bearer_token: str | None = None,
+    ) -> dict[str, Any]:
+        enforce_read_only_sql(sql)
+        row_cap = self._settings.sql_executor_row_limit
+        payload: dict[str, Any] = {"query": sql, "max_rows": row_cap}
+        headers: dict[str, str] = {}
+        if bearer_token and bearer_token.strip():
+            headers["Authorization"] = f"Bearer {bearer_token.strip()}"
+        elif self._settings.spring_sql_bearer_token:
+            headers["Authorization"] = f"Bearer {self._settings.spring_sql_bearer_token.strip()}"
+        if correlation_id and correlation_id.strip():
+            headers["X-Correlation-Id"] = correlation_id.strip()
+        started = time.perf_counter()
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout, headers={"Content-Type": "application/json"}) as client:
+                resp = await client.post(self._url, json=payload, headers=headers)
+        except httpx.TimeoutException as exc:
+            logger.warning("http_spring timeout mode=http_spring correlation_id=%s", correlation_id or "-")
+            raise SqlExecutorError("[timeout] spring sql execution timed out", category="timeout") from exc
+        except httpx.RequestError as exc:
+            logger.warning("http_spring transport mode=http_spring correlation_id=%s", correlation_id or "-")
+            raise SqlExecutorError("[transport] spring sql request failed", category="transport") from exc
+
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
+        if resp.status_code >= 400:
+            body = _safe_parse_json(resp)
+            msg = _failure_message(body) or f"spring returned HTTP {resp.status_code}"
+            raise SqlExecutorError(msg, category=_failure_category(body))
+        data = _safe_parse_json(resp)
+        if not isinstance(data, dict):
+            raise SqlExecutorError("[malformed] spring response is not a JSON object")
+        if data.get("error"):
+            raise SqlExecutorError(_failure_message(data) or "spring execution rejected", category=_failure_category(data))
+        rows_out = _spring_rows_as_dicts(data)[:row_cap]
+        row_count = data.get("row_count")
+        if row_count is None:
+            row_count = len(rows_out)
+        elif isinstance(row_count, int) and row_count > len(rows_out):
+            row_count = len(rows_out)
+        meta = data.get("meta") if isinstance(data.get("meta"), dict) else {}
+        meta = {
+            **meta,
+            "mode": "http_spring",
+            "execution_ms": data.get("execution_ms", elapsed_ms),
+            "row_count": row_count,
+            "columns": data.get("columns"),
+            "summary": data.get("summary"),
+            "spring_correlation_id": data.get("correlation_id"),
+            "client_duration_ms": elapsed_ms,
+        }
+        return {"rows": rows_out, "meta": meta}
 
     def execute(
         self,

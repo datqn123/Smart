@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 from functools import lru_cache
+from collections.abc import AsyncIterator, Iterator
 from typing import Any, Protocol
 
 from langchain_core.messages import HumanMessage
@@ -14,11 +17,38 @@ from app.config.graph_settings import load_graph_settings
 from app.config.settings import load_llm_settings
 from app.graph import compile_agent_graph, default_initial_state, iter_graph_stream
 from app.graph.deps import GraphDeps
-from app.harness import AgentHarness
+from app.graph.state import fresh_turn_overlay
+from app.graph.tools import CatalogDraftTool, InventoryDraftTool, SchemaExploreTool, SqlQueryTool
+from app.harness import (
+    AgentHarness,
+    ErrorEvent,
+    FinalAnswerEvent,
+    HarnessOrchestrator,
+    HarnessPolicy,
+    PendingHitlEvent,
+    ProgressEvent,
+    SsePayloadEvent,
+    ToolRegistry,
+    TurnContext,
+    TurnScratchpad,
+)
 from app.graph.sql_executor import build_sql_executor
 from app.llm.registry import LlmRegistry, build_llm_registry
 
 logger = logging.getLogger(__name__)
+
+HARNESS_LOOP_INTENTS = frozenset(
+    {
+        "sql_query",
+        "data_query",
+        "schema_explore",
+        "catalog_draft",
+        "inventory_draft",
+        "system_data_query",
+        "catalog_data_entry",
+        "inventory_data_entry",
+    }
+)
 
 
 class GraphRuntime(Protocol):
@@ -85,6 +115,47 @@ class LangGraphRuntime:
         )
 
 
+class LangHarnessRuntime:
+    """Strangler runtime: route selected turns to Harness loop, otherwise legacy graph."""
+
+    def __init__(
+        self,
+        compiled: Any,
+        orchestrator: HarnessOrchestrator,
+        *,
+        graph_settings: Any,
+    ) -> None:
+        self._legacy = LangGraphRuntime(compiled, graph_settings=graph_settings)
+        self._orchestrator = orchestrator
+        self._graph_settings = graph_settings
+
+    def invoke(
+        self,
+        request: ChatRequest,
+        *,
+        correlation_id: str,
+        bearer_token: str | None = None,
+    ) -> dict[str, Any]:
+        return self._legacy.invoke(request, correlation_id=correlation_id, bearer_token=bearer_token)
+
+    def stream(
+        self,
+        request: ChatRequest,
+        *,
+        correlation_id: str,
+        bearer_token: str | None = None,
+    ) -> Any:
+        if not _should_use_harness_loop(request, self._graph_settings):
+            return self._legacy.stream(request, correlation_id=correlation_id, bearer_token=bearer_token)
+        return _iter_harness_stream(
+            self._orchestrator,
+            request,
+            graph_settings=self._graph_settings,
+            correlation_id=correlation_id,
+            bearer_token=bearer_token,
+        )
+
+
 def _build_state(
     *,
     request: ChatRequest,
@@ -100,70 +171,17 @@ def _build_state(
     state["thread_id"] = request.metadata.thread_id
     state["schema_version"] = request.metadata.schema_version
     # Fresh turn: do not let checkpointed SQL channel bleed into this answer.
-    state["query_result"] = None
-    state["generated_sql"] = None
-    state["final_answer"] = None
-    state["error_payload"] = None
-    state["intent"] = None
-    state["route_source"] = None
-    state["sql_review_ok"] = None
+    state.update(fresh_turn_overlay())
     state["sql_repair_max_attempts"] = int(getattr(graph_settings, "sql_repair_max_attempts", 3))
-    state["sql_valid"] = None
-    state["result_ok"] = None
-    state["result_empty"] = None
-    state["runtime_schema_artifact"] = None
-    state["selected_tables"] = None
-    state["sql_gen_mode"] = None
-    state["sql_attempt_history"] = None
-    state["sql_local_pool"] = None
     state["validation_feedback"] = empty_feedback()
-    state["idea_data_request"] = None
-    state["idea_chart_idea"] = None
-    state["chart_spec_draft"] = None
-    state["chart_spec_final"] = None
-    state["schema_plan"] = None
-    state["ledger_metric_id"] = None
-    state["schema_join_hints"] = None
-    state["chart_brief"] = None
-    state["chart_thread_context"] = None
-    state["chart_data_ok"] = None
-    state["chart_data_issues"] = None
-    state["chart_warnings"] = None
-    state["chart_retry_hint"] = None
-    state["chart_result_profile"] = None
-    state["chart_degraded"] = None
-    state["catalog_entity_type"] = None
-    state["catalog_row_count_hint"] = None
-    state["catalog_draft_slots"] = None
-    state["catalog_draft_payload"] = None
-    state["catalog_draft_id"] = None
-    state["catalog_draft_sse"] = None
-    state["inventory_doc_type"] = None
-    state["inventory_line_count_hint"] = None
-    state["inventory_draft_slots"] = None
-    state["inventory_draft_payload"] = None
-    state["inventory_draft_id"] = None
-    state["inventory_draft_sse"] = None
     state["interaction_mode"] = request.options.interaction_mode
     state["planning_mode"] = request.options.planning_mode
-    state["show_query_table"] = None
-    state["query_table_sse"] = None
-    state["planner_strategy"] = None
-    state["planner_reason"] = None
-    state["planner_confidence"] = None
-    state["planner_doc_refs"] = None
-    state["domain_guard_action"] = None
-    state["normalized_user_question"] = None
-    state["domain_context"] = None
-    state["domain_clarify_sse"] = None
     clar = getattr(request.options, "clarification", None)
     state["clarification_response"] = (
         clar.model_dump(mode="json")
         if clar is not None
         else None
     )
-    state["clarification_applied_context"] = None
-    state["progress_text"] = None
     state["spring_bearer_token"] = bearer_token
     return state
 
@@ -203,8 +221,136 @@ def _build_graph_deps() -> GraphDeps:
     )
 
 
+def _build_tool_registry(deps: GraphDeps) -> ToolRegistry:
+    registry = ToolRegistry()
+    for tool in (
+        SqlQueryTool(deps),
+        SchemaExploreTool(deps),
+        CatalogDraftTool(deps),
+        InventoryDraftTool(deps),
+    ):
+        registry.register(tool.manifest, tool)
+    return registry
+
+
+def _should_use_harness_loop(request: ChatRequest, graph_settings: Any) -> bool:
+    if not bool(getattr(graph_settings, "harness_loop_enabled", False)):
+        return False
+    allowed = {
+        str(item).strip()
+        for item in (getattr(graph_settings, "harness_loop_intents", None) or HARNESS_LOOP_INTENTS)
+        if str(item).strip()
+    }
+    intent = _quick_classify_harness_intent(request.message)
+    return intent in allowed
+
+
+def _quick_classify_harness_intent(message: str) -> str:
+    text = (message or "").lower()
+    if any(token in text for token in ("tạo phiếu", "nhập kho", "xuất kho", "inventory draft", "stock receipt")):
+        return "inventory_draft"
+    if any(token in text for token in ("tạo sản phẩm", "tạo danh mục", "catalog", "product draft")):
+        return "catalog_draft"
+    if any(token in text for token in ("schema", "bảng nào", "cột nào", "join")):
+        return "schema_explore"
+    if any(token in text for token in ("doanh thu", "chi phí", "tồn kho", "báo cáo", "thống kê", "danh sách")):
+        return "data_query"
+    return "chat_normal"
+
+
+def _build_turn_context(
+    request: ChatRequest,
+    *,
+    correlation_id: str,
+    bearer_token: str | None,
+) -> TurnContext:
+    return TurnContext(
+        tenant_id=request.metadata.tenant_id,
+        user_id=request.metadata.user_id,
+        thread_id=request.metadata.thread_id,
+        correlation_id=correlation_id,
+        bearer_token=bearer_token,
+        schema_version=request.metadata.schema_version,
+    )
+
+
+async def _harness_events(
+    orchestrator: HarnessOrchestrator,
+    request: ChatRequest,
+    *,
+    correlation_id: str,
+    bearer_token: str | None,
+) -> AsyncIterator[Any]:
+    scratchpad = TurnScratchpad(messages=[HumanMessage(content=request.message)])
+    ctx = _build_turn_context(request, correlation_id=correlation_id, bearer_token=bearer_token)
+    async for event in orchestrator.run(scratchpad, ctx):
+        yield event
+
+
+def _iter_harness_stream(
+    orchestrator: HarnessOrchestrator,
+    request: ChatRequest,
+    *,
+    graph_settings: Any,
+    correlation_id: str,
+    bearer_token: str | None,
+) -> Iterator[Any]:
+    _ = graph_settings
+    agen = _harness_events(
+        orchestrator,
+        request,
+        correlation_id=correlation_id,
+        bearer_token=bearer_token,
+    )
+    loop = asyncio.new_event_loop()
+    try:
+        while True:
+            try:
+                event = loop.run_until_complete(agen.__anext__())
+            except StopAsyncIteration:
+                break
+            yield _event_to_stream_chunk(event)
+    finally:
+        loop.run_until_complete(loop.shutdown_asyncgens())
+        loop.close()
+
+
+def _event_to_stream_chunk(event: Any) -> Any:
+    if isinstance(event, ProgressEvent):
+        return ("custom", {"progress_text": event.text})
+    if isinstance(event, FinalAnswerEvent):
+        return ("custom", {"final_answer": event.text})
+    if isinstance(event, ErrorEvent):
+        return {"error_payload": {"code": event.code, "message": event.message}}
+    if isinstance(event, SsePayloadEvent):
+        if event.event_name == "draft":
+            return {"catalog_draft_sse": event.payload}
+        if event.event_name == "inventory_draft":
+            return {"inventory_draft_sse": event.payload}
+        if event.event_name == "data_table":
+            return {"query_table_sse": event.payload}
+        if event.event_name == "chart":
+            return {"chart_spec_final": event.payload}
+        return {f"{event.event_name}_sse": event.payload}
+    if isinstance(event, PendingHitlEvent):
+        return ("harness_control", {"suppress_done": True})
+    return {"data": json.dumps(event, default=str, ensure_ascii=False)}
+
+
 @lru_cache(maxsize=1)
 def get_graph_runtime() -> GraphRuntime:
     deps = _build_graph_deps()
     compiled = compile_agent_graph(deps, use_checkpointer=True)
-    return LangGraphRuntime(compiled, graph_settings=deps.settings)
+    if not bool(getattr(deps.settings, "harness_loop_enabled", False)):
+        return LangGraphRuntime(compiled, graph_settings=deps.settings)
+    if deps.llm_registry is None:
+        logger.warning("HARNESS_LOOP_ENABLED=true but LLM registry is missing; using legacy graph runtime.")
+        return LangGraphRuntime(compiled, graph_settings=deps.settings)
+    orchestrator = HarnessOrchestrator(
+        llm_registry=deps.llm_registry,
+        tool_registry=_build_tool_registry(deps),
+        policy=HarnessPolicy(),
+        settings=deps.settings,
+        harness=deps.harness,
+    )
+    return LangHarnessRuntime(compiled, orchestrator, graph_settings=deps.settings)
