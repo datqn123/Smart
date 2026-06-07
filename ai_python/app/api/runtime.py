@@ -39,14 +39,10 @@ logger = logging.getLogger(__name__)
 
 HARNESS_LOOP_INTENTS = frozenset(
     {
-        "sql_query",
         "data_query",
         "schema_explore",
         "catalog_draft",
         "inventory_draft",
-        "system_data_query",
-        "catalog_data_entry",
-        "inventory_data_entry",
     }
 )
 
@@ -136,6 +132,12 @@ class LangHarnessRuntime:
         correlation_id: str,
         bearer_token: str | None = None,
     ) -> dict[str, Any]:
+        if _should_use_harness_loop(request, self._graph_settings):
+            logger.warning(
+                "harness_loop_enabled=True but /invoke always uses legacy graph; "
+                "use /stream for harness-orchestrated responses (correlation_id=%s)",
+                correlation_id,
+            )
         return self._legacy.invoke(request, correlation_id=correlation_id, bearer_token=bearer_token)
 
     def stream(

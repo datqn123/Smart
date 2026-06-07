@@ -334,7 +334,7 @@ def _iter_chat_sse_events(
         clarify_sent=clarify_sent,
     ):
         yield _sse_ui_event("error", _sse_user_facing_error(final_error))
-    if not suppress_done:
+    if not suppress_done or final_error is not None:
         yield _sse_ui_event("done", "")
 
 

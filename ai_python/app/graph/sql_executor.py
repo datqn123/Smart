@@ -103,6 +103,7 @@ class HttpSpringSqlExecutor:
             headers["Authorization"] = f"Bearer {token}"
         self._owns_client = client is None
         self._client = client or httpx.Client(timeout=self._timeout, headers=headers)
+        self._async_client = httpx.AsyncClient(timeout=self._timeout, headers=headers)
 
     def close(self) -> None:
         if self._owns_client:
@@ -129,8 +130,7 @@ class HttpSpringSqlExecutor:
             headers["X-Correlation-Id"] = correlation_id.strip()
         started = time.perf_counter()
         try:
-            async with httpx.AsyncClient(timeout=self._timeout, headers={"Content-Type": "application/json"}) as client:
-                resp = await client.post(self._url, json=payload, headers=headers)
+            resp = await self._async_client.post(self._url, json=payload, headers=headers)
         except httpx.TimeoutException as exc:
             logger.warning("http_spring timeout mode=http_spring correlation_id=%s", correlation_id or "-")
             raise SqlExecutorError("[timeout] spring sql execution timed out", category="timeout") from exc
