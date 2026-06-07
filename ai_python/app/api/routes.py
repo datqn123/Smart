@@ -65,6 +65,16 @@ def _extract_partial_update(chunk: Any) -> dict[str, Any]:
     return {"data": str(chunk)}
 
 
+def _extract_bearer_token(authorization: str | None) -> str | None:
+    """Strip 'Bearer ' prefix so downstream callers only see the raw token."""
+    if not authorization:
+        return None
+    s = authorization.strip()
+    if s.lower().startswith("bearer "):
+        s = s[7:].strip()
+    return s or None
+
+
 def _validate_auth(
     authorization: str | None = Header(default=None, alias="Authorization"),
     validator: JwtValidator = Depends(get_jwt_validator),
@@ -353,7 +363,7 @@ async def stream_chat(
             runtime,
             request,
             correlation_id=correlation_id,
-            bearer_token=authorization,
+            bearer_token=_extract_bearer_token(authorization),
         ),
         media_type="text/event-stream",
         headers=_SSE_STREAM_HEADERS,
