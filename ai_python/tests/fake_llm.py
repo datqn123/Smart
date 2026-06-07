@@ -8,6 +8,8 @@ from typing import TypeVar
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel
 
+from app.llm.openai_compatible import InvokeUsage
+
 T = TypeVar("T", bound=BaseModel)
 
 
@@ -23,8 +25,13 @@ class FakeLlmClient:
         planner_strategy: str | None = None,
         planner_intent: str | None = None,
         planner_confidence: float = 0.0,
+        intent_confidence: float = 0.95,
+        intent_missing: list[str] | None = None,
+        intent_entity_score: float = 0.95,
         sql_review_failures: int = 0,
         table_pick: list[str] | None = None,
+        plan_nodes: list[dict] | None = None,
+        compose_followups: int = 2,
     ) -> None:
         self._reply = reply
         self._stream_parts = stream_parts or ["hel", "lo"]
@@ -32,10 +39,16 @@ class FakeLlmClient:
         self._planner_strategy = planner_strategy
         self._planner_intent = planner_intent
         self._planner_confidence = planner_confidence
+        self._intent_confidence = intent_confidence
+        self._intent_missing = intent_missing or []
+        self._intent_entity_score = intent_entity_score
         self._sql_review_fail_left = sql_review_failures
         self._table_pick = table_pick
+        self._plan_nodes = plan_nodes
+        self._compose_followups = compose_followups
         self.invoke_count = 0
         self.last_invoke_text: str | None = None
+        self.last_usage = InvokeUsage(prompt_tokens=50, completion_tokens=50, cost_usd=0.001)
 
     def invoke_text(self, user: str, *, system: str | None = None) -> str:
         self.invoke_count += 1
@@ -56,6 +69,21 @@ class FakeLlmClient:
         if schema.__name__ == "IntentOutput":
             intent_val = self._intent if self._intent is not None else "general_chat"
             return schema.model_validate({"intent": intent_val})  # type: ignore[return-value]
+        if schema.__name__ == "IntentObjectOutput":
+            intent_val = self._intent if self._intent is not None else "data_query"
+            return schema.model_validate(  # type: ignore[return-value]
+                {
+                    "goal": "fake goal",
+                    "intent_type": intent_val,
+                    "required_data": ["revenue"],
+                    "resolved_entities": [
+                        {"raw": "x", "matched": "y", "score": self._intent_entity_score}
+                    ],
+                    "confidence": self._intent_confidence,
+                    "ambiguities": [],
+                    "missing_required": self._intent_missing,
+                }
+            )
         if schema.__name__ == "AgentPlannerOutput":
             strategy = self._planner_strategy or "defer_to_intent"
             return schema.model_validate(  # type: ignore[return-value]
@@ -66,6 +94,28 @@ class FakeLlmClient:
                     "confidence": self._planner_confidence,
                     "need_clarification": False,
                 },
+            )
+        if schema.__name__ == "PlanGraphOutput":
+            return schema.model_validate(  # type: ignore[return-value]
+                {
+                    "nodes": self._plan_nodes
+                    or [
+                        {
+                            "id": "n1",
+                            "tool": "sql_query",
+                            "needs": [],
+                            "input_spec": {"query": "revenue"},
+                            "output_expect": "rows",
+                        },
+                        {
+                            "id": "n2",
+                            "tool": "sql_query",
+                            "needs": [],
+                            "input_spec": {"query": "inventory"},
+                            "output_expect": "rows",
+                        },
+                    ]
+                }
             )
         if schema.__name__ == "IdeaPlannerOutput":
             return schema.model_validate(  # type: ignore[return-value]
@@ -145,4 +195,31 @@ class FakeLlmClient:
                     ],
                 },
             )
+        if schema.__name__ == "AnswerComposerOutput":
+            return schema.model_validate(  # type: ignore[return-value]
+                {
+                    "answer_markdown": "Doanh thu: 100đ",
+                    "assumptions": [],
+                    "follow_ups": [
+                        "Xem theo tuần?",
+                        "So với tháng trước?",
+                        "Xem theo sản phẩm?",
+                    ][: self._compose_followups],
+                }
+            )
         raise NotImplementedError(schema)
+
+    async def astructured_predict(
+        self,
+        messages: Sequence[BaseMessage],
+        schema: type[T],
+        *,
+        max_retries: int = 3,
+        json_output_contract: str | None = None,
+    ) -> T:
+        return self.structured_predict(
+            messages,
+            schema,
+            max_retries=max_retries,
+            json_output_contract=json_output_contract,
+        )

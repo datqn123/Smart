@@ -326,17 +326,16 @@ def _iter_chat_sse_events(
             if "error_payload" in update and isinstance(update["error_payload"], dict):
                 final_error = update["error_payload"]
     except Exception as exc:  # noqa: BLE001
+        final_error = {
+            "code": "AI_RUNTIME_ERROR",
+            "message": str(exc) or f"{type(exc).__name__}",
+        }
         if had_stream_payload:
             logger.warning(
                 "stream ended with exception after partial output: %s",
                 exc,
                 exc_info=True,
             )
-        else:
-            final_error = {
-                "code": "AI_RUNTIME_ERROR",
-                "message": str(exc) or f"{type(exc).__name__}",
-            }
 
     if should_emit_stream_error(
         final_error,

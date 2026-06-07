@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import AsyncIterator, Iterator, Sequence
+from dataclasses import dataclass
 from typing import TypeVar
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
@@ -18,11 +19,23 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
 
+@dataclass(frozen=True)
+class InvokeUsage:
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    cost_usd: float = 0.0
+
+    @property
+    def total_tokens(self) -> int:
+        return int(self.prompt_tokens or 0) + int(self.completion_tokens or 0)
+
+
 class OpenAICompatibleChatClient:
     """Wraps ``ChatOpenAI``; sole place that instantiates the LangChain model."""
 
     def __init__(self, chat: ChatOpenAI) -> None:
         self._chat = chat
+        self.last_usage = InvokeUsage()
 
     def invoke_text(self, user: str, *, system: str | None = None) -> str:
         messages: list[BaseMessage] = []

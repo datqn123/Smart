@@ -54,3 +54,25 @@ def test_protocol_exposes_async_methods() -> None:
     from app.llm.protocol import LlmClient
 
     assert "astructured_predict" in LlmClient.__dict__
+
+
+@pytest.mark.asyncio
+async def test_async_no_blocking_call() -> None:
+    from app.harness.runtime import AgentHarness, ToolCallContext
+
+    harness = AgentHarness(enabled=True)
+    called = False
+
+    async def tool():
+        nonlocal called
+        called = True
+        return {"ok": True}
+
+    result = await harness.arun_tool(
+        tool_name="sql_query",
+        tool=tool,
+        context=ToolCallContext(tool_name="sql_query", correlation_id="corr-async"),
+    )
+
+    assert called is True
+    assert result == {"ok": True}

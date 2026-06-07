@@ -570,7 +570,7 @@ export function ChatBotPage() {
                       </div>
                     </div>
                   </div>
-                ) : (
+                ) : hasClarify ? null : (
                 <div className={`px-4 py-3 rounded-2xl text-[15px] leading-relaxed shadow-sm ${
                   msg.role === "user" 
                     ? "rounded-tr-none border border-white/10 bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-md shadow-blue-200/50"

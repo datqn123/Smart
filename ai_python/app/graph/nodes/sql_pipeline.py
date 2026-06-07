@@ -1241,36 +1241,36 @@ def route_after_validate_sql(state: AgentState) -> str:
 def _effective_ledger_first_prompts(state: AgentState, settings: Any) -> bool:
     if not settings.sql_ledger_first_prompts:
         return False
+    if state.get("intent") == "system_data_chart":
+        req = state.get("idea_data_request")
+        if not isinstance(req, dict) or not req:
+            brief = state.get("chart_brief")
+            if isinstance(brief, dict):
+                req = brief.get("data_request")
+        if not isinstance(req, dict):
+            return False
+        blob = json.dumps(req, ensure_ascii=False).lower()
+        keys = (
+            "financeledger",
+            "ledger",
+            "doanh thu",
+            "chi phí",
+            "chi phi",
+            "revenue",
+            "expense",
+            "cashflow",
+            "sổ cái",
+            "so cai",
+            "salesrevenue",
+        )
+        return any(k in blob for k in keys)
     user_q = scope_effective_question(
         latest_human_question(state.get("messages")) or "",
         state.get("business_scope") if isinstance(state.get("business_scope"), dict) else None,
     )
     if not should_use_ledger_first_prompts(detect_sql_query_domain(user_q)):
         return False
-    if state.get("intent") != "system_data_chart":
-        return detect_sql_query_domain(user_q) == "ledger"
-    req = state.get("idea_data_request")
-    if not isinstance(req, dict) or not req:
-        brief = state.get("chart_brief")
-        if isinstance(brief, dict):
-            req = brief.get("data_request")
-    if not isinstance(req, dict):
-        return False
-    blob = json.dumps(req, ensure_ascii=False).lower()
-    keys = (
-        "financeledger",
-        "ledger",
-        "doanh thu",
-        "chi phí",
-        "chi phi",
-        "revenue",
-        "expense",
-        "cashflow",
-        "sổ cái",
-        "so cai",
-        "salesrevenue",
-    )
-    return any(k in blob for k in keys)
+    return detect_sql_query_domain(user_q) == "ledger"
 
 
 def route_after_validate_result(state: AgentState) -> str:

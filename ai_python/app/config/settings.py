@@ -63,8 +63,32 @@ class LlmSettings(BaseSettings):
         default=None,
         description="Temperature for structured model; unset inherits LLM_TEMPERATURE.",
     )
+    # --- Tiered model routing (P7). Each tier optionally maps to its own model id on
+    #     the same gateway. Empty = alias to the existing structured client (no-op),
+    #     so enabling AGENTIC_MODEL_ROUTING with no tier set keeps current behaviour. ---
+    tier_haiku_model: str = Field(
+        default="",
+        description="LLM_TIER_HAIKU_MODEL — cheap/fast model for intent & compact.",
+    )
+    tier_sonnet_model: str = Field(
+        default="",
+        description="LLM_TIER_SONNET_MODEL — balanced model for planner/sql/compose.",
+    )
+    tier_opus_model: str = Field(
+        default="",
+        description="LLM_TIER_OPUS_MODEL — strong model used on replan escalation.",
+    )
 
-    @field_validator("base_url", "model", "structured_base_url", "structured_model", mode="before")
+    @field_validator(
+        "base_url",
+        "model",
+        "structured_base_url",
+        "structured_model",
+        "tier_haiku_model",
+        "tier_sonnet_model",
+        "tier_opus_model",
+        mode="before",
+    )
     @classmethod
     def strip_str(cls, v: object) -> object:
         if isinstance(v, str):
@@ -77,6 +101,16 @@ class LlmSettings(BaseSettings):
         if v is None:
             return None
         return max(0.0, min(2.0, v))
+
+    def fork_for_model(self, name: str) -> LlmSettings | None:
+        """Return settings for a tier model on the same gateway, or ``None`` if unset.
+
+        Inherits primary base_url / api_key / temperature; only the model id changes.
+        """
+        clean = (name or "").strip()
+        if not clean:
+            return None
+        return self.model_copy(update={"model": clean})
 
     def fork_for_structured_chat(self) -> LlmSettings | None:
         """Return settings for the structured-output LLM, or ``None`` to use primary only."""

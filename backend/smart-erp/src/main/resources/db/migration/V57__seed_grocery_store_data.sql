@@ -9,6 +9,18 @@
 DELETE FROM InventoryLogs WHERE product_id IN (SELECT id FROM Products WHERE sku_code LIKE 'DEMO-%' OR sku_code LIKE 'BULK-SEED-%');
 DELETE FROM StockReceiptDetails WHERE product_id IN (SELECT id FROM Products WHERE sku_code LIKE 'DEMO-%' OR sku_code LIKE 'BULK-SEED-%');
 DELETE FROM OrderDetails WHERE product_id IN (SELECT id FROM Products WHERE sku_code LIKE 'DEMO-%' OR sku_code LIKE 'BULK-SEED-%');
+DELETE FROM stockdispatch_lines WHERE inventory_id IN (
+    SELECT i.id
+    FROM Inventory i
+    JOIN Products p ON p.id = i.product_id
+    WHERE p.sku_code LIKE 'DEMO-%' OR p.sku_code LIKE 'BULK-SEED-%'
+);
+DELETE FROM InventoryAuditLines WHERE inventory_id IN (
+    SELECT i.id
+    FROM Inventory i
+    JOIN Products p ON p.id = i.product_id
+    WHERE p.sku_code LIKE 'DEMO-%' OR p.sku_code LIKE 'BULK-SEED-%'
+);
 DELETE FROM Inventory WHERE product_id IN (SELECT id FROM Products WHERE sku_code LIKE 'DEMO-%' OR sku_code LIKE 'BULK-SEED-%');
 DELETE FROM ProductPriceHistory WHERE product_id IN (SELECT id FROM Products WHERE sku_code LIKE 'DEMO-%' OR sku_code LIKE 'BULK-SEED-%');
 DELETE FROM ProductUnits WHERE product_id IN (SELECT id FROM Products WHERE sku_code LIKE 'DEMO-%' OR sku_code LIKE 'BULK-SEED-%');
@@ -23,20 +35,36 @@ UPDATE Categories SET name='Nước giải khát',       description='Nước ng
 UPDATE Categories SET name='Hóa phẩm & Tẩy rửa',    description='Bột giặt, nước xả, nước rửa chén, nước lau sàn' WHERE category_code='CAT003';
 UPDATE Categories SET name='Vật dụng gia đình',      description='Ly chén, dao kéo, đồ nhựa gia dụng' WHERE category_code='CAT004';
 
--- ============================================================
--- 3) THÊM DANH MỤC CẤP 1 MỚI
--- ============================================================
-INSERT INTO Categories (category_code, name, description, sort_order) VALUES
-('CAT005', 'Bánh kẹo & Snack',  'Bánh quy, kẹo, snack, socola, bánh ngọt, bánh ăn dặm', 5),
-('CAT006', 'Chăm sóc cá nhân',  'Xà phòng, dầu gội, sữa tắm, kem đánh răng, khăn giấy, tã', 6)
-ON CONFLICT (category_code) DO UPDATE SET name=EXCLUDED.name, description=EXCLUDED.description;
+WITH seed(category_code, name, description, sort_order) AS (
+    VALUES
+    ('CAT005', 'Bánh kẹo & Snack', 'Bánh quy, kẹo, snack, socola, bánh ngọt, bánh ăn dặm', 5),
+    ('CAT006', 'Chăm sóc cá nhân', 'Xà phòng, dầu gội, sữa tắm, kem đánh răng, khăn giấy, tã', 6)
+)
+UPDATE Categories c
+SET name = seed.name,
+    description = seed.description,
+    sort_order = seed.sort_order,
+    status = 'Active',
+    deleted_at = NULL
+FROM seed
+WHERE c.category_code = seed.category_code;
 
--- ============================================================
--- 4) THÊM DANH MỤC CẤP 2 (22 danh mục con)
--- ============================================================
-INSERT INTO Categories (category_code, name, parent_id, sort_order)
-SELECT v.code, v.name, c.id, v.sort
-FROM (VALUES
+WITH seed(category_code, name, description, sort_order) AS (
+    VALUES
+    ('CAT005', 'Bánh kẹo & Snack', 'Bánh quy, kẹo, snack, socola, bánh ngọt, bánh ăn dặm', 5),
+    ('CAT006', 'Chăm sóc cá nhân', 'Xà phòng, dầu gội, sữa tắm, kem đánh răng, khăn giấy, tã', 6)
+)
+INSERT INTO Categories (category_code, name, description, sort_order)
+SELECT seed.category_code, seed.name, seed.description, seed.sort_order
+FROM seed
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM Categories c
+    WHERE c.category_code = seed.category_code
+);
+
+WITH seed(code, name, parent_code, sort_order) AS (
+    VALUES
     ('CAT00101', 'Mì gói & miến',           'CAT001', 1),
     ('CAT00102', 'Nước mắm & nước tương',   'CAT001', 2),
     ('CAT00103', 'Hạt nêm & bột ngọt',      'CAT001', 3),
@@ -63,8 +91,55 @@ FROM (VALUES
     ('CAT00602', 'Sữa tắm',                  'CAT006', 2),
     ('CAT00603', 'Kem đánh răng & bàn chải', 'CAT006', 3),
     ('CAT00604', 'Khăn giấy, tã & vệ sinh',  'CAT006', 4)
-) AS v(code, name, parent_code, sort)
-JOIN Categories c ON c.category_code = v.parent_code;
+)
+UPDATE Categories child
+SET name = seed.name,
+    parent_id = parent.id,
+    sort_order = seed.sort_order,
+    status = 'Active',
+    deleted_at = NULL
+FROM seed
+JOIN Categories parent ON parent.category_code = seed.parent_code
+WHERE child.category_code = seed.code;
+
+WITH seed(code, name, parent_code, sort_order) AS (
+    VALUES
+    ('CAT00101', 'Mì gói & miến',           'CAT001', 1),
+    ('CAT00102', 'Nước mắm & nước tương',   'CAT001', 2),
+    ('CAT00103', 'Hạt nêm & bột ngọt',      'CAT001', 3),
+    ('CAT00104', 'Dầu ăn',                  'CAT001', 4),
+    ('CAT00105', 'Gạo, đường, muối',         'CAT001', 5),
+    ('CAT00201', 'Nước ngọt có gas',         'CAT002', 1),
+    ('CAT00202', 'Bia',                      'CAT002', 2),
+    ('CAT00203', 'Nước suối & tinh khiết',   'CAT002', 3),
+    ('CAT00204', 'Trà & cà phê',             'CAT002', 4),
+    ('CAT00205', 'Sữa tươi & sữa chua',      'CAT002', 5),
+    ('CAT00206', 'Nước trái cây',            'CAT002', 6),
+    ('CAT00301', 'Bột giặt & nước giặt',     'CAT003', 1),
+    ('CAT00302', 'Nước xả vải',              'CAT003', 2),
+    ('CAT00303', 'Nước rửa chén',            'CAT003', 3),
+    ('CAT00304', 'Nước lau sàn & vệ sinh',   'CAT003', 4),
+    ('CAT00401', 'Ly chén dĩa & hộp đựng',   'CAT004', 1),
+    ('CAT00402', 'Dao kéo dụng cụ bếp',      'CAT004', 2),
+    ('CAT00403', 'Đồ nhựa gia dụng',         'CAT004', 3),
+    ('CAT00501', 'Bánh quy & bánh bông lan', 'CAT005', 1),
+    ('CAT00502', 'Kẹo các loại',             'CAT005', 2),
+    ('CAT00503', 'Socola & bánh ngọt',       'CAT005', 3),
+    ('CAT00504', 'Snack',                    'CAT005', 4),
+    ('CAT00601', 'Xà phòng & dầu gội',       'CAT006', 1),
+    ('CAT00602', 'Sữa tắm',                  'CAT006', 2),
+    ('CAT00603', 'Kem đánh răng & bàn chải', 'CAT006', 3),
+    ('CAT00604', 'Khăn giấy, tã & vệ sinh',  'CAT006', 4)
+)
+INSERT INTO Categories (category_code, name, parent_id, sort_order)
+SELECT seed.code, seed.name, parent.id, seed.sort_order
+FROM seed
+JOIN Categories parent ON parent.category_code = seed.parent_code
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM Categories child
+    WHERE child.category_code = seed.code
+);
 
 -- ============================================================
 -- 5) NHÀ CUNG CẤP (21)
@@ -271,7 +346,7 @@ WITH sp AS (
     ('SP147','Tã quần Bobby size M (6-11kg) 42 cái','CAT00604','NCC020',85000,120000,'Bịch'),
     ('SP148','Tã quần Bobby size L (9-14kg) 36 cái','CAT00604','NCC020',88000,125000,'Bịch'),
     ('SP149','Băng vệ sinh Kotex trung bình 10 miếng','CAT00604','NCC014',18000,25000,'Gói')
-    ) AS t
+    ) AS t(sku, name, cat_code, supplier_code, cost, sale, unit)
 )
 INSERT INTO Products (category_id, sku_code, name, status)
 SELECT c.id, t.sku, t.name, 'Active'
@@ -325,7 +400,7 @@ WITH sp AS (
     ('SP138','Tuýp'),('SP139','Tuýp'),('SP140','Tuýp'),
     ('SP141','Cái'),('SP142','Cái'),
     ('SP143','Hộp'),('SP144','Bịch'),('SP145','Hộp'),('SP146','Bịch'),('SP147','Bịch'),('SP148','Bịch'),('SP149','Gói')
-    ) AS t
+    ) AS t(sku, unit)
 )
 INSERT INTO ProductUnits (product_id, unit_name, conversion_rate, is_base_unit)
 SELECT p.id, t.unit, 1.0, true
@@ -386,7 +461,7 @@ WITH sp AS (
     ('SP141',15000,22000),('SP142',8000,12000),
     ('SP143',10000,15000),('SP144',18000,28000),('SP145',8000,12000),
     ('SP146',5000,8000),('SP147',85000,120000),('SP148',88000,125000),('SP149',18000,25000)
-    ) AS t
+    ) AS t(sku, cost, sale)
 )
 INSERT INTO ProductPriceHistory (product_id, unit_id, cost_price, sale_price, effective_date)
 SELECT p.id, u.id, t.cost, t.sale, DATE '2026-06-01'

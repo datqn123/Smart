@@ -68,6 +68,47 @@ def test_build_llm_registry_single_model_one_factory_call(
     assert reg.get("sql_gen") is reg.get("chat")
 
 
+@patch("app.llm.registry.build_chat_openai")
+def test_tiers_alias_structured_when_unset(
+    mock_build: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No tier model configured → haiku/sonnet/opus alias the structured client."""
+    monkeypatch.setenv("LLM_REQUIRED", "0")
+    monkeypatch.setenv("LLM_API_KEY", "secret")
+    monkeypatch.setenv("LLM_BASE_URL", "https://example.com")
+    monkeypatch.setenv("LLM_MODEL", "primary-m")
+    monkeypatch.setenv("LLM_STRUCTURED_MODEL", "structured-m")
+    for tier in ("HAIKU", "SONNET", "OPUS"):
+        monkeypatch.delenv(f"LLM_TIER_{tier}_MODEL", raising=False)
+    mock_build.return_value = MagicMock()
+    reg = build_llm_registry(load_llm_settings())
+    # Only primary + structured were built; tiers reuse the structured client object.
+    assert mock_build.call_count == 2
+    assert reg.get("sonnet") is reg.get("intent")
+    assert reg.get("haiku") is reg.get("intent")
+    assert reg.get("opus") is reg.get("intent")
+
+
+@patch("app.llm.registry.build_chat_openai")
+def test_tier_opus_uses_its_own_model(
+    mock_build: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A configured tier model builds a dedicated client distinct from structured."""
+    monkeypatch.setenv("LLM_REQUIRED", "0")
+    monkeypatch.setenv("LLM_API_KEY", "secret")
+    monkeypatch.setenv("LLM_BASE_URL", "https://example.com")
+    monkeypatch.setenv("LLM_MODEL", "primary-m")
+    monkeypatch.setenv("LLM_STRUCTURED_MODEL", "structured-m")
+    monkeypatch.setenv("LLM_TIER_OPUS_MODEL", "opus-m")
+    mock_build.side_effect = lambda **kwargs: MagicMock(name=kwargs["settings"].model)
+    reg = build_llm_registry(load_llm_settings())
+    models = [call.kwargs["settings"].model for call in mock_build.call_args_list]
+    assert "opus-m" in models  # dedicated opus client built
+    assert reg.get("opus") is not reg.get("sonnet")  # opus distinct from aliased structured
+
+
 def test_registry_unknown_role_falls_back_to_default() -> None:
     reg = LlmRegistry()
     fake = FakeLlmClient(reply="x", stream_parts=["a", "b"])

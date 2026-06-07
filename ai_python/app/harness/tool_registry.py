@@ -16,6 +16,12 @@ class TurnContext:
     correlation_id: str
     bearer_token: str | None
     schema_version: str | None
+    clarification_response: dict[str, Any] | None = None
+    pending_hitl_tool: str | None = None
+    pending_hitl_payload: dict[str, Any] | None = None
+    intent_object: dict[str, Any] | None = None
+    assumptions: list[str] = field(default_factory=list)
+    role: str | None = None
 
 
 @dataclass(frozen=True)
@@ -84,7 +90,15 @@ class ToolCall(BaseModel):
     reasoning: str = ""
 
 
+class ClarifyRequest(BaseModel):
+    """Ask the user a clarifying question (rendered as a UI bubble, not plain text)."""
+
+    questions: list[str] = Field(default_factory=list)
+    suggested_rewrite: str = ""
+
+
 class DecisionSchema(BaseModel):
-    action: Literal["call_tool", "final_answer"]
+    action: Literal["call_tool", "final_answer", "clarify"]
     tool_call: ToolCall | None = None
     final_answer: str | None = None
+    clarify: ClarifyRequest | None = None

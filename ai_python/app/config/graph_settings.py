@@ -326,6 +326,68 @@ class GraphSettings(BaseSettings):
         default="harness_planner",
         description="LLM registry role used for harness next-action decisions.",
     )
+    # --- Agentic AI target completion P0: async boundary + budgets ---
+    agentic_async_enabled: bool = Field(
+        default=False,
+        description="Use native async harness stream path when available.",
+    )
+    harness_token_budget: int = Field(
+        default=0,
+        ge=0,
+        description="Per-turn token budget for harness loop; 0 disables token budget.",
+    )
+    harness_cost_budget_usd: float = Field(
+        default=0.05,
+        ge=0.0,
+        description="Per-turn cost budget in USD for harness loop; 0 disables cost budget.",
+    )
+    harness_wallclock_timeout_s: float = Field(
+        default=30.0,
+        ge=0.0,
+        description="Per-turn wall-clock timeout in seconds for harness loop; 0 disables timeout.",
+    )
+    # --- Agentic AI target completion P1: intent object gate ---
+    agentic_intent_object_enabled: bool = Field(
+        default=False,
+        description="Analyze requests with IntentObject before the harness loop.",
+    )
+    intent_confidence_run: float = Field(default=0.9, ge=0.0, le=1.0)
+    intent_confidence_hitl: float = Field(default=0.75, ge=0.0, le=1.0)
+    entity_score_hitl: float = Field(default=0.6, ge=0.0, le=1.0)
+    # --- Agentic AI target completion P3: SQL self-correct + data validator ---
+    sql_regen_max: int = Field(default=3, ge=0, le=10)
+    sql_empty_retry_max: int = Field(default=2, ge=0, le=10)
+    agentic_data_validator_enabled: bool = Field(
+        default=False,
+        description="Enable data_validator tool in agentic flows.",
+    )
+    # --- Agentic AI target completion P2: PlanGraph DAG ---
+    agentic_plan_dag_enabled: bool = Field(
+        default=False,
+        description="Enable opt-in plan-driven DAG execution for selected harness intents.",
+    )
+    plan_replan_max: int = Field(default=2, ge=0, le=10)
+    # --- Agentic AI target completion P4: answer/chart tools ---
+    agentic_answer_composer_enabled: bool = Field(
+        default=False,
+        description="Enable answer_composer as the final agentic answer tool.",
+    )
+    # --- Agentic AI target completion P6: capability guard ---
+    agentic_capability_guard_enabled: bool = Field(
+        default=False,
+        description="Enable capability/RBAC guard extensions for agentic tools.",
+    )
+    # --- Agentic AI target completion P5: memory + compact ---
+    working_memory_pairs: int = Field(default=6, ge=0, le=20)
+    compact_context_ratio: float = Field(default=0.70, ge=0.0, le=1.0)
+    semantic_store_mode: str = Field(default="memory")
+    semantic_expire_days: int = Field(default=90, ge=1, le=3650)
+    # --- Agentic AI target completion P7: model routing + cache ---
+    agentic_model_routing_enabled: bool = Field(default=False)
+    agentic_semantic_cache_enabled: bool = Field(default=False)
+    opt_escalate_replan_count: int = Field(default=2, ge=0, le=10)
+    # --- Agentic AI target completion P8: observability ---
+    agentic_trace_enabled: bool = Field(default=True)
 
     @field_validator("ai_display_timezone", mode="before")
     @classmethod
@@ -412,6 +474,15 @@ class GraphSettings(BaseSettings):
         "sql_review_skip_low_risk",
         "harness_enabled",
         "harness_loop_enabled",
+        "agentic_async_enabled",
+        "agentic_intent_object_enabled",
+        "agentic_data_validator_enabled",
+        "agentic_plan_dag_enabled",
+        "agentic_answer_composer_enabled",
+        "agentic_capability_guard_enabled",
+        "agentic_model_routing_enabled",
+        "agentic_semantic_cache_enabled",
+        "agentic_trace_enabled",
         mode="before",
     )
     @classmethod
@@ -440,6 +511,13 @@ class GraphSettings(BaseSettings):
         "sql_repair_max_attempts",
         "planner_max_md_chars",
         "harness_max_steps",
+        "harness_token_budget",
+        "sql_regen_max",
+        "sql_empty_retry_max",
+        "plan_replan_max",
+        "working_memory_pairs",
+        "semantic_expire_days",
+        "opt_escalate_replan_count",
         mode="before",
     )
     @classmethod

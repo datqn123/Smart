@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -42,12 +44,64 @@ class AgentHarness:
         if not self._enabled:
             return tool()
         self._before_tool_call(ctx)
+        started = time.perf_counter()
         try:
             result = tool()
         except Exception as exc:
-            self._after_tool_call(ctx, ok=False, error=str(exc))
+            self._after_tool_call(
+                ctx,
+                ok=False,
+                error=str(exc),
+                latency_ms=(time.perf_counter() - started) * 1000,
+            )
             raise
-        self._after_tool_call(ctx, ok=True, result=result)
+        self._after_tool_call(
+            ctx,
+            ok=True,
+            result=result,
+            latency_ms=(time.perf_counter() - started) * 1000,
+        )
+        return result
+
+    async def arun_tool(
+        self,
+        *,
+        tool_name: str,
+        tool: Callable[[], Any],
+        context: ToolCallContext | None = None,
+        tokens: int = 0,
+        cost_usd: float = 0.0,
+    ) -> Any:
+        ctx = context or ToolCallContext(tool_name=tool_name)
+        if not self._enabled:
+            result = tool()
+            if inspect.isawaitable(result):
+                return await result
+            return result
+        self._before_tool_call(ctx)
+        started = time.perf_counter()
+        try:
+            result = tool()
+            if inspect.isawaitable(result):
+                result = await result
+        except Exception as exc:
+            self._after_tool_call(
+                ctx,
+                ok=False,
+                error=str(exc),
+                tokens=tokens,
+                cost_usd=cost_usd,
+                latency_ms=(time.perf_counter() - started) * 1000,
+            )
+            raise
+        self._after_tool_call(
+            ctx,
+            ok=True,
+            result=result,
+            tokens=tokens,
+            cost_usd=cost_usd,
+            latency_ms=(time.perf_counter() - started) * 1000,
+        )
         return result
 
     def _before_tool_call(self, ctx: ToolCallContext) -> None:
@@ -70,6 +124,9 @@ class AgentHarness:
         ok: bool,
         result: Any | None = None,
         error: str | None = None,
+        tokens: int = 0,
+        cost_usd: float = 0.0,
+        latency_ms: float | None = None,
     ) -> None:
         payload: dict[str, Any] = {
             "event": "after_tool_call",
@@ -78,6 +135,9 @@ class AgentHarness:
             "correlation_id": ctx.correlation_id,
             "tenant_id": ctx.tenant_id,
             "thread_id": ctx.thread_id,
+            "tokens": int(tokens or 0),
+            "cost_usd": float(cost_usd or 0.0),
+            "latency_ms": float(latency_ms or 0.0),
         }
         if ok:
             payload["result_type"] = type(result).__name__ if result is not None else "NoneType"

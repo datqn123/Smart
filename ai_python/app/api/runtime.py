@@ -5,9 +5,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from functools import lru_cache
 from collections.abc import AsyncIterator, Iterator
+from dataclasses import dataclass
+from functools import lru_cache
+from time import monotonic
 from typing import Any, Protocol
+from uuid import uuid4
 
 from langchain_core.messages import HumanMessage
 
@@ -18,9 +21,19 @@ from app.config.settings import load_llm_settings
 from app.graph import compile_agent_graph, default_initial_state, iter_graph_stream
 from app.graph.deps import GraphDeps
 from app.graph.state import fresh_turn_overlay
-from app.graph.tools import CatalogDraftTool, InventoryDraftTool, SchemaExploreTool, SqlQueryTool
+from app.graph.tools import (
+    AnswerComposerTool,
+    BuildChartTool,
+    CatalogDraftTool,
+    DataValidatorTool,
+    ErpGuideTool,
+    InventoryDraftTool,
+    SchemaExploreTool,
+    SqlQueryTool,
+)
 from app.harness import (
     AgentHarness,
+    ClarifyEvent,
     ErrorEvent,
     FinalAnswerEvent,
     HarnessOrchestrator,
@@ -45,6 +58,14 @@ HARNESS_LOOP_INTENTS = frozenset(
         "inventory_draft",
     }
 )
+PENDING_HITL_TTL_SECONDS = 30 * 60
+
+
+@dataclass(frozen=True)
+class PendingHitlRecord:
+    tool_name: str
+    payload: dict[str, Any]
+    created_at: float
 
 
 class GraphRuntime(Protocol):
@@ -124,6 +145,7 @@ class LangHarnessRuntime:
         self._legacy = LangGraphRuntime(compiled, graph_settings=graph_settings)
         self._orchestrator = orchestrator
         self._graph_settings = graph_settings
+        self._pending_hitl: dict[str, PendingHitlRecord] = {}
 
     def invoke(
         self,
@@ -148,14 +170,44 @@ class LangHarnessRuntime:
         bearer_token: str | None = None,
     ) -> Any:
         if not _should_use_harness_loop(request, self._graph_settings):
+            intent = _quick_classify_harness_intent(request.message)
+            logger.info("harness_route=legacy intent=%s message_preview=%.60s", intent, request.message)
             return self._legacy.stream(request, correlation_id=correlation_id, bearer_token=bearer_token)
+        logger.info("harness_route=loop intent=%s message_preview=%.60s", _quick_classify_harness_intent(request.message), request.message)
+        hitl_key = _pending_hitl_key(request, correlation_id=correlation_id)
+        is_resume = _clarification_response(request) is not None
+        pending_record = self._get_pending_hitl(hitl_key) if is_resume else None
         return _iter_harness_stream(
             self._orchestrator,
             request,
             graph_settings=self._graph_settings,
             correlation_id=correlation_id,
             bearer_token=bearer_token,
+            pending_hitl_tool=pending_record.tool_name if pending_record else None,
+            pending_hitl_payload=pending_record.payload if pending_record else None,
+            on_pending_hitl=lambda spec: self._store_pending_hitl(hitl_key, spec),
+            on_resume_success=(lambda: self._pending_hitl.pop(hitl_key, None)) if is_resume else None,
         )
+
+    def _store_pending_hitl(self, key: str, spec: Any) -> None:
+        tool_name = _tool_name_from_hitl_event(str(getattr(spec, "event_name", "") or ""))
+        if not tool_name:
+            return
+        payload = getattr(spec, "payload", None)
+        self._pending_hitl[key] = PendingHitlRecord(
+            tool_name=tool_name,
+            payload=dict(payload) if isinstance(payload, dict) else {},
+            created_at=monotonic(),
+        )
+
+    def _get_pending_hitl(self, key: str) -> PendingHitlRecord | None:
+        record = self._pending_hitl.get(key)
+        if record is None:
+            return None
+        if monotonic() - record.created_at > PENDING_HITL_TTL_SECONDS:
+            self._pending_hitl.pop(key, None)
+            return None
+        return record
 
 
 def _build_state(
@@ -225,12 +277,20 @@ def _build_graph_deps() -> GraphDeps:
 
 def _build_tool_registry(deps: GraphDeps) -> ToolRegistry:
     registry = ToolRegistry()
-    for tool in (
+    tools: list[Any] = [
         SqlQueryTool(deps),
         SchemaExploreTool(deps),
         CatalogDraftTool(deps),
         InventoryDraftTool(deps),
-    ):
+    ]
+    settings = deps.settings
+    # P3 — data validator (gated; keeps the flags-off manifest unchanged for regression).
+    if bool(getattr(settings, "agentic_data_validator_enabled", False)):
+        tools.append(DataValidatorTool())
+    # P4 — answer composer + chart + erp guide (gated together).
+    if bool(getattr(settings, "agentic_answer_composer_enabled", False)):
+        tools.extend((AnswerComposerTool(), BuildChartTool(), ErpGuideTool()))
+    for tool in tools:
         registry.register(tool.manifest, tool)
     return registry
 
@@ -238,6 +298,8 @@ def _build_tool_registry(deps: GraphDeps) -> ToolRegistry:
 def _should_use_harness_loop(request: ChatRequest, graph_settings: Any) -> bool:
     if not bool(getattr(graph_settings, "harness_loop_enabled", False)):
         return False
+    if _clarification_response(request) is not None:
+        return True
     allowed = {
         str(item).strip()
         for item in (getattr(graph_settings, "harness_loop_intents", None) or HARNESS_LOOP_INTENTS)
@@ -248,6 +310,15 @@ def _should_use_harness_loop(request: ChatRequest, graph_settings: Any) -> bool:
 
 
 def _quick_classify_harness_intent(message: str) -> str:
+    """Best-effort intent label for the harness route.
+
+    Only the write-style intents (drafts) and schema exploration are detected by
+    keyword, because they map to dedicated tool flows. Everything else defaults to
+    ``data_query`` so any read-style question reliably enters the harness loop —
+    the harness planner LLM then decides whether to call a tool or answer directly
+    (incl. politely declining out-of-scope questions). Keyword precision is no
+    longer load-bearing for read queries; it only affects the logged label.
+    """
     text = (message or "").lower()
     if any(token in text for token in ("tạo phiếu", "nhập kho", "xuất kho", "inventory draft", "stock receipt")):
         return "inventory_draft"
@@ -255,9 +326,7 @@ def _quick_classify_harness_intent(message: str) -> str:
         return "catalog_draft"
     if any(token in text for token in ("schema", "bảng nào", "cột nào", "join")):
         return "schema_explore"
-    if any(token in text for token in ("doanh thu", "chi phí", "tồn kho", "báo cáo", "thống kê", "danh sách")):
-        return "data_query"
-    return "chat_normal"
+    return "data_query"
 
 
 def _build_turn_context(
@@ -265,6 +334,8 @@ def _build_turn_context(
     *,
     correlation_id: str,
     bearer_token: str | None,
+    pending_hitl_tool: str | None = None,
+    pending_hitl_payload: dict[str, Any] | None = None,
 ) -> TurnContext:
     return TurnContext(
         tenant_id=request.metadata.tenant_id,
@@ -273,6 +344,9 @@ def _build_turn_context(
         correlation_id=correlation_id,
         bearer_token=bearer_token,
         schema_version=request.metadata.schema_version,
+        clarification_response=_clarification_response(request),
+        pending_hitl_tool=pending_hitl_tool,
+        pending_hitl_payload=pending_hitl_payload,
     )
 
 
@@ -282,9 +356,17 @@ async def _harness_events(
     *,
     correlation_id: str,
     bearer_token: str | None,
+    pending_hitl_tool: str | None = None,
+    pending_hitl_payload: dict[str, Any] | None = None,
 ) -> AsyncIterator[Any]:
-    scratchpad = TurnScratchpad(messages=[HumanMessage(content=request.message)])
-    ctx = _build_turn_context(request, correlation_id=correlation_id, bearer_token=bearer_token)
+    scratchpad = TurnScratchpad(messages=[HumanMessage(content=_resume_scratchpad_message(request))])
+    ctx = _build_turn_context(
+        request,
+        correlation_id=correlation_id,
+        bearer_token=bearer_token,
+        pending_hitl_tool=pending_hitl_tool,
+        pending_hitl_payload=pending_hitl_payload,
+    )
     async for event in orchestrator.run(scratchpad, ctx):
         yield event
 
@@ -296,6 +378,10 @@ def _iter_harness_stream(
     graph_settings: Any,
     correlation_id: str,
     bearer_token: str | None,
+    pending_hitl_tool: str | None = None,
+    pending_hitl_payload: dict[str, Any] | None = None,
+    on_pending_hitl: Any | None = None,
+    on_resume_success: Any | None = None,
 ) -> Iterator[Any]:
     _ = graph_settings
     agen = _harness_events(
@@ -303,6 +389,8 @@ def _iter_harness_stream(
         request,
         correlation_id=correlation_id,
         bearer_token=bearer_token,
+        pending_hitl_tool=pending_hitl_tool,
+        pending_hitl_payload=pending_hitl_payload,
     )
     loop = asyncio.new_event_loop()
     try:
@@ -311,10 +399,73 @@ def _iter_harness_stream(
                 event = loop.run_until_complete(agen.__anext__())
             except StopAsyncIteration:
                 break
+            if isinstance(event, PendingHitlEvent) and on_pending_hitl is not None:
+                on_pending_hitl(event.spec)
+            if isinstance(event, FinalAnswerEvent) and on_resume_success is not None:
+                on_resume_success()
             yield _event_to_stream_chunk(event)
     finally:
         loop.run_until_complete(loop.shutdown_asyncgens())
         loop.close()
+
+
+def _resume_scratchpad_message(request: ChatRequest) -> str:
+    """Resolve the question to run when resuming a harness data_query clarification.
+
+    If the user accepted the suggested rewrite, use it verbatim. For a free-form
+    reply, recombine the original question (carried in continuationContext) with the
+    answer so the planner keeps full context. Draft HITL resumes are untouched.
+    """
+    answer = request.message
+    clar = _clarification_response(request)
+    if not clar:
+        return answer
+    cc = clar.get("continuation_context") or {}
+    kind = cc.get("clarifyKind") or clar.get("clarify_kind")
+    if kind != "harness_data_query":
+        return answer
+    rewrite = str(clar.get("suggested_rewrite") or "").strip()
+    if rewrite:
+        return rewrite
+    original = str(cc.get("originalQuestion") or "").strip()
+    if original and original != answer.strip():
+        return f"{original}\n\nNgười dùng trả lời câu hỏi làm rõ: {answer}"
+    return answer
+
+
+def _clarification_response(request: ChatRequest) -> dict[str, Any] | None:
+    clar = getattr(request.options, "clarification", None)
+    if clar is None:
+        return None
+    if isinstance(clar, dict):
+        return dict(clar)
+    if hasattr(clar, "model_dump"):
+        dumped = clar.model_dump(mode="json")
+        return dict(dumped) if isinstance(dumped, dict) else None
+    return None
+
+
+def _pending_hitl_key(request: ChatRequest, *, correlation_id: str) -> str:
+    return request.metadata.thread_id or correlation_id
+
+
+def _tool_name_from_hitl_event(event_name: str) -> str | None:
+    if event_name == "draft":
+        return "catalog_draft"
+    if event_name == "inventory_draft":
+        return "inventory_draft"
+    return None
+
+
+def _harness_update_chunk(payload: dict[str, Any]) -> dict[str, Any]:
+    """Wrap an SSE-bearing payload under a node key.
+
+    ``routes._extract_partial_update`` flattens one level to unwrap LangGraph node
+    names, so a bare ``{"query_table_sse": ...}`` would be flattened into its inner
+    keys and the top-level key lost. Nesting under ``"harness"`` makes the payload
+    survive that flatten exactly like a legacy ``{node: {state}}`` update.
+    """
+    return {"harness": payload}
 
 
 def _event_to_stream_chunk(event: Any) -> Any:
@@ -323,20 +474,48 @@ def _event_to_stream_chunk(event: Any) -> Any:
     if isinstance(event, FinalAnswerEvent):
         return ("custom", {"final_answer": event.text})
     if isinstance(event, ErrorEvent):
-        return {"error_payload": {"code": event.code, "message": event.message}}
+        return _harness_update_chunk({"error_payload": {"code": event.code, "message": event.message}})
     if isinstance(event, SsePayloadEvent):
         if event.event_name == "draft":
-            return {"catalog_draft_sse": event.payload}
+            return _harness_update_chunk({"catalog_draft_sse": event.payload})
         if event.event_name == "inventory_draft":
-            return {"inventory_draft_sse": event.payload}
+            return _harness_update_chunk({"inventory_draft_sse": event.payload})
         if event.event_name == "data_table":
-            return {"query_table_sse": event.payload}
+            return _harness_update_chunk({"query_table_sse": event.payload})
         if event.event_name == "chart":
-            return {"chart_spec_final": event.payload}
-        return {f"{event.event_name}_sse": event.payload}
+            return _harness_update_chunk({"chart_spec_final": event.payload})
+        return _harness_update_chunk({f"{event.event_name}_sse": event.payload})
+    if isinstance(event, ClarifyEvent):
+        return _harness_update_chunk({"domain_clarify_sse": _build_clarify_sse(event)})
     if isinstance(event, PendingHitlEvent):
         return ("harness_control", {"suppress_done": True})
     return {"data": json.dumps(event, default=str, ensure_ascii=False)}
+
+
+def _build_clarify_sse(event: ClarifyEvent) -> dict[str, Any]:
+    """Build the clarify SSE payload in the shape the frontend already consumes.
+
+    Mirrors the legacy domain_guard ``domain_clarify_sse`` contract. The original
+    question is stashed in ``continuationContext`` so a free-form reply can be
+    recombined with it on resume (see ``_resume_scratchpad_message``).
+    """
+    clarify_id = uuid4().hex
+    return {
+        "clarifyId": clarify_id,
+        "clarifyKind": "harness_data_query",
+        "questions": list(event.questions),
+        "issues": [],
+        "guideRefs": [],
+        "originalQuestion": event.original_question,
+        "suggestedRewrite": event.suggested_rewrite,
+        "suggestedNormalized": event.suggested_rewrite,
+        "matchedModules": [],
+        "continuationContext": {
+            "clarifyId": clarify_id,
+            "clarifyKind": "harness_data_query",
+            "originalQuestion": event.original_question,
+        },
+    }
 
 
 @lru_cache(maxsize=1)
@@ -344,6 +523,7 @@ def get_graph_runtime() -> GraphRuntime:
     deps = _build_graph_deps()
     compiled = compile_agent_graph(deps, use_checkpointer=True)
     if not bool(getattr(deps.settings, "harness_loop_enabled", False)):
+        logger.info("runtime=LangGraphRuntime (harness_loop_enabled=False)")
         return LangGraphRuntime(compiled, graph_settings=deps.settings)
     if deps.llm_registry is None:
         logger.warning("HARNESS_LOOP_ENABLED=true but LLM registry is missing; using legacy graph runtime.")
@@ -355,4 +535,5 @@ def get_graph_runtime() -> GraphRuntime:
         settings=deps.settings,
         harness=deps.harness,
     )
+    logger.info("runtime=LangHarnessRuntime harness_loop_enabled=True intents=%s", HARNESS_LOOP_INTENTS)
     return LangHarnessRuntime(compiled, orchestrator, graph_settings=deps.settings)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage, SystemMessage
 
 from app.config.graph_settings import GraphSettings
@@ -178,3 +179,27 @@ def test_messages_to_transcript() -> None:
     )
     assert "User: h" in t
     assert "Assistant: a" in t
+
+
+def test_compact_triggers_at_ratio() -> None:
+    from app.harness.compact import CompactSubagent
+
+    subagent = CompactSubagent(compact_context_ratio=0.70)
+
+    assert subagent.should_compact(token_count=70, context_window=100)
+
+
+@pytest.mark.asyncio
+async def test_compact_preserves_constraints() -> None:
+    from app.harness.compact import CompactSubagent
+
+    block = await CompactSubagent(compact_context_ratio=0.70).compact(
+        [
+            HumanMessage(content="Xem doanh thu tháng 5"),
+            AIMessage(content="Doanh thu là 10 triệu"),
+            HumanMessage(content="Nhớ chỉ xem chi nhánh A"),
+        ]
+    )
+
+    assert block.compact_block.startswith("[COMPACT]")
+    assert "chi nhánh A" in block.compact_block

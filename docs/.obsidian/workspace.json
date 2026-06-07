@@ -4,21 +4,21 @@
     "type": "split",
     "children": [
       {
-        "id": "67ea60214bfacb66",
+        "id": "3c17e99e912b8d3e",
         "type": "tabs",
         "children": [
           {
-            "id": "12ba7b4107d35ccd",
+            "id": "b35f9c2d5b1079b5",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "dev/frontend/database/SEED_DATA_MOCK.md",
+                "file": "dev/ai-python/srs/SRS_AI_Task004_langgraph-gemma4-task4-spring-fastapi.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "SEED_DATA_MOCK"
+              "title": "SRS_AI_Task004_langgraph-gemma4-task4-spring-fastapi"
             }
           }
         ]
@@ -183,43 +183,43 @@
       "bases:Tạo cơ sở mới": false
     }
   },
-  "active": "12ba7b4107d35ccd",
+  "active": "4a42ad8245f0b892",
   "lastOpenFiles": [
+    "upgrade/ai-python/qa/002_agentic-ai-target-completion.md",
+    "upgrade/ai-python/qa/002_agentic-ai-target-completion.md.tmp.14196.ca8bd76d6423",
+    "upgrade/ai-python/tech_lead/002_agentic-ai-target-completion.md",
+    "upgrade/ai-python/tech_lead/002_agentic-ai-target-completion.md.tmp.14196.c42d8e3ceea4",
+    "upgrade/ai-python/srs/004_agentic-ai-target-completion.md",
+    "upgrade/ai-python/srs/004_agentic-ai-target-completion.md.tmp.14196.696ebb6cd02e",
+    "ai-python/agentic-ai-supporting-assets/001_index.md",
+    "ai-python/agentic-ai-supporting-assets/016_K15_intent_tool_success_history.md",
+    "ai-python/agentic-ai-supporting-assets/001_index.md.tmp.9344.c2df4af8a1ee",
+    "ai-python/agentic-ai-supporting-assets/015_K14_vi_units_formatting.md",
+    "ai-python/agentic-ai-supporting-assets/014_K13_erp_domain_guide.md",
+    "ai-python/agentic-ai-supporting-assets/011_K10_answer_templates.md",
+    "ai-python/agentic-ai-supporting-assets/016_K15_intent_tool_success_history.md.tmp.9344.1f92bb0a0b15",
+    "ai-python/agentic-ai-supporting-assets/015_K14_vi_units_formatting.md.tmp.9344.ce7b3f8d9175",
+    "ai-python/agentic-ai-supporting-assets/010_K9_chart_spec_catalog.md.tmp.9344.194635228238",
+    "ai-python/agentic-ai-supporting-assets/013_K12_golden_eval_set.md.tmp.9344.737d5d3fe9db",
+    "ai-python/agentic-ai-supporting-assets/012_K11_draft_slot_schema.md.tmp.9344.5f5fbf1cfb79",
+    "ai-python/agentic-ai-supporting-assets/005_K4_real_catalog_embedding_index.md.tmp.9344.c17a0430fbba",
+    "ai-python/agentic-ai-supporting-assets/006_K5_sql_allowlist_safety_policy.md",
+    "ai-python/agentic-ai-supporting-assets/002_K1_system_data_dictionary.md",
+    "ai-python/agentic-ai-supporting-assets/003_K2_vi_synonym_to_column_dictionary.md",
+    "dev/requires/Design Agentic AI.md",
+    "ai-python/agentic-ai-supporting-assets/013_K12_golden_eval_set.md",
+    "ai-python/agentic-ai-supporting-assets/012_K11_draft_slot_schema.md",
+    "ai-python/agentic-ai-supporting-assets/010_K9_chart_spec_catalog.md",
+    "ai-python/agentic-ai-supporting-assets/009_K8_business_rules_formulas.md",
+    "ai-python/agentic-ai-supporting-assets/008_K7_sql_few_shot_examples.md",
+    "ai-python/agentic-ai-supporting-assets/007_K6_capability_rbac_matrix.md",
+    "ai-python/agentic-ai-supporting-assets/005_K4_real_catalog_embedding_index.md",
+    "ai-python/agentic-ai-supporting-assets/004_K3_enum_status_dictionary.md",
+    "dev/frontend/database/SEED_DATA_MOCK.md",
+    "upgrade/ai-python/srs/003_hitl-resume-flow.md",
     "upgrade/ai-python/qa/001_harness-orchestrated-agentic-loop.md",
-    "upgrade/ai-python/qa/001_harness-orchestrated-agentic-loop.md.tmp.16868.b1e81f8fc335",
     "upgrade/ai-python/tech_lead/001_harness-orchestrated-agentic-loop.md",
     "frontend/code-review/CODE_REVIEW_docs-cleanup-seed-data.md",
-    "upgrade/ai-python/qa",
-    "upgrade/ai-python/tech_lead",
-    "upgrade/ai-python/srs/002_harness-orchestrated-agentic-loop.md",
-    "dev/frontend/database/SEED_DATA_MOCK.md",
-    "upgrade/ai-python/srs/002_harness-orchestrated-agentic-loop.md.tmp.16868.142649fd19d8",
-    "frontend/srs/026_cashflow-three-pages-upgrade.md",
-    "frontend/srs/025_invoice-history-upgrade.md",
-    "frontend/srs/024_product-management-upgrade.md",
-    "frontend/srs/023_inventory-redesign-plan.md",
-    "frontend/srs/022_retail-pos-redesign.md",
-    "frontend/srs/021_custom-builder-ux-improvements.md",
-    "frontend/srs/020_custom-builder-layout-stability.md",
-    "frontend/srs/019_custom-builder-wizard-conditional-ui-bugfix.md",
-    "frontend/srs/018_custom-builder-logic-connector-bugfix.md",
-    "frontend/srs/011_custom-builder-settings-first-ui-redesign.md",
-    "frontend/srs/009_custom-builder-ui-gap-plan.md",
-    "frontend/srs/008_custom-builder-menu-interface-design.md",
-    "frontend/srs/007_product-menu-table-column-settings.md",
-    "frontend/srs/006_order-invoice-history-table-unification.md",
-    "frontend/srs/005_product-management-table-unification.md",
-    "frontend/srs/004_menu-navigation-freeze-diagnosis.md",
-    "frontend/qa/022_retail-pos-redesign-phase3.md",
-    "frontend/qa/022_retail-pos-redesign-phase1.md",
-    "frontend/qa/021_custom-builder-ux-improvements.md",
-    "frontend/qa/020_custom-builder-layout-stability.md",
-    "frontend/qa/019_custom-builder-wizard-conditional-ui-bugfix.md",
-    "frontend/qa/029_management-screens-logic-audit.md.tmp.16868.322a2cd27df1",
-    "frontend/tech_lead/027_management-screens-logic-audit.md.tmp.16868.372b24a853e1",
-    "frontend/srs/023_management-screens-logic-audit.md.tmp.16868.f987dcaea1ad",
-    "frontend/srs/023_management-screens-logic-audit.md.tmp.16868.7bf21f32f19c",
-    "frontend/srs/023_management-screens-logic-audit.md.tmp.16868.4a6e454ae4f9",
-    "frontend/srs/023_management-screens-logic-audit.md.tmp.16868.3a5697e8e320"
+    "upgrade/ai-python/srs/002_harness-orchestrated-agentic-loop.md"
   ]
 }

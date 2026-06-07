@@ -85,4 +85,23 @@ def build_llm_registry(settings: LlmSettings) -> LlmRegistry:
     reg.register("sql_gen", sql_gen_client)
     for role in _STRUCTURED_ROLES:
         reg.register(role, structured)
+
+    # --- Tiered model routing (P7): register haiku/sonnet/opus. Each tier uses its
+    #     configured model when set, else aliases to the structured client so that
+    #     enabling routing with no tier configured keeps the current behaviour. ---
+    def _tier_client(model_name: str) -> LlmClient:
+        forked = settings.fork_for_model(model_name)
+        if forked is None:
+            return structured
+        return OpenAICompatibleChatClient(build_chat_openai(settings=forked))
+
+    reg.register("haiku", _tier_client(settings.tier_haiku_model))
+    reg.register("sonnet", _tier_client(settings.tier_sonnet_model))
+    reg.register("opus", _tier_client(settings.tier_opus_model))
+    logger.info(
+        "LLM tiers: haiku=%r sonnet=%r opus=%r (empty=alias structured)",
+        settings.tier_haiku_model or "(structured)",
+        settings.tier_sonnet_model or "(structured)",
+        settings.tier_opus_model or "(structured)",
+    )
     return reg
