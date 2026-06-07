@@ -25,6 +25,7 @@ from app.graph.tools import (
     AnswerComposerTool,
     BuildChartTool,
     CatalogDraftTool,
+    DataTableBuilderTool,
     DataValidatorTool,
     ErpGuideTool,
     InventoryDraftTool,
@@ -46,6 +47,14 @@ from app.harness import (
     TurnScratchpad,
 )
 from app.graph.sql_executor import build_sql_executor
+from app.harness.hitl_store import (
+    InMemoryPendingHitlStore,
+    PendingHitlRecord,
+    PendingHitlStore,
+    SqlitePendingHitlStore,
+)
+from app.harness.history_store import InMemoryIntentHistoryStore, SqliteIntentHistoryStore
+from app.harness.plan_template_store import InMemoryPlanTemplateStore, SqlitePlanTemplateStore
 from app.llm.registry import LlmRegistry, build_llm_registry
 
 logger = logging.getLogger(__name__)
@@ -59,13 +68,6 @@ HARNESS_LOOP_INTENTS = frozenset(
     }
 )
 PENDING_HITL_TTL_SECONDS = 30 * 60
-
-
-@dataclass(frozen=True)
-class PendingHitlRecord:
-    tool_name: str
-    payload: dict[str, Any]
-    created_at: float
 
 
 class GraphRuntime(Protocol):
@@ -141,11 +143,22 @@ class LangHarnessRuntime:
         orchestrator: HarnessOrchestrator,
         *,
         graph_settings: Any,
+        hitl_store: PendingHitlStore | None = None,
     ) -> None:
         self._legacy = LangGraphRuntime(compiled, graph_settings=graph_settings)
         self._orchestrator = orchestrator
         self._graph_settings = graph_settings
-        self._pending_hitl: dict[str, PendingHitlRecord] = {}
+        self._hitl_store: PendingHitlStore = hitl_store or InMemoryPendingHitlStore(
+            ttl_seconds=float(PENDING_HITL_TTL_SECONDS)
+        )
+
+    @property
+    def _pending_hitl(self) -> dict[str, Any]:
+        """Backward-compat view used by existing tests."""
+        store = self._hitl_store
+        if hasattr(store, "_store"):
+            return store._store  # type: ignore[attr-defined]
+        return {}
 
     def invoke(
         self,
@@ -176,7 +189,11 @@ class LangHarnessRuntime:
         logger.info("harness_route=loop intent=%s message_preview=%.60s", _quick_classify_harness_intent(request.message), request.message)
         hitl_key = _pending_hitl_key(request, correlation_id=correlation_id)
         is_resume = _clarification_response(request) is not None
-        pending_record = self._get_pending_hitl(hitl_key) if is_resume else None
+        pending_record = self._get_pending_hitl(hitl_key, request) if is_resume else None
+        pending_clarify_payload = None
+        if pending_record is not None and pending_record.tool_name == "clarify_user":
+            pending_clarify_payload = pending_record.payload
+            pending_record = None
         return _iter_harness_stream(
             self._orchestrator,
             request,
@@ -185,27 +202,145 @@ class LangHarnessRuntime:
             bearer_token=bearer_token,
             pending_hitl_tool=pending_record.tool_name if pending_record else None,
             pending_hitl_payload=pending_record.payload if pending_record else None,
-            on_pending_hitl=lambda spec: self._store_pending_hitl(hitl_key, spec),
-            on_resume_success=(lambda: self._pending_hitl.pop(hitl_key, None)) if is_resume else None,
+            pending_clarify_payload=pending_clarify_payload,
+            on_pending_hitl=lambda spec: self._store_pending_hitl(
+                hitl_key,
+                spec,
+                tenant_id=request.metadata.tenant_id,
+                user_id=request.metadata.user_id,
+                thread_id=request.metadata.thread_id,
+            ),
+            on_pending_clarify=lambda event: self._store_pending_clarify(
+                hitl_key,
+                event,
+                tenant_id=request.metadata.tenant_id,
+                user_id=request.metadata.user_id,
+                thread_id=request.metadata.thread_id,
+            ),
+            on_resume_success=(lambda: self._hitl_store.delete(hitl_key)) if is_resume else None,
         )
 
-    def _store_pending_hitl(self, key: str, spec: Any) -> None:
+    async def astream(
+        self,
+        request: ChatRequest,
+        *,
+        correlation_id: str,
+        bearer_token: str | None = None,
+    ) -> AsyncIterator[Any]:
+        """Native async stream path — avoids private event loop per request."""
+        if not _should_use_harness_loop(request, self._graph_settings):
+            # Wrap legacy sync path in async bridge (asyncio.to_thread is not needed
+            # here because iter_graph_stream is a sync iterator; yielding directly is
+            # safe since FastAPI handles sync iterables in StreamingResponse too, but
+            # we keep the async contract for the caller).
+            for chunk in self._legacy.stream(request, correlation_id=correlation_id, bearer_token=bearer_token):
+                yield chunk
+            return
+
+        logger.info(
+            "harness_route=loop/async intent=%s message_preview=%.60s",
+            _quick_classify_harness_intent(request.message),
+            request.message,
+        )
+        hitl_key = _pending_hitl_key(request, correlation_id=correlation_id)
+        is_resume = _clarification_response(request) is not None
+        pending_record = self._get_pending_hitl(hitl_key, request) if is_resume else None
+        pending_clarify_payload = None
+        if pending_record is not None and pending_record.tool_name == "clarify_user":
+            pending_clarify_payload = pending_record.payload
+            pending_record = None
+
+        async for event in _harness_events(
+            self._orchestrator,
+            request,
+            correlation_id=correlation_id,
+            bearer_token=bearer_token,
+            pending_hitl_tool=pending_record.tool_name if pending_record else None,
+            pending_hitl_payload=pending_record.payload if pending_record else None,
+            pending_clarify_payload=pending_clarify_payload,
+        ):
+            if isinstance(event, PendingHitlEvent):
+                self._store_pending_hitl(
+                    hitl_key,
+                    event.spec,
+                    tenant_id=request.metadata.tenant_id,
+                    user_id=request.metadata.user_id,
+                    thread_id=request.metadata.thread_id,
+                )
+            if isinstance(event, ClarifyEvent):
+                self._store_pending_clarify(
+                    hitl_key,
+                    event,
+                    tenant_id=request.metadata.tenant_id,
+                    user_id=request.metadata.user_id,
+                    thread_id=request.metadata.thread_id,
+                )
+            if isinstance(event, FinalAnswerEvent) and is_resume:
+                self._hitl_store.delete(hitl_key)
+            yield _event_to_stream_chunk(event)
+
+    def _store_pending_hitl(
+        self,
+        key: str,
+        spec: Any,
+        *,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
+        thread_id: str | None = None,
+    ) -> None:
+        import time
+
         tool_name = _tool_name_from_hitl_event(str(getattr(spec, "event_name", "") or ""))
         if not tool_name:
             return
         payload = getattr(spec, "payload", None)
-        self._pending_hitl[key] = PendingHitlRecord(
-            tool_name=tool_name,
-            payload=dict(payload) if isinstance(payload, dict) else {},
-            created_at=monotonic(),
+        self._hitl_store.put(
+            key,
+            PendingHitlRecord(
+                tool_name=tool_name,
+                payload=dict(payload) if isinstance(payload, dict) else {},
+                tenant_id=tenant_id,
+                user_id=user_id,
+                thread_id=thread_id,
+                created_at=time.time(),
+            ),
         )
 
-    def _get_pending_hitl(self, key: str) -> PendingHitlRecord | None:
-        record = self._pending_hitl.get(key)
+    def _store_pending_clarify(
+        self,
+        key: str,
+        event: ClarifyEvent,
+        *,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
+        thread_id: str | None = None,
+    ) -> None:
+        import time
+
+        self._hitl_store.put(
+            key,
+            PendingHitlRecord(
+                tool_name="clarify_user",
+                payload={
+                    "clarifyKind": "harness_data_query",
+                    "questions": list(event.questions),
+                    "suggestedRewrite": event.suggested_rewrite,
+                    "originalQuestion": event.original_question,
+                },
+                tenant_id=tenant_id,
+                user_id=user_id,
+                thread_id=thread_id,
+                created_at=time.time(),
+            ),
+        )
+
+    def _get_pending_hitl(self, key: str, request: ChatRequest) -> PendingHitlRecord | None:
+        record = self._hitl_store.get(key)
         if record is None:
             return None
-        if monotonic() - record.created_at > PENDING_HITL_TTL_SECONDS:
-            self._pending_hitl.pop(key, None)
+        if record.tenant_id and record.tenant_id != request.metadata.tenant_id:
+            return None
+        if record.user_id and record.user_id != request.metadata.user_id:
             return None
         return record
 
@@ -289,7 +424,7 @@ def _build_tool_registry(deps: GraphDeps) -> ToolRegistry:
         tools.append(DataValidatorTool())
     # P4 — answer composer + chart + erp guide (gated together).
     if bool(getattr(settings, "agentic_answer_composer_enabled", False)):
-        tools.extend((AnswerComposerTool(), BuildChartTool(), ErpGuideTool()))
+        tools.extend((AnswerComposerTool(), BuildChartTool(), DataTableBuilderTool(), ErpGuideTool()))
     for tool in tools:
         registry.register(tool.manifest, tool)
     return registry
@@ -347,7 +482,18 @@ def _build_turn_context(
         clarification_response=_clarification_response(request),
         pending_hitl_tool=pending_hitl_tool,
         pending_hitl_payload=pending_hitl_payload,
+        role=str(getattr(request.metadata, "role", "") or "") or None,
+        permissions=_metadata_permissions(request.metadata),
     )
+
+
+def _metadata_permissions(metadata: Any) -> tuple[str, ...]:
+    raw = getattr(metadata, "permissions", ()) or getattr(metadata, "scopes", ()) or ()
+    if isinstance(raw, str):
+        items = [item.strip() for item in raw.replace(",", " ").split()]
+    else:
+        items = [str(item).strip() for item in raw if str(item).strip()]
+    return tuple(items)
 
 
 async def _harness_events(
@@ -358,8 +504,11 @@ async def _harness_events(
     bearer_token: str | None,
     pending_hitl_tool: str | None = None,
     pending_hitl_payload: dict[str, Any] | None = None,
+    pending_clarify_payload: dict[str, Any] | None = None,
 ) -> AsyncIterator[Any]:
-    scratchpad = TurnScratchpad(messages=[HumanMessage(content=_resume_scratchpad_message(request))])
+    scratchpad = TurnScratchpad(
+        messages=[HumanMessage(content=_resume_scratchpad_message(request, pending_clarify_payload))]
+    )
     ctx = _build_turn_context(
         request,
         correlation_id=correlation_id,
@@ -380,7 +529,9 @@ def _iter_harness_stream(
     bearer_token: str | None,
     pending_hitl_tool: str | None = None,
     pending_hitl_payload: dict[str, Any] | None = None,
+    pending_clarify_payload: dict[str, Any] | None = None,
     on_pending_hitl: Any | None = None,
+    on_pending_clarify: Any | None = None,
     on_resume_success: Any | None = None,
 ) -> Iterator[Any]:
     _ = graph_settings
@@ -391,6 +542,7 @@ def _iter_harness_stream(
         bearer_token=bearer_token,
         pending_hitl_tool=pending_hitl_tool,
         pending_hitl_payload=pending_hitl_payload,
+        pending_clarify_payload=pending_clarify_payload,
     )
     loop = asyncio.new_event_loop()
     try:
@@ -401,6 +553,8 @@ def _iter_harness_stream(
                 break
             if isinstance(event, PendingHitlEvent) and on_pending_hitl is not None:
                 on_pending_hitl(event.spec)
+            if isinstance(event, ClarifyEvent) and on_pending_clarify is not None:
+                on_pending_clarify(event)
             if isinstance(event, FinalAnswerEvent) and on_resume_success is not None:
                 on_resume_success()
             yield _event_to_stream_chunk(event)
@@ -409,7 +563,10 @@ def _iter_harness_stream(
         loop.close()
 
 
-def _resume_scratchpad_message(request: ChatRequest) -> str:
+def _resume_scratchpad_message(
+    request: ChatRequest,
+    pending_clarify_payload: dict[str, Any] | None = None,
+) -> str:
     """Resolve the question to run when resuming a harness data_query clarification.
 
     If the user accepted the suggested rewrite, use it verbatim. For a free-form
@@ -427,7 +584,8 @@ def _resume_scratchpad_message(request: ChatRequest) -> str:
     rewrite = str(clar.get("suggested_rewrite") or "").strip()
     if rewrite:
         return rewrite
-    original = str(cc.get("originalQuestion") or "").strip()
+    pending = pending_clarify_payload if isinstance(pending_clarify_payload, dict) else {}
+    original = str(cc.get("originalQuestion") or pending.get("originalQuestion") or "").strip()
     if original and original != answer.strip():
         return f"{original}\n\nNgười dùng trả lời câu hỏi làm rõ: {answer}"
     return answer
@@ -534,6 +692,26 @@ def get_graph_runtime() -> GraphRuntime:
         policy=HarnessPolicy(),
         settings=deps.settings,
         harness=deps.harness,
+        plan_template_store=_build_plan_template_store(deps.settings),
+        history_store=_build_history_store(deps.settings),
     )
     logger.info("runtime=LangHarnessRuntime harness_loop_enabled=True intents=%s", HARNESS_LOOP_INTENTS)
     return LangHarnessRuntime(compiled, orchestrator, graph_settings=deps.settings)
+
+
+def _build_plan_template_store(settings: Any) -> Any | None:
+    if not bool(getattr(settings, "agentic_v3_plan_template_enabled", False)):
+        return None
+    path = getattr(settings, "agentic_v3_template_store_path", None)
+    if path:
+        return SqlitePlanTemplateStore(str(path))
+    return InMemoryPlanTemplateStore()
+
+
+def _build_history_store(settings: Any) -> Any | None:
+    if not bool(getattr(settings, "agentic_v3_enabled", False)):
+        return None
+    path = getattr(settings, "agentic_v3_history_store_path", None)
+    if path:
+        return SqliteIntentHistoryStore(str(path))
+    return InMemoryIntentHistoryStore()

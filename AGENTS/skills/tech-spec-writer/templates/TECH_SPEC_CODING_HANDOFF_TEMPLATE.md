@@ -57,7 +57,7 @@ Briefly state the implementation outcome in user-observable terms.
 | Error envelope | ... | ... | ... |
 | Transaction / concurrency | ... | ... | ... |
 | Cache invalidation | ... | ... | ... |
-| AI guardrails | ... | ... | ... |
+| AI validation/policy | ... | ... | ... |
 
 ---
 
@@ -169,8 +169,8 @@ Explain why it fits existing project patterns.
 | :--- | :--- | :--- |
 | Missing permission | Backend/RBAC | 403 and Vietnamese user message |
 | Invalid input | Validation | 400 with field detail if available |
-| Tool rejected | Execution guardrail | Safe AI response, no raw internal error |
-| Graph wrong route | Logic flow | Retry/fallback or clarification |
+| Tool rejected | Validation/policy behavior | Safe AI response, no raw internal error |
+| Runtime wrong route | Runtime flow | Retry/fallback or clarification |
 | Contract drift | Integration | Sanitized error and logged correlation id |
 
 ---

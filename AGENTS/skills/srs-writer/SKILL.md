@@ -200,5 +200,5 @@ An SRS is done when:
 - RBAC names exact claims/permissions.
 - Request/response/error examples are complete enough for FE/BE tests.
 - SQL/data impact is tied to real migrations or marked as OQ/GAP.
-- AI flow names orchestrator, executor, tools, state keys, and guardrails.
+- AI flow names runtime ownership, validation/policy behavior, tool contracts, and state keys.
 - Open questions are explicit and not hidden inside prose.

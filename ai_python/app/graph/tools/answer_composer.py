@@ -20,6 +20,16 @@ class AnswerComposerTool:
         name="answer_composer",
         description="Compose a Vietnamese final answer from tool observations.",
         args_schema='{"observations":"list","assumptions":"list[str]"}',
+        capability="answer_compose",
+        output_schema='{"answer_markdown": "string", "assumptions": "list[str]"}',
+        output_artifact_types=("answer",),
+        when_to_use="Final step: summarize observations into a Vietnamese answer and reference emitted artifacts.",
+        when_not_to_use="Data still needs to be fetched or validated, or the user needs a raw table/chart artifact only.",
+        risk_level="low",
+        side_effect_class="read_only",
+        consumes=("observations", "rows"),
+        produces=("answer",),
+        examples=("tổng hợp kết quả thành câu trả lời", "trả lời kèm tham chiếu bảng/biểu đồ"),
     )
 
     async def invoke(self, args: dict[str, Any], ctx: TurnContext) -> ToolResult:
@@ -27,7 +37,10 @@ class AnswerComposerTool:
         observations = args.get("observations") or []
         assumptions = [str(item) for item in (args.get("assumptions") or []) if str(item).strip()]
         rows = _first_rows(observations)
-        if not rows:
+        summary = _first_observation_summary(observations)
+        if summary:
+            answer = summary
+        elif not rows:
             answer = (
                 "Không tìm thấy dữ liệu phù hợp với yêu cầu hiện tại. "
                 "Bạn có thể hỏi lại cụ thể hơn, ví dụ: doanh thu tháng này hoặc tồn kho của một sản phẩm cụ thể."
@@ -64,6 +77,26 @@ def _first_rows(observations: Any) -> list[dict[str, Any]]:
         if isinstance(rows, list):
             return [row for row in rows if isinstance(row, dict)]
     return []
+
+
+def _first_observation_summary(observations: Any) -> str:
+    if not isinstance(observations, list):
+        return ""
+    for item in observations:
+        if not isinstance(item, dict):
+            continue
+        row_count = item.get("row_count")
+        if isinstance(row_count, int):
+            sample_rows = item.get("sample_rows")
+            sample = ""
+            if isinstance(sample_rows, list) and sample_rows and isinstance(sample_rows[0], dict):
+                sample = " Mẫu: " + _summarize_first_row(sample_rows[0]) + "."
+            artifact_refs = item.get("artifact_refs")
+            artifact = ""
+            if isinstance(artifact_refs, list) and artifact_refs:
+                artifact = " Kết quả chi tiết nằm trong artifact đã tạo."
+            return f"Tôi đã tổng hợp được {row_count} dòng dữ liệu phù hợp.{sample}{artifact}"
+    return ""
 
 
 def _summarize_first_row(row: dict[str, Any]) -> str:

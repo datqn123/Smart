@@ -17,8 +17,25 @@ from app.harness.intent import IntentSubagent
 from app.harness.memory import WorkingMemory
 from app.harness.model_router import ModelRouter
 from app.harness.observability import TraceRecorder
-from app.harness.plan_graph import NodeResult, PlanExecutor, PlanGraph, PlannerSubagent
-from app.harness.policy import HarnessPolicy, HarnessPolicyError
+from app.harness.history_store import (
+    STATUS_DEGRADED,
+    STATUS_SUCCESS,
+    IntentHistoryStore,
+    build_history_event,
+)
+from app.harness.observation import ObservationEnvelope
+from app.harness.plan_graph import (
+    NodeResult,
+    PlanExecutor,
+    PlanGraph,
+    PlannerSubagent,
+    degraded_final_answer,
+    run_planner_owned_plan,
+)
+from app.harness.plan_template_store import PlanTemplateStore, normalize_intent_key
+from app.harness.plan_template_store import plan_graph_hash
+from app.harness.result_store import InMemoryResultRefStore
+from app.harness.policy import POLICY_VERSION, HarnessPolicy, HarnessPolicyError
 from app.harness.runtime import AgentHarness, ToolCallContext
 from app.harness.scratchpad import TurnScratchpad
 from app.harness.tool_registry import (
@@ -77,12 +94,16 @@ class HarnessOrchestrator:
         policy: HarnessPolicy,
         settings: GraphSettings,
         harness: AgentHarness,
+        plan_template_store: PlanTemplateStore | None = None,
+        history_store: IntentHistoryStore | None = None,
     ) -> None:
         self._llm_registry = llm_registry
         self._tool_registry = tool_registry
         self._policy = policy
         self._settings = settings
         self._harness = harness
+        self._plan_template_store = plan_template_store
+        self._history_store = history_store
         self._budget = self._new_budget()
         self._last_budget_hit: str | None = None
         self._last_llm_tokens = 0
@@ -227,7 +248,7 @@ class HarnessOrchestrator:
                 seen_tool_calls.add(signature)
 
                 try:
-                    self._policy.check(tool_name, args, role=ctx.role, tenant_id=ctx.tenant_id)
+                    self._check_policy(tool_name, args, ctx)
                     result = await self._run_tool_cached(
                         ToolInput(tool_name=tool_name, args=args, context=ctx)
                     )
@@ -301,7 +322,7 @@ class HarnessOrchestrator:
         yield ProgressEvent("Đang xác nhận nháp đã duyệt.")
         args = {"request": "confirm"}
         try:
-            self._policy.check(tool_name, args, role=ctx.role, tenant_id=ctx.tenant_id)
+            self._check_policy(tool_name, args, ctx)
             result = await self._harness_run_tool_async(ToolInput(tool_name=tool_name, args=args, context=ctx))
         except HarnessPolicyError as exc:
             yield ErrorEvent(str(exc), "HARNESS_POLICY_BLOCK")
@@ -371,32 +392,97 @@ class HarnessOrchestrator:
         planner = PlannerSubagent(llm_registry=self._llm_registry, settings=self._settings)
         intent_dump = intent.model_dump(mode="json")
         manifest = self._tool_registry.tools_manifest_text()
-        try:
-            plan: PlanGraph = await planner.plan(intent_dump, "", manifest)
-        except Exception:  # noqa: BLE001
-            logger.warning("planner failed; falling back to reactive summary", exc_info=True)
-            yield FinalAnswerEvent(scratchpad.observation_summary())
-            return
         executor = PlanExecutor(tool_registry=self._tool_registry, policy=self._policy, harness=self._harness)
 
-        async def _replan(_current: PlanGraph, results: list[NodeResult], attempt: int) -> PlanGraph:
-            self._replan_count = attempt
-            if recorder is not None:
-                recorder.record_replan()
-            failed = [r.model_dump(mode="json") for r in results if not (r.ok and r.output_meets_expect)]
-            return await planner.plan({"intent": intent_dump, "failed_nodes": failed}, "", manifest)
+        max_replans = int(getattr(self._settings, "plan_replan_max", 2) or 0)
+        degraded_reason = ""
+        plan: PlanGraph | None = None
+        results: list[NodeResult] = []
 
-        try:
-            results, _replans = await executor.execute_with_replan(
-                plan,
-                ctx,
-                replan=_replan,
-                max_replans=int(getattr(self._settings, "plan_replan_max", 2) or 0),
-            )
-        except Exception:  # noqa: BLE001
-            logger.warning("plan execution failed", exc_info=True)
-            yield FinalAnswerEvent(scratchpad.observation_summary())
-            return
+        template_hit = False
+        if bool(getattr(self._settings, "agentic_v3_enabled", False)) and bool(
+            getattr(self._settings, "agentic_v3_plan_template_enabled", False)
+        ):
+            template = self._get_plan_template(self._original_question(scratchpad), ctx)
+            if template is not None and self._plan_is_template_safe(template.plan_graph):
+                template_hit = True
+                plan = template.plan_graph
+                yield ProgressEvent("Execution tier: template")
+                try:
+                    outcome = await self._execute_v3_plan(
+                        executor,
+                        planner,
+                        plan,
+                        ctx,
+                        intent_dump=intent_dump,
+                        manifest=manifest,
+                        recorder=recorder,
+                        max_replans=max_replans,
+                    )
+                except Exception:  # noqa: BLE001
+                    logger.warning("template plan execution failed", exc_info=True)
+                    self._record_plan_template_outcome(self._original_question(scratchpad), ctx, "failure")
+                    outcome = None
+                if outcome is None:
+                    template_hit = False
+                elif not outcome.degraded:
+                    self._record_plan_template_outcome(self._original_question(scratchpad), ctx, "success")
+                    results = outcome.results
+                else:
+                    self._record_plan_template_outcome(self._original_question(scratchpad), ctx, "degraded")
+                    template_hit = False
+                    degraded_reason = ""
+
+        if not template_hit:
+            try:
+                plan = await planner.plan(intent_dump, "", manifest)
+            except Exception:  # noqa: BLE001
+                logger.warning("planner failed; falling back to reactive summary", exc_info=True)
+                yield FinalAnswerEvent(scratchpad.observation_summary())
+                return
+
+        if results:
+            pass
+        elif bool(getattr(self._settings, "agentic_v3_enabled", False)):
+            # v3: Planner owns the replan decision; Harness only signals
+            # replan_required via observations and enforces bounds/dedup/safety.
+            try:
+                outcome = await self._execute_v3_plan(
+                    executor,
+                    planner,
+                    plan,
+                    ctx,
+                    intent_dump=intent_dump,
+                    manifest=manifest,
+                    recorder=recorder,
+                    max_replans=max_replans,
+                )
+            except Exception:  # noqa: BLE001
+                logger.warning("plan execution failed", exc_info=True)
+                yield FinalAnswerEvent(scratchpad.observation_summary())
+                return
+            results = outcome.results
+            if outcome.degraded:
+                degraded_reason = outcome.stopped_reason
+        else:
+            async def _replan(_current: PlanGraph, results: list[NodeResult], attempt: int) -> PlanGraph:
+                self._replan_count = attempt
+                if recorder is not None:
+                    recorder.record_replan()
+                failed = [r.model_dump(mode="json") for r in results if not (r.ok and r.output_meets_expect)]
+                return await planner.plan({"intent": intent_dump, "failed_nodes": failed}, "", manifest)
+
+            try:
+                results, _replans = await executor.execute_with_replan(
+                    plan,
+                    ctx,
+                    replan=_replan,
+                    max_replans=max_replans,
+                )
+            except Exception:  # noqa: BLE001
+                logger.warning("plan execution failed", exc_info=True)
+                yield FinalAnswerEvent(scratchpad.observation_summary())
+                return
 
         for result in results:
             yield ProgressEvent(f"Plan node {result.node_id}: {'ok' if result.ok else 'fail'}")
@@ -411,7 +497,54 @@ class HarnessOrchestrator:
             )
 
         final_text = await self._compose_plan_answer(results, ctx)
+        if degraded_reason:
+            # FR-1.6: degraded answers must be explicitly labeled as incomplete.
+            final_text = f"{degraded_final_answer(degraded_reason)}\n\n{final_text}".strip()
+        if plan is not None and bool(getattr(self._settings, "agentic_v3_enabled", False)):
+            self._record_history(
+                question=self._original_question(scratchpad),
+                plan=plan,
+                ctx=ctx,
+                status=STATUS_DEGRADED if degraded_reason else STATUS_SUCCESS,
+                failure_kind=degraded_reason or None,
+            )
         yield FinalAnswerEvent(final_text)
+
+    async def _execute_v3_plan(
+        self,
+        executor: PlanExecutor,
+        planner: PlannerSubagent,
+        plan: PlanGraph,
+        ctx: TurnContext,
+        *,
+        intent_dump: dict[str, Any],
+        manifest: str,
+        recorder: TraceRecorder | None,
+        max_replans: int,
+    ) -> Any:
+        result_store = InMemoryResultRefStore()
+
+        async def _planner_replan(
+            observations: list[ObservationEnvelope], attempt: int
+        ) -> PlanGraph | None:
+            self._replan_count = attempt
+            if recorder is not None:
+                recorder.record_replan()
+            failed = [o.model_dump(mode="json") for o in observations if o.replan_required]
+            try:
+                return await planner.plan({"intent": intent_dump, "failed_nodes": failed}, "", manifest)
+            except Exception:  # noqa: BLE001
+                return None
+
+        return await run_planner_owned_plan(
+            executor,
+            plan,
+            ctx,
+            registry=self._tool_registry,
+            planner_replan=_planner_replan,
+            max_replans=max_replans,
+            result_store=result_store,
+        )
 
     async def _compose_plan_answer(self, results: list[NodeResult], ctx: TurnContext) -> str:
         # A planner that included an answer_composer node already produced the answer.
@@ -422,7 +555,16 @@ class HarnessOrchestrator:
         if bool(getattr(self._settings, "agentic_answer_composer_enabled", False)) and self._has_tool(
             "answer_composer"
         ):
-            observations = [{"rows": _rows_of(r.tool_result)} for r in results if r.ok]
+            observations = [
+                (
+                    r.observation.model_dump(mode="json")
+                    if r.observation is not None
+                    else {"rows": _rows_of(r.tool_result)}
+                )
+                for r in results
+                if r.ok
+            ]
+            self._check_policy("answer_composer", {"observations": observations}, ctx)
             res = await self._harness_run_tool_async(
                 ToolInput(
                     tool_name="answer_composer",
@@ -440,6 +582,70 @@ class HarnessOrchestrator:
             return True
         except KeyError:
             return False
+
+    def _get_plan_template(self, question: str, ctx: TurnContext) -> Any | None:
+        store = self._plan_template_store
+        if store is None:
+            return None
+        return store.get(
+            normalize_intent_key(question),
+            role_scope=_role_scope(ctx),
+            manifest_version=self._tool_registry.manifest_version,
+            policy_version=POLICY_VERSION,
+            asset_versions=_v3_asset_versions(),
+        )
+
+    def _record_plan_template_outcome(self, question: str, ctx: TurnContext, status: str) -> None:
+        store = self._plan_template_store
+        if store is None:
+            return
+        store.record_outcome(normalize_intent_key(question), role_scope=_role_scope(ctx), status=status)
+
+    def _record_history(
+        self,
+        *,
+        question: str,
+        plan: PlanGraph,
+        ctx: TurnContext,
+        status: str,
+        failure_kind: str | None = None,
+    ) -> None:
+        store = self._history_store
+        if store is None:
+            return
+        event = build_history_event(
+            tenant_id=ctx.tenant_id,
+            intent_key=normalize_intent_key(question),
+            plan_hash=plan_graph_hash(plan),
+            tools=[node.tool for node in plan.nodes],
+            status=status,
+            replan_count=self._replan_count,
+            cost_usd=float(self._last_llm_cost or 0.0),
+            asset_versions=_v3_asset_versions(),
+            failure_kind=failure_kind,
+        )
+        store.append(event)
+
+    def _plan_is_template_safe(self, plan: PlanGraph) -> bool:
+        for node in plan.nodes:
+            manifest = self._tool_registry.get_manifest(node.tool)
+            if manifest is None:
+                return False
+            if manifest.side_effect_class == "non_idempotent_write":
+                return False
+        return True
+
+    def _check_policy(self, tool_name: str, args: dict[str, Any], ctx: TurnContext) -> None:
+        manifest = self._tool_registry.get_manifest(tool_name)
+        self._policy.check(
+            tool_name,
+            args,
+            role=ctx.role,
+            permissions=ctx.permissions,
+            tenant_id=ctx.tenant_id,
+            rbac_required=manifest.rbac_required if manifest else (),
+            side_effect_class=manifest.side_effect_class if manifest else None,
+        )
 
     @staticmethod
     def _sse_from_output(output: Any) -> dict[str, Any] | None:
@@ -513,6 +719,14 @@ def _rows_of(output: Any) -> list[dict[str, Any]]:
     if isinstance(query_result, dict) and isinstance(query_result.get("rows"), list):
         return [r for r in query_result["rows"] if isinstance(r, dict)]
     return []
+
+
+def _role_scope(ctx: TurnContext) -> str:
+    return str(ctx.role or "default").strip() or "default"
+
+
+def _v3_asset_versions() -> dict[str, str]:
+    return {"K12": "1.0", "K15": "1.0"}
 
 
 def _is_hitl_resume(clarification_response: dict[str, Any] | None) -> bool:

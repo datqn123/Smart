@@ -100,7 +100,7 @@ rg -n "compile_agent_graph|add_node|add_edge|AgentHarness|ToolCallContext|SqlExe
 
 ## AI Agentic Requirements
 
-When the feature touches AI chat, SQL agent, charting, draft generation, STT/TTS, or any LangGraph/Harness/tool flow:
+When the feature touches AI chat, SQL agent, charting, draft generation, STT/TTS, or any AI runtime/tool flow:
 
 - Define state keys and ownership according to the active SRS or architecture handoff.
 - Define validation and policy rules before tool invocation.
@@ -133,7 +133,7 @@ The Tech Spec is done when:
 - Scope boundaries are explicit.
 - All contracts are concrete enough for code and tests.
 - Files to read/edit are listed.
-- Test plan includes unit, integration, UI, and AI graph/Harness/tool cases when applicable.
+- Test plan includes unit, integration, UI, and AI runtime/tool cases when applicable.
 - Horizontal analysis has been performed and documented.
 - Open questions and gaps are traceable.
 - Readiness is declared.

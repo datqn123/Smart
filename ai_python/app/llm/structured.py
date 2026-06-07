@@ -36,6 +36,7 @@ def structured_invoke(
     *,
     max_retries: int = 3,
     json_output_contract: str | None = None,
+    _last_msg_out: list | None = None,
 ) -> T:
     """Ask the model for **only** JSON matching ``schema``; parse + validate with retries.
 
@@ -71,7 +72,10 @@ def structured_invoke(
             msg: AIMessage = chat.invoke(tail)  # type: ignore[assignment]
             text = _extract_json_text(str(msg.content))
             data = json.loads(text)
-            return schema.model_validate(data)
+            result = schema.model_validate(data)
+            if _last_msg_out is not None:
+                _last_msg_out.append(msg)
+            return result
         except (json.JSONDecodeError, ValidationError, TypeError) as e:
             last_err = e
             # Retry: SystemMessage for error hint, then re-merge instruction into last Human
@@ -109,6 +113,7 @@ async def astructured_invoke(
     *,
     max_retries: int = 3,
     json_output_contract: str | None = None,
+    _last_msg_out: list | None = None,
 ) -> T:
     """Async variant of :func:`structured_invoke` using ``chat.ainvoke``."""
     hint = (
@@ -137,7 +142,10 @@ async def astructured_invoke(
             msg: AIMessage = await chat.ainvoke(tail)  # type: ignore[assignment]
             text = _extract_json_text(str(msg.content))
             data = json.loads(text)
-            return schema.model_validate(data)
+            result = schema.model_validate(data)
+            if _last_msg_out is not None:
+                _last_msg_out.append(msg)
+            return result
         except (json.JSONDecodeError, ValidationError, TypeError) as e:
             last_err = e
             retry_tail: list[BaseMessage] = list(messages)

@@ -17,6 +17,14 @@ class SchemaExploreTool:
         name="schema_explore",
         description="Explore ERP database schema, relevant tables, columns, and join hints.",
         args_schema='{"topic": "string"}',
+        capability="data_read",
+        output_schema='{"schema": "string"}',
+        when_to_use="Planner needs table/column names or join hints before composing a data query.",
+        when_not_to_use="Actual data values are needed (use sql_query).",
+        risk_level="low",
+        side_effect_class="read_only",
+        produces=("schema",),
+        examples=("bảng nào chứa tồn kho", "cột nào là doanh thu"),
     )
 
     def __init__(self, deps: GraphDeps) -> None:

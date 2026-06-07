@@ -155,40 +155,158 @@ class SqlQueryTool:
         name="sql_query",
         description="Read ERP data using the SQL subgraph. Input can be a natural-language data question.",
         args_schema='{"query": "string"}',
+        capability="data_read",
+        output_schema='{"rows": "list[dict]", "generated_sql": "string"}',
+        when_to_use="Need actual ERP data: numbers, lists, rows, aggregates from the database.",
+        when_not_to_use="User only wants schema/structure (use schema_explore) or only wants to create a record (use a draft tool).",
+        risk_level="low",
+        side_effect_class="read_only",
+        produces=("rows",),
+        result_ref_policy="result_ref",
+        examples=("doanh thu tháng này", "liệt kê sản phẩm sắp hết hàng"),
     )
 
-    def __init__(self, deps: GraphDeps, compiled: Any | None = None) -> None:
+    def __init__(
+        self,
+        deps: GraphDeps,
+        compiled: Any | None = None,
+        *,
+        _test_generate: Any | None = None,
+        _test_review: Any | None = None,
+        _test_execute: Any | None = None,
+    ) -> None:
         self._deps = deps
-        self._compiled = compiled or build_sql_subgraph(deps).compile()
+        # _compiled kept for backward compat; used when sql_executor unavailable (tests/CI).
+        self._compiled = compiled or (build_sql_subgraph(deps).compile() if getattr(deps, "llm_registry", None) is not None or getattr(deps, "sql_executor", None) is not None else None)
         self._capability = CapabilityMatrix()
+        self._test_generate = _test_generate
+        self._test_review = _test_review
+        self._test_execute = _test_execute
 
-    async def invoke(self, args: dict[str, Any], ctx: TurnContext) -> ToolResult:
+    def _use_thin_adapter(self) -> bool:
+        """Use SelfCorrectingSqlRunner thin adapter when sql_executor is available."""
+        return (
+            self._test_generate is not None
+            or getattr(self._deps, "sql_executor", None) is not None
+        )
+
+    def _make_callables(self, query: str, ctx: TurnContext):
+        """Return (generate, review, execute) async callables for the runner."""
+        if self._test_generate is not None:
+            return self._test_generate, self._test_review, self._test_execute
+
+        from app.graph.feedback import append_feedback
+        from app.graph.nodes.sql_pipeline import make_gen_sql_node, make_sql_review_node
+
+        gen_node = make_gen_sql_node(self._deps)
+        review_node = make_sql_review_node(self._deps)
+        shared: dict[str, Any] = dict(build_tool_state(query, ctx, self._deps.settings))
+
+        async def generate(hint: str | None) -> str:
+            nonlocal shared
+            if hint:
+                shared = {**shared, "validation_feedback": append_feedback(shared, "sql_fix", str(hint))}
+            result = await asyncio.to_thread(gen_node, shared)
+            shared = {**shared, **result}
+            return str(shared.get("generated_sql") or "")
+
+        async def review(sql: str) -> dict[str, Any]:
+            nonlocal shared
+            state_for_review = {**shared, "generated_sql": sql}
+            result = await asyncio.to_thread(review_node, state_for_review)
+            ok = bool(result.get("sql_review_ok", True))
+            if ok:
+                return {"ok": True, "issues": []}
+            new_fb = result.get("validation_feedback") or {}
+            issues: list[str] = []
+            if isinstance(new_fb, dict):
+                for bucket in ("policy", "exec", "sql_fix"):
+                    items = new_fb.get(bucket, [])
+                    if items:
+                        issues.append(str(items[-1]))
+                        break
+            shared = {**shared, **result}
+            return {"ok": False, "issues": issues or ["sql review failed"], "retry_hint": "; ".join(issues)}
+
+        async def execute(sql: str) -> list[dict[str, Any]]:
+            result = await self._deps.sql_executor.aexecute(
+                sql,
+                tenant_id=ctx.tenant_id,
+                correlation_id=ctx.correlation_id,
+                bearer_token=ctx.bearer_token,
+            )
+            rows = result.get("rows", []) if isinstance(result, dict) else []
+            return rows if isinstance(rows, list) else []
+
+        return generate, review, execute
+
+    async def _invoke_legacy(self, args: dict[str, Any], ctx: TurnContext) -> ToolResult:
+        """Fallback path: compiled SQL subgraph (used when sql_executor not available)."""
         query = str(args.get("query") or args.get("sql") or "").strip()
-        state = build_tool_state(query, ctx, self._deps.settings)
-        out = await asyncio.to_thread(self._compiled.invoke, state, build_tool_config(ctx))
+        compiled = self._compiled
+        if compiled is None:
+            compiled = build_sql_subgraph(self._deps).compile()
+        out = await asyncio.to_thread(compiled.invoke, build_tool_state(query, ctx, self._deps.settings), build_tool_config(ctx))
         result = out.get("query_result") if isinstance(out, dict) else None
         rows = result.get("rows", []) if isinstance(result, dict) else []
         rows = rows if isinstance(rows, list) else []
         sse = out.get("query_table_sse") if isinstance(out, dict) else None
         executed_sql = str(out.get("generated_sql") or "") if isinstance(out, dict) else ""
-
-        # P6 — role-based sensitive-column masking applied at the tool OUTPUT, so a
-        # `SELECT *` cannot leak cost/margin/debt columns to a non-owner role.
         guard_on = bool(getattr(self._deps.settings, "agentic_capability_guard_enabled", False))
         if guard_on:
             rows = self._capability.mask_columns(ctx.role, rows)
             sse = _mask_sse_rows(sse, ctx.role, self._capability)
-
         if isinstance(sse, dict):
             sse = {"_event": "data_table", **sse}
-
         observation = _format_rows_observation(rows, sql=executed_sql)
         if guard_on:
-            # P6 — strip embedded prompt-injection instructions carried inside data.
             observation = sanitize_user_data(observation)
         return ToolResult(
             ok=bool(out.get("result_ok")) if isinstance(out, dict) else False,
             output=dict(out or {}),
             observation_text=observation,
             sse_payload=sse if isinstance(sse, dict) else None,
+        )
+
+    async def invoke(self, args: dict[str, Any], ctx: TurnContext) -> ToolResult:
+        if not self._use_thin_adapter():
+            return await self._invoke_legacy(args, ctx)
+
+        query = str(args.get("query") or args.get("sql") or "").strip()
+        settings = self._deps.settings
+        regen_max = int(getattr(settings, "sql_regen_max", 3))
+        empty_retry_max = int(getattr(settings, "sql_empty_retry_max", 2))
+
+        generate, review, execute = self._make_callables(query, ctx)
+        runner = SelfCorrectingSqlRunner(
+            sql_regen_max=regen_max,
+            sql_empty_retry_max=empty_retry_max,
+            generate=generate,
+            review=review,
+            execute=execute,
+        )
+        runner_result = await runner.run()
+
+        rows = runner_result.rows
+        sql = runner_result.sql
+
+        sse: dict[str, Any] | None = {"_event": "data_table", "rows": rows} if rows else None
+
+        # P6 — role-based sensitive-column masking at tool OUTPUT boundary.
+        guard_on = bool(getattr(settings, "agentic_capability_guard_enabled", False))
+        if guard_on:
+            rows = self._capability.mask_columns(ctx.role, rows)
+            sse = {"_event": "data_table", "rows": rows} if rows else None
+
+        observation = _format_rows_observation(rows, sql=sql)
+        if runner_result.warning:
+            observation = f"{runner_result.warning}\n{observation}"
+        if guard_on:
+            observation = sanitize_user_data(observation)
+
+        return ToolResult(
+            ok=runner_result.ok,
+            output={"query_result": {"rows": rows}, "generated_sql": sql},
+            observation_text=observation,
+            sse_payload=sse,
         )

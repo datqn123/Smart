@@ -321,7 +321,7 @@ def test_new_tools_registered_when_flags_on():
     import app.graph.tools.inventory_draft as iv
 
     manifest_text = _safe_manifest(deps, sq, se, cd, iv)
-    for name in ("data_validator", "answer_composer", "build_chart", "erp_guide"):
+    for name in ("data_validator", "answer_composer", "build_chart", "data_table_builder", "erp_guide"):
         assert name in manifest_text
 
 
@@ -338,7 +338,7 @@ def test_new_tools_absent_when_flags_off():
     import app.graph.tools.inventory_draft as iv
 
     manifest_text = _safe_manifest(deps, sq, se, cd, iv)
-    for name in ("data_validator", "answer_composer", "build_chart", "erp_guide"):
+    for name in ("data_validator", "answer_composer", "build_chart", "data_table_builder", "erp_guide"):
         assert name not in manifest_text
 
 

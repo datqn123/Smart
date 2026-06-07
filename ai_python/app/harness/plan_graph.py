@@ -5,13 +5,21 @@ from __future__ import annotations
 import asyncio
 import re
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.harness.observation import ObservationEnvelope, build_observation
 from app.harness.policy import HarnessPolicy
 from app.harness.runtime import AgentHarness, ToolCallContext
-from app.harness.tool_registry import ToolInput, ToolRegistry, ToolResult, TurnContext
+from app.harness.tool_registry import (
+    ToolInput,
+    ToolRegistry,
+    ToolResult,
+    TurnContext,
+    can_silent_retry,
+)
 
 
 class PlanNode(BaseModel):
@@ -37,6 +45,7 @@ class NodeResult(BaseModel):
     tool_result: dict[str, Any] = Field(default_factory=dict)
     observation_text: str = ""
     error: str = ""
+    observation: ObservationEnvelope | None = None
 
 
 _PLANNER_SYSTEM = (
@@ -88,7 +97,13 @@ class PlanExecutor:
         self._policy = policy
         self._harness = harness
 
-    async def execute(self, plan: PlanGraph, ctx: TurnContext) -> list[NodeResult]:
+    async def execute(
+        self,
+        plan: PlanGraph,
+        ctx: TurnContext,
+        *,
+        result_store: Any | None = None,
+    ) -> list[NodeResult]:
         pending = {node.id: node for node in plan.nodes}
         completed: set[str] = set()
         results: list[NodeResult] = []
@@ -116,7 +131,7 @@ class PlanExecutor:
             # BEFORE launching the layer (every dependency is guaranteed complete).
             layer = [(node, _resolve_refs(dict(node.input_spec or {}), outputs)) for node in ready]
             layer_results = await asyncio.gather(
-                *(self._execute_node(node, args, ctx) for node, args in layer)
+                *(self._execute_node(node, args, ctx, result_store=result_store) for node, args in layer)
             )
             results.extend(layer_results)
             for result in layer_results:
@@ -146,10 +161,24 @@ class PlanExecutor:
         return any((not result.ok) or (not result.output_meets_expect) for result in results)
 
     async def _execute_node(
-        self, node: PlanNode, args: dict[str, Any], ctx: TurnContext
+        self,
+        node: PlanNode,
+        args: dict[str, Any],
+        ctx: TurnContext,
+        *,
+        result_store: Any | None = None,
     ) -> NodeResult:
         try:
-            self._policy.check(node.tool, args, role=ctx.role, tenant_id=ctx.tenant_id)
+            manifest = self._tool_registry.get_manifest(node.tool)
+            self._policy.check(
+                node.tool,
+                args,
+                role=ctx.role,
+                permissions=ctx.permissions,
+                tenant_id=ctx.tenant_id,
+                rbac_required=manifest.rbac_required if manifest else (),
+                side_effect_class=manifest.side_effect_class if manifest else None,
+            )
             tool = self._tool_registry.get_impl(node.tool)
             result: ToolResult = await self._harness.arun_tool(
                 tool_name=node.tool,
@@ -161,12 +190,28 @@ class PlanExecutor:
                     thread_id=ctx.thread_id,
                 ),
             )
+            output_meets_expect = _output_meets_expect(result, node.output_expect)
+            observation: ObservationEnvelope | None = None
+            output = dict(result.output or {})
+            if result_store is not None:
+                observation = build_observation(
+                    tool_name=node.tool,
+                    tool_result=result,
+                    ctx=ctx,
+                    result_store=result_store,
+                    output_meets_expect=output_meets_expect,
+                )
+                output = _planner_safe_output(output, observation)
             return NodeResult(
                 node_id=node.id,
                 ok=bool(result.ok),
-                output_meets_expect=_output_meets_expect(result, node.output_expect),
-                tool_result=dict(result.output or {}),
+                output_meets_expect=output_meets_expect,
+                tool_result=output,
                 observation_text=result.observation_text,
+                # Carry the tool's failure detail so the v3 observation layer can
+                # fingerprint it for dedup (sanitized before reaching the Planner).
+                error="" if result.ok else (result.error_message or result.observation_text or ""),
+                observation=observation,
             )
         except Exception as exc:  # noqa: BLE001
             return NodeResult(
@@ -211,6 +256,174 @@ def _lookup(path: str, outputs: dict[str, dict[str, Any]]) -> Any:
         else:
             return None
     return current
+
+
+def _planner_safe_output(output: dict[str, Any], observation: ObservationEnvelope) -> dict[str, Any]:
+    """Planner/downstream-safe node output for v3 result_ref data-flow.
+
+    Full row sets and raw SQL internals stay in ``ResultRefStore``. Child nodes
+    bind to ``result_ref`` and resolve through Harness-scoped context.
+    """
+    if observation.result_ref:
+        safe: dict[str, Any] = {
+            "result_ref": observation.result_ref,
+            "row_count": observation.row_count,
+            "schema_fields": list(observation.schema_fields),
+            "aggregate_stats": dict(observation.aggregate_stats),
+            "sample_rows": list(observation.sample_rows),
+            "truncated": observation.truncated,
+            "masked": observation.masked,
+        }
+        if observation.artifact_refs:
+            safe["artifact_refs"] = list(observation.artifact_refs)
+        return safe
+
+    blocked = {"rows", "query_result", "generated_sql", "sql"}
+    return {key: value for key, value in output.items() if key not in blocked}
+
+
+# ---------------------------------------------------------------------------
+# v3 (SRS-006) planner-owned replan
+#
+# The Harness only signals ``replan_required`` via sanitized observations and
+# enforces bounds/dedup/side-effect safety. The Planner — through the
+# ``planner_replan`` callback — owns the decision to replan, stop, or degrade.
+# The executor never synthesizes the next plan itself (FR-6.1, AR-1/AR-2).
+# ---------------------------------------------------------------------------
+
+# Planner callback: given the current observations and the next attempt index,
+# return a new PlanGraph to try, or None to stop (planner chose to give up/degrade).
+PlannerReplan = Callable[[list[ObservationEnvelope], int], Awaitable["PlanGraph | None"]]
+
+
+@dataclass
+class ReplanOutcome:
+    results: list[NodeResult]
+    observations: list[ObservationEnvelope] = field(default_factory=list)
+    replan_count: int = 0
+    stopped_reason: str = "ok"  # ok|max_replans|duplicate|non_idempotent_block|planner_stop
+    degraded: bool = False
+
+
+def _node_tool_map(plan: PlanGraph) -> dict[str, str]:
+    return {node.id: node.tool for node in plan.nodes}
+
+
+def _results_to_observations(
+    results: list[NodeResult],
+    *,
+    node_tool: dict[str, str],
+    ctx: TurnContext,
+    registry: ToolRegistry,
+    result_store: Any | None,
+) -> list[ObservationEnvelope]:
+    observations: list[ObservationEnvelope] = []
+    for r in results:
+        if r.observation is not None:
+            observations.append(r.observation)
+            continue
+        tool_name = node_tool.get(r.node_id, r.node_id)
+        adapted = ToolResult(
+            ok=bool(r.ok),
+            output=dict(r.tool_result or {}),
+            observation_text=r.observation_text,
+            error_message=r.error or None,
+        )
+        observations.append(
+            build_observation(
+                tool_name=tool_name,
+                tool_result=adapted,
+                ctx=ctx,
+                result_store=result_store,
+                output_meets_expect=bool(r.output_meets_expect),
+            )
+        )
+    return observations
+
+
+def _has_non_idempotent_failure(
+    results: list[NodeResult], node_tool: dict[str, str], registry: ToolRegistry
+) -> bool:
+    for r in results:
+        if r.ok and r.output_meets_expect:
+            continue
+        manifest = registry.get_manifest(node_tool.get(r.node_id, ""))
+        side_effect = manifest.side_effect_class if manifest else "read_only"
+        if not can_silent_retry(side_effect):
+            return True
+    return False
+
+
+async def run_planner_owned_plan(
+    executor: "PlanExecutor",
+    plan: PlanGraph,
+    ctx: TurnContext,
+    *,
+    registry: ToolRegistry,
+    planner_replan: PlannerReplan,
+    max_replans: int,
+    result_store: Any | None = None,
+) -> ReplanOutcome:
+    """Execute a plan, surfacing failures to the Planner for the replan decision.
+
+    Guarantees:
+    - Harness emits ``replan_required`` observations, never picks the next plan.
+    - Replan count is bounded (FR-6.4).
+    - Duplicate failure fingerprints short-circuit (FR-6.5).
+    - ``non_idempotent_write`` failures are never silently retried (FR-6.6).
+    """
+    max_replans = max(0, int(max_replans))
+    exec_ctx = replace(ctx, result_store=result_store) if result_store is not None else ctx
+    seen_fingerprints: set[str] = set()
+    replan_count = 0
+    current = plan
+    node_tool = _node_tool_map(current)
+    results = await executor.execute(current, exec_ctx, result_store=result_store)
+
+    while True:
+        node_tool = _node_tool_map(current)
+        observations = _results_to_observations(
+            results, node_tool=node_tool, ctx=exec_ctx, registry=registry, result_store=result_store
+        )
+        failing = [o for o in observations if o.replan_required]
+        if not failing:
+            return ReplanOutcome(results, observations, replan_count, "ok", False)
+
+        # FR-6.6: a non-idempotent write must not be silently retried.
+        if _has_non_idempotent_failure(results, node_tool, registry):
+            return ReplanOutcome(results, observations, replan_count, "non_idempotent_block", True)
+
+        # FR-6.5: identical failure fingerprint(s) => stop instead of looping.
+        fps = {o.failure_fingerprint for o in failing if o.failure_fingerprint}
+        if fps and fps <= seen_fingerprints:
+            return ReplanOutcome(results, observations, replan_count, "duplicate", True)
+        seen_fingerprints |= fps
+
+        # FR-6.4: bounded replans.
+        if replan_count >= max_replans:
+            return ReplanOutcome(results, observations, replan_count, "max_replans", True)
+
+        # Planner — not Harness — chooses the next plan (or stops).
+        next_plan = await planner_replan(observations, replan_count + 1)
+        if next_plan is None or not next_plan.nodes:
+            return ReplanOutcome(results, observations, replan_count, "planner_stop", True)
+        replan_count += 1
+        current = next_plan
+        results = await executor.execute(current, exec_ctx, result_store=result_store)
+
+
+def degraded_final_answer(reason: str = "", missing: str = "") -> str:
+    """Vietnamese incomplete-answer label for degraded outcomes (FR-1.6)."""
+    detail = {
+        "max_replans": "hệ thống đã thử lại nhiều lần nhưng chưa lấy đủ dữ liệu",
+        "duplicate": "kế hoạch lặp lại cùng một lỗi nên đã dừng",
+        "non_idempotent_block": "thao tác ghi không thể tự thử lại an toàn",
+        "planner_stop": "chưa tìm được cách hoàn thành an toàn",
+    }.get(reason, "chưa lấy đủ dữ liệu cần thiết")
+    text = f"⚠️ Câu trả lời chưa đầy đủ: {detail}."
+    if missing:
+        text += f" Thiếu: {missing}."
+    return text
 
 
 def _output_meets_expect(result: ToolResult, output_expect: str) -> bool:

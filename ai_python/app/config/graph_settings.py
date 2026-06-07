@@ -388,6 +388,35 @@ class GraphSettings(BaseSettings):
     opt_escalate_replan_count: int = Field(default=2, ge=0, le=10)
     # --- Agentic AI target completion P8: observability ---
     agentic_trace_enabled: bool = Field(default=True)
+    # --- Agentic AI v3.0 (SRS-006) planner-brain upgrade (defaults off) ---
+    agentic_v3_enabled: bool = Field(
+        default=False,
+        description="Master flag for v3 planner-brain runtime (observation contract, result_ref, planner-owned replan).",
+    )
+    agentic_v3_plan_template_enabled: bool = Field(
+        default=False,
+        description="Enable execution-tier fast-path using validated, version-pinned plan templates.",
+    )
+    agentic_v3_template_store_path: str | None = Field(
+        default=None,
+        description="SQLite path for PlanTemplateStore; in-memory when unset.",
+    )
+    agentic_v3_history_store_path: str | None = Field(
+        default=None,
+        description="SQLite path for K15 IntentHistoryStore; in-memory when unset.",
+    )
+    agentic_v3_route_accuracy_threshold: float = Field(
+        default=0.8,
+        ge=0.0,
+        le=1.0,
+        description="Minimum K12 route accuracy required before agentic_v3_enabled may roll out.",
+    )
+    agentic_v3_observation_sample_limit: int = Field(
+        default=20,
+        ge=1,
+        le=200,
+        description="Max masked sample rows in an ObservationEnvelope; full data stays behind result_ref.",
+    )
 
     @field_validator("ai_display_timezone", mode="before")
     @classmethod
@@ -483,6 +512,8 @@ class GraphSettings(BaseSettings):
         "agentic_model_routing_enabled",
         "agentic_semantic_cache_enabled",
         "agentic_trace_enabled",
+        "agentic_v3_enabled",
+        "agentic_v3_plan_template_enabled",
         mode="before",
     )
     @classmethod
@@ -518,6 +549,7 @@ class GraphSettings(BaseSettings):
         "working_memory_pairs",
         "semantic_expire_days",
         "opt_escalate_replan_count",
+        "agentic_v3_observation_sample_limit",
         mode="before",
     )
     @classmethod

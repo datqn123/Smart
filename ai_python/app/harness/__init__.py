@@ -16,6 +16,18 @@ from app.harness.memory import EpisodicMemory, InMemorySemanticStore, SemanticRe
 from app.harness.model_router import ModelRouter
 from app.harness.observability import TraceRecorder, TurnMetrics, aggregate_metrics
 from app.harness.plan_graph import NodeResult, PlanExecutor, PlanGraph, PlanGraphOutput, PlanNode, PlannerSubagent
+from app.harness.hitl_store import (
+    InMemoryPendingHitlStore,
+    PendingHitlRecord,
+    PendingHitlStore,
+    SqlitePendingHitlStore,
+)
+from app.harness.observation import ObservationEnvelope, build_observation
+from app.harness.result_store import (
+    InMemoryResultRefStore,
+    ResultRefStore,
+    StoredResult,
+)
 from app.harness.runtime import AgentHarness, HarnessPermissionError, ToolCallContext
 from app.harness.scratchpad import Observation, TurnScratchpad
 from app.harness.tool_registry import (
@@ -40,6 +52,15 @@ __all__ = [
     "FinalAnswerEvent",
     "HarnessOrchestrator",
     "HarnessPermissionError",
+    "InMemoryPendingHitlStore",
+    "InMemoryResultRefStore",
+    "ObservationEnvelope",
+    "PendingHitlRecord",
+    "PendingHitlStore",
+    "ResultRefStore",
+    "SqlitePendingHitlStore",
+    "StoredResult",
+    "build_observation",
     "HarnessPolicy",
     "HarnessPolicyError",
     "HitlSpec",

@@ -10,6 +10,14 @@ class ErpGuideTool:
         name="erp_guide",
         description="Return concise ERP domain guidance for intent/planner context.",
         args_schema='{"topic":"string"}',
+        capability="erp_guide",
+        output_schema='{"guidance": "string"}',
+        when_to_use="Planner needs ERP domain terminology or guidance to interpret the goal.",
+        when_not_to_use="The goal needs actual data (use sql_query) or a record (use a draft tool).",
+        risk_level="low",
+        side_effect_class="read_only",
+        produces=("guidance",),
+        examples=("phiếu nhập là gì", "quy trình bán hàng"),
     )
 
     async def invoke(self, args: dict, ctx: TurnContext) -> ToolResult:

@@ -49,7 +49,7 @@ State the behavior that must be proven before release.
 | Error envelope | ... | ... | ... |
 | Transaction / rollback | ... | ... | ... |
 | Frontend cache/state | ... | ... | ... |
-| AI guardrail | ... | ... | ... |
+| AI validation/policy | ... | ... | ... |
 
 ---
 

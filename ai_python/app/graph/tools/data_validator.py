@@ -6,6 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.graph.tools._result_ref import rows_from_args_or_ref
 from app.harness.tool_registry import ToolManifest, ToolResult, TurnContext
 
 
@@ -20,22 +21,32 @@ class DataValidatorTool:
         name="data_validator",
         description="Validate ERP rows against required data and basic business constraints.",
         args_schema='{"rows":"list","required_data":"list[str]"}',
+        capability="data_validate",
+        output_schema='{"ok": "bool", "issues": "list[str]", "severity": "string"}',
+        when_to_use="After a data query, before composing an answer or artifact, to confirm rows satisfy the question.",
+        when_not_to_use="No rows have been fetched yet.",
+        risk_level="low",
+        side_effect_class="read_only",
+        consumes=("rows",),
+        produces=("validation",),
+        examples=("kiểm tra dữ liệu doanh thu có đủ kỳ", "xác nhận rows khớp yêu cầu"),
     )
 
     async def invoke(self, args: dict[str, Any], ctx: TurnContext) -> ToolResult:
-        _ = ctx
-        rows = args.get("rows") or []
+        rows, error = rows_from_args_or_ref(args, ctx)
+        if error:
+            return ToolResult(ok=False, output={}, observation_text=error, error_message=error)
         required_data = [str(item) for item in (args.get("required_data") or [])]
         issues: list[str] = []
         if required_data:
             available = set()
-            for row in rows if isinstance(rows, list) else []:
+            for row in rows:
                 if isinstance(row, dict):
                     available.update(str(key) for key in row)
             for key in required_data:
                 if key not in available:
                     issues.append(f"missing_column:{key}")
-        for row in rows if isinstance(rows, list) else []:
+        for row in rows:
             if not isinstance(row, dict):
                 continue
             for value in row.values():

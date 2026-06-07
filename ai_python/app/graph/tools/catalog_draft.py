@@ -18,6 +18,16 @@ class CatalogDraftTool:
         description="Create a catalog/product/category draft and stop for human confirmation.",
         args_schema='{"request": "string"}',
         has_hitl=True,
+        capability="draft_create",
+        output_schema='{"draft": "dict"}',
+        output_artifact_types=("input_table_draft",),
+        when_to_use="User asks to create/add a product, category, or catalog record.",
+        when_not_to_use="User only wants to read or list existing catalog data (use sql_query).",
+        risk_level="high",
+        rbac_required=("draft_create",),
+        side_effect_class="non_idempotent_write",
+        produces=("input_table_draft",),
+        examples=("thêm sản phẩm mới", "tạo danh mục hàng hóa"),
     )
 
     def __init__(self, deps: GraphDeps, compiled: Any | None = None) -> None:

@@ -347,6 +347,150 @@ def _iter_chat_sse_events(
         yield _sse_ui_event("done", "")
 
 
+async def _aiter_chat_sse_events(
+    runtime: Any,
+    request: ChatRequest,
+    *,
+    correlation_id: str,
+    bearer_token: str | None,
+):
+    """Async SSE generator — uses native astream() to avoid private event-loop bridges."""
+    prev_answer = ""
+    chart_sent = False
+    draft_sent = False
+    inventory_draft_sent = False
+    data_table_sent = False
+    clarify_sent = False
+    progress_sent = ""
+    final_error: dict[str, Any] | None = None
+    had_stream_payload = False
+    had_custom_payload = False
+    suppress_done = False
+    set_correlation_id(correlation_id)
+    try:
+        async for chunk in runtime.astream(
+            request,
+            correlation_id=correlation_id,
+            bearer_token=bearer_token,
+        ):
+            if isinstance(chunk, tuple) and len(chunk) == 2:
+                mode, payload = chunk
+                if mode == "harness_control" and isinstance(payload, dict):
+                    suppress_done = suppress_done or bool(payload.get("suppress_done"))
+                    continue
+            custom_progress = _progress_from_custom_chunk(chunk)
+            if custom_progress and custom_progress != progress_sent:
+                yield _sse_ui_event("progress", custom_progress)
+                progress_sent = custom_progress
+                had_stream_payload = True
+                continue
+            update = _extract_partial_update(chunk)
+            progress = update.get("progress_text")
+            if isinstance(progress, str) and progress and progress != progress_sent:
+                yield _sse_ui_event("progress", progress)
+                progress_sent = progress
+                had_stream_payload = True
+            clarify_spec = update.get("domain_clarify_sse")
+            if not clarify_sent and isinstance(clarify_spec, dict) and clarify_spec:
+                try:
+                    clarify_payload = json.dumps(clarify_spec, ensure_ascii=False)
+                except (TypeError, ValueError):
+                    clarify_payload = "{}"
+                yield _sse_ui_event("clarify", clarify_payload)
+                clarify_sent = True
+                had_stream_payload = True
+            spec = update.get("chart_spec_final")
+            if not chart_sent and isinstance(spec, dict) and spec:
+                try:
+                    payload = json.dumps(spec, ensure_ascii=False)
+                except (TypeError, ValueError):
+                    payload = "{}"
+                yield _sse_ui_event("chart", payload)
+                chart_sent = True
+                had_stream_payload = True
+            draft_spec = update.get("catalog_draft_sse")
+            if not draft_sent and isinstance(draft_spec, dict) and draft_spec:
+                try:
+                    draft_payload = json.dumps(draft_spec, ensure_ascii=False)
+                except (TypeError, ValueError):
+                    draft_payload = "{}"
+                yield _sse_ui_event("draft", draft_payload)
+                draft_sent = True
+                had_stream_payload = True
+            inv_draft_spec = update.get("inventory_draft_sse")
+            if not inventory_draft_sent and isinstance(inv_draft_spec, dict) and inv_draft_spec:
+                try:
+                    inv_payload = json.dumps(inv_draft_spec, ensure_ascii=False)
+                except (TypeError, ValueError):
+                    inv_payload = "{}"
+                yield _sse_ui_event("inventory_draft", inv_payload)
+                inventory_draft_sent = True
+                had_stream_payload = True
+            table_spec = update.get("query_table_sse")
+            if not data_table_sent and isinstance(table_spec, dict) and table_spec:
+                try:
+                    table_payload = json.dumps(table_spec, ensure_ascii=False)
+                except (TypeError, ValueError):
+                    table_payload = "{}"
+                yield _sse_ui_event("data_table", table_payload)
+                data_table_sent = True
+                had_stream_payload = True
+            if isinstance(chunk, tuple) and len(chunk) == 2:
+                mode, payload = chunk
+                if mode == "custom" and isinstance(payload, dict) and "final_answer" in payload:
+                    had_custom_payload = True
+                    current = str(payload["final_answer"])
+                    yield _sse_ui_event("delta_full", current)
+                    had_stream_payload = True
+                    if current.startswith(prev_answer) and len(current) > len(prev_answer):
+                        delta = current[len(prev_answer):]
+                        if delta:
+                            yield _sse_ui_event("delta", delta)
+                            had_stream_payload = True
+                        prev_answer = current
+                    elif current != prev_answer:
+                        yield _sse_ui_event("delta", current)
+                        had_stream_payload = True
+                        prev_answer = current
+                    continue
+            if "final_answer" in update and update["final_answer"] and not had_custom_payload:
+                current = str(update["final_answer"])
+                yield _sse_ui_event("delta_full", current)
+                had_stream_payload = True
+                if current.startswith(prev_answer) and len(current) > len(prev_answer):
+                    delta = current[len(prev_answer):]
+                    if delta:
+                        yield _sse_ui_event("delta", delta)
+                        had_stream_payload = True
+                    prev_answer = current
+                elif current != prev_answer:
+                    yield _sse_ui_event("delta", current)
+                    had_stream_payload = True
+                    prev_answer = current
+            if "error_payload" in update and isinstance(update["error_payload"], dict):
+                final_error = update["error_payload"]
+    except Exception as exc:  # noqa: BLE001
+        final_error = {
+            "code": "AI_RUNTIME_ERROR",
+            "message": str(exc) or f"{type(exc).__name__}",
+        }
+        if had_stream_payload:
+            logger.warning(
+                "async stream ended with exception after partial output: %s",
+                exc,
+                exc_info=True,
+            )
+
+    if should_emit_stream_error(
+        final_error,
+        streamed_answer=prev_answer,
+        clarify_sent=clarify_sent,
+    ):
+        yield _sse_ui_event("error", _sse_user_facing_error(final_error))
+    if not suppress_done or final_error is not None:
+        yield _sse_ui_event("done", "")
+
+
 @router.post("/stream")
 async def stream_chat(
     request: ChatRequest,
@@ -356,13 +500,29 @@ async def stream_chat(
     runtime: GraphRuntime = Depends(get_graph_runtime),
 ) -> StreamingResponse:
     _enforce_identity_context(request, claims, correlation_id=correlation_id)
+    bearer_token = _extract_bearer_token(authorization)
+
+    # Use native async path when flag is on and runtime supports astream().
+    graph_settings = getattr(runtime, "_graph_settings", None)
+    async_enabled = bool(getattr(graph_settings, "agentic_async_enabled", False))
+    if async_enabled and hasattr(runtime, "astream"):
+        return StreamingResponse(
+            _aiter_chat_sse_events(
+                runtime,
+                request,
+                correlation_id=correlation_id,
+                bearer_token=bearer_token,
+            ),
+            media_type="text/event-stream",
+            headers=_SSE_STREAM_HEADERS,
+        )
 
     return StreamingResponse(
         _iter_chat_sse_events(
             runtime,
             request,
             correlation_id=correlation_id,
-            bearer_token=_extract_bearer_token(authorization),
+            bearer_token=bearer_token,
         ),
         media_type="text/event-stream",
         headers=_SSE_STREAM_HEADERS,

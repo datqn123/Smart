@@ -18,6 +18,16 @@ class InventoryDraftTool:
         description="Create an inventory document draft and stop for human confirmation.",
         args_schema='{"request": "string"}',
         has_hitl=True,
+        capability="draft_create",
+        output_schema='{"draft": "dict"}',
+        output_artifact_types=("inventory_draft",),
+        when_to_use="User asks to create an inventory receipt/issue document.",
+        when_not_to_use="User only wants to read or list inventory data (use sql_query).",
+        risk_level="high",
+        rbac_required=("draft_create",),
+        side_effect_class="non_idempotent_write",
+        produces=("inventory_draft",),
+        examples=("tạo phiếu nhập kho", "lập phiếu xuất hàng"),
     )
 
     def __init__(self, deps: GraphDeps, compiled: Any | None = None) -> None:
