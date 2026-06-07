@@ -256,7 +256,6 @@ Superpowers: <skills or principles applied>
 ## Safety Boundaries
 
 - Do not edit `ai_python` runtime for workflow documentation tasks.
-- For AI agentic coding tasks, keep LangGraph as orchestrator, Harness as executor/validation boundary, and tools as scoped integrations.
 - For any error or bug, perform horizontal analysis across similar scopes before choosing the fix.
 - Do not broaden implementation beyond the active handoff unless it is necessary to keep contracts consistent.
 

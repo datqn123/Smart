@@ -79,9 +79,9 @@ rg -n "compile_agent_graph|add_node|AgentHarness|ToolCallContext|SqlExecutor|ret
    - State required DB rows, auth role/permission claims, frontend mock responses, or AI fake LLM/tool responses.
 
 5. Define AI agentic tests when in scope.
-   - LangGraph logic flow: route, state, retry, fallback.
-   - Harness guardrails: validation, policy rejection, audit/log correlation.
-   - Tool integration: scoped inputs/outputs, auth propagation, sanitized errors.
+   - Runtime flow: route, state, retry, fallback.
+   - Validation/policy behavior: rejection, permission enforcement, audit/log correlation.
+   - Tool integration: inputs/outputs, auth propagation, sanitized errors.
    - Contract drift: malformed downstream response, timeout, 401/403/5xx.
 
 6. Produce QA handoff.
@@ -106,6 +106,6 @@ The QA Spec is done when:
 
 - Every implementation slice has at least one verification path or is explicitly marked not applicable.
 - Permission, validation, conflict, empty, and regression cases are covered where relevant.
-- AI cases classify failures across LangGraph logic, Harness guardrails, tool integration, and contract drift.
+- AI cases classify failures across the current runtime flow, validation/policy behavior, tool integration, and contract drift.
 - Required test data and mocks are named.
 - Readiness is declared.

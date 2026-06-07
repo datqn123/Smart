@@ -57,7 +57,7 @@
 | Frontend Mini-ERP | Yes / No | Route, page, API hook, UI state |
 | Backend Spring | Yes / No | Controller, service, repository, security |
 | Database | Yes / No | Flyway, table, index, constraint |
-| AI Python | Yes / No | LangGraph node, Harness tool, FastAPI route |
+| AI Python | Yes / No | Runtime component, tool integration, FastAPI route |
 | External service | Yes / No | LLM, STT/TTS, email, storage |
 
 ---
@@ -277,7 +277,7 @@ WHERE ...;
 
 ### 10.1 Intent & Routing
 
-| Intent | Entry point | LangGraph node/subgraph | Output |
+| Intent | Entry point | Runtime component | Output |
 | :--- | :--- | :--- | :--- |
 | `system_data_query` | `/ai/chat/stream` | `sql_branch` | Query result / final answer |
 
@@ -285,8 +285,8 @@ WHERE ...;
 
 | Layer | Component | Responsibility |
 | :--- | :--- | :--- |
-| Orchestrator | LangGraph | State, routing, retry, iterative logic |
-| Executor | Harness | Deterministic execution, validation, audit boundary |
+| Runtime flow | Current approved runtime | State, routing, retry, iterative logic |
+| Validation/policy | Current approved boundary | Deterministic execution, validation, audit boundary |
 | Tool | SQL executor / Spring client / draft client | Scoped integration with backend or services |
 
 ### 10.3 State Contract
@@ -304,7 +304,7 @@ WHERE ...;
 | Unsafe SQL | SELECT-only, allowlist, row limit |
 | Unauthorized data access | JWT relay + Spring RBAC + tenant scope |
 | LLM hallucination | Schema artifact, deterministic validation, retry cap |
-| Tool misuse | Harness policy + audit log |
+| Tool misuse | Validation/policy + audit log |
 | Wrong draft commit | Human review before commit |
 
 ### 10.5 AI Error Handling
@@ -355,7 +355,7 @@ WHERE ...;
 | Test | Goal |
 | :--- | :--- |
 | Graph route | Intent reaches correct node |
-| Harness | Tool blocked by policy when needed |
+| Validation/policy | Tool blocked by policy when needed |
 | SQL executor | Bearer forwarded, read-only enforced |
 | Retry | Retry cap respected |
 | SSE | Stream emits expected events |
@@ -433,4 +433,3 @@ And Spring performs JWT/RBAC checks before execution
 - [ ] AI guardrails approved when applicable.
 
 **Signature / PR label:** ...
-

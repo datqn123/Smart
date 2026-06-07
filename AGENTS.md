@@ -131,4 +131,3 @@ Project rules:
 - Do not edit agent runtime source under `ai_python/` unless the active agent scope explicitly requires production AI code changes.
 - Project working agents live under `AGENTS/skills/**`.
 - Use `AGENTS/WORKFLOW_RULE.md` for handoff and auto-call behavior.
-- Preserve the separation of LangGraph, Harness, and tools for AI agentic work.

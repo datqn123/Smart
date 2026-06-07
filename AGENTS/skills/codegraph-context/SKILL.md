@@ -146,4 +146,3 @@ Findings must still be grounded in exact file and line references from the sourc
 - Do not skip horizontal analysis just because CodeGraph returns few files.
 - Do not commit `.codegraph/codegraph.db`, WAL/SHM files, cache, or logs.
 - If CodeGraph is unavailable, continue with `rg`, direct file reads, and existing project docs.
-- For AI agentic work, CodeGraph helps discover code but does not change the architecture rule: LangGraph orchestrates, Harness executes/validates, tools stay scoped.

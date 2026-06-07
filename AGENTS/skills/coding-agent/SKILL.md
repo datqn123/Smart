@@ -68,7 +68,7 @@ rg -n "compile_agent_graph|add_node|add_edge|AgentHarness|ToolCallContext|SqlExe
    - Backend: controller/service/repository/security/error envelope.
    - Frontend: route/page/component/API hook/cache/toast conventions.
    - Database: Flyway naming, constraints, indexes, backfills.
-   - AI: LangGraph nodes, Harness boundary, tool clients, prompts, state keys.
+   - AI: runtime components, execution boundary, tool clients, prompts, state keys.
 
 3. Perform horizontal analysis before editing.
    - Search adjacent modules for the same pattern.
@@ -78,7 +78,6 @@ rg -n "compile_agent_graph|add_node|add_edge|AgentHarness|ToolCallContext|SqlExe
 4. Implement in small slices.
    - Preserve existing project style.
    - Keep contracts aligned across frontend, backend, database, and AI layers.
-   - For AI agentic code, keep LangGraph, Harness, and tools separated.
 
 5. Test and verify.
    - Run the narrowest meaningful tests first.
@@ -94,11 +93,10 @@ rg -n "compile_agent_graph|add_node|add_edge|AgentHarness|ToolCallContext|SqlExe
 
 When editing AI-related runtime code:
 
-- LangGraph owns orchestration/state/routing/retry.
-- Harness owns deterministic execution, validation, policy enforcement, and audit boundary.
-- Tools only perform scoped integrations.
-- Classify failures as logic flow, execution guardrail, tool integration, or contract drift.
-- Do not let a tool bypass Harness validation.
+- Follow the architecture ownership declared by the active SRS, Tech Spec, or approved handoff.
+- Keep runtime flow, validation/policy behavior, tool integration, and API contracts aligned.
+- Classify failures as runtime flow, validation/policy, tool integration, or contract drift.
+- Do not let a tool bypass the validation and policy contracts declared for the current task.
 - Do not leak raw provider, SQL, stack trace, or infrastructure errors to end users.
 
 ## Done Criteria

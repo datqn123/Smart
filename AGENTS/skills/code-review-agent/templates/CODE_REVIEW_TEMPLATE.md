@@ -29,7 +29,7 @@ If there are no findings, state: `No blocking findings found.`
 | Error handling | Pass / Risk / Fail | ... |
 | Database / transaction | Pass / Risk / Fail | ... |
 | Frontend UX/cache | Pass / Risk / Fail | ... |
-| AI LangGraph/Harness/tools | Pass / Risk / Fail / N/A | ... |
+| AI runtime/integrations | Pass / Risk / Fail / N/A | ... |
 
 ---
 
@@ -41,7 +41,7 @@ If there are no findings, state: `No blocking findings found.`
 | Integration | Pass / Missing / N/A | ... |
 | Frontend | Pass / Missing / N/A | ... |
 | E2E/manual | Pass / Missing / N/A | ... |
-| AI graph/Harness/tool | Pass / Missing / N/A | ... |
+| AI runtime/integration | Pass / Missing / N/A | ... |
 
 ---
 
@@ -64,4 +64,3 @@ If there are no findings, state: `No blocking findings found.`
 **Status:** REVIEW_PASS | REVIEW_PASS_WITH_RISKS | REVIEW_BLOCKED
 
 **Reason:** ...
-

@@ -6,7 +6,7 @@ The output must fit this project, not a generic SRS template. Smart ERP has thre
 
 - `backend/smart-erp`: Spring Boot API, JWT/RBAC, transaction boundaries, Flyway/PostgreSQL.
 - `frontend/mini-erp`: React/Vite UI, route/menu permissions, TanStack Query, user-visible error states.
-- `ai_python`: FastAPI + LangGraph orchestration + Harness execution boundary + tools that call Spring.
+- `ai_python`: FastAPI AI runtime, current graph/execution stack, and tool integrations that call Spring.
 
 Do not edit source files under `ai_python/` while using this skill unless the user explicitly asks for code changes. For SRS work, read `ai_python` only as evidence.
 
@@ -85,8 +85,8 @@ Look for:
 
 - FastAPI routes in `ai_python/app/api/routes.py`.
 - Runtime state in `ai_python/app/api/runtime.py`.
-- LangGraph nodes/subgraphs in `ai_python/app/graph/`.
-- Harness tool boundaries in `ai_python/app/harness/`.
+- AI runtime components in `ai_python/app/graph/` or the current execution stack.
+- Execution and policy boundaries in `ai_python/app/harness/` or the current approved runtime layer.
 - SQL/tool clients such as `sql_executor`, draft clients, describe clients.
 
 Useful commands:
@@ -121,11 +121,9 @@ rg -n "APIRouter|@router|compile_agent_graph|add_node|add_edge|ToolCallContext|A
    - Non-functional requirements must have verification method.
    - Error messages must be user-functional and Vietnamese when client-visible.
 
-6. For AI features, enforce architecture separation.
-   - LangGraph = orchestrator/state/routing/retry.
-   - Harness = deterministic execution and validation boundary.
-   - Tools = scoped integrations only.
-   - If an issue exists, classify whether it belongs to logic flow, execution guardrails, or improper tool integration.
+6. For AI features, capture architecture ownership from the current approved design.
+   - Define runtime flow, state ownership, validation/policy boundary, and tool integration contracts.
+   - If an issue exists, classify whether it belongs to runtime flow, validation/policy, tool integration, or contract drift.
 
 7. Add acceptance criteria and test strategy.
    - Include happy path and main failure branches.

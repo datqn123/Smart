@@ -80,11 +80,10 @@ rg -n "401|403|409|PreAuthorize|apiJson|useMutation|AgentHarness|ToolCallContext
    - Check whether the fix introduced inconsistency in similar scopes.
    - Prefer root-cause findings over superficial comments.
 
-5. Review AI agentic boundaries when in scope.
-   - LangGraph must own orchestration/state/routing/retry.
-   - Harness must own deterministic execution, validation, policy, and audit boundary.
-   - Tools must stay scoped and must not bypass Harness.
-   - Classify AI defects as logic flow, execution guardrail, improper tool integration, or contract drift.
+5. Review AI agentic architecture when in scope.
+   - Compare ownership, state flow, validation/policy behavior, and tool permissions against the active handoff.
+   - Confirm AI integrations do not bypass the contracts declared for the current task.
+   - Classify AI defects as runtime flow, validation/policy, tool integration, or contract drift.
 
 6. Report findings.
    - Findings first, ordered by severity.

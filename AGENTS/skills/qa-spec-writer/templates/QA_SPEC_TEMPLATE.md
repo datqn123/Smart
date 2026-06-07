@@ -82,8 +82,8 @@ State the behavior that must be proven before release.
 
 | ID | Area | Scenario | Expected result |
 | :--- | :--- | :--- | :--- |
-| AI-001 | LangGraph logic flow | ... | Correct route/state/retry |
-| AI-002 | Harness guardrail | ... | Tool blocked or allowed deterministically |
+| AI-001 | Runtime flow | ... | Correct route/state/retry |
+| AI-002 | Validation/policy behavior | ... | Tool blocked or allowed deterministically |
 | AI-003 | Tool integration | ... | Scoped input/output and auth propagation |
 | AI-004 | Contract drift | ... | Sanitized failure and no raw internal leak |
 
@@ -133,4 +133,3 @@ Adjust commands to the actual module and scope before execution.
 1. Implement with tests mapped to P0 first.
 2. Keep test names traceable to `TC-*`.
 3. Report any skipped tests with reason and risk.
-

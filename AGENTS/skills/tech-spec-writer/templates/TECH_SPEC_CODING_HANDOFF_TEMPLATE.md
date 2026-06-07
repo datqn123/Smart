@@ -23,7 +23,7 @@ Briefly state the implementation outcome in user-observable terms.
 | Backend | `<controller/service/repository>` | Existing pattern or affected file |
 | Frontend | `<page/api hook/component>` | Existing pattern or affected file |
 | Database | `<Flyway/table/index>` | Existing schema or migration need |
-| AI | `<graph/harness/tool/prompt>` | Only when in scope |
+| AI | `<runtime/tool/prompt>` | Only when in scope |
 | Docs | `<api/adr/task>` | Contract or prior decision |
 
 ---
@@ -43,10 +43,9 @@ Briefly state the implementation outcome in user-observable terms.
 | Layer | Owner responsibility | Must not own |
 | :--- | :--- | :--- |
 | Frontend | UI state, route/menu visibility, query cache, visible errors | Server-side authorization |
-| Backend | RBAC, business rules, transaction, persistence | AI orchestration |
-| LangGraph | State flow, routing, retry, iterative control | Deterministic execution guardrails |
-| Harness | Execution validation, policy, audit boundary | High-level planning |
-| Tools | Scoped integration calls | Orchestration or policy bypass |
+| Backend | RBAC, business rules, transaction, persistence | Out-of-scope AI runtime ownership |
+| AI runtime | Responsibilities defined by the active SRS or architecture handoff | Out-of-scope ownership |
+| AI integrations | Scoped external or backend calls | Policy bypass |
 
 ---
 
@@ -120,9 +119,9 @@ Explain why it fits existing project patterns.
 
 | Item | Contract |
 | :--- | :--- |
-| LangGraph node/subgraph | ... |
+| AI runtime component | ... |
 | State keys | ... |
-| Harness policy | ... |
+| AI validation/policy | ... |
 | Tool input | ... |
 | Tool output | ... |
 | Retry/fallback | ... |
@@ -159,8 +158,8 @@ Explain why it fits existing project patterns.
 | Integration | ... | Controller/service/repository contract |
 | Frontend | ... | Render, interaction, cache, errors |
 | E2E/manual | ... | Main workflow |
-| AI graph | ... | Routing/state/retry |
-| Harness/tool | ... | Policy, validation, auth propagation |
+| AI runtime flow | ... | Routing/state/retry |
+| AI policy/tool integration | ... | Policy, validation, auth propagation |
 
 ---
 
@@ -196,4 +195,3 @@ Explain why it fits existing project patterns.
 2. Preserve existing project patterns.
 3. Add or update tests listed above.
 4. Do not broaden scope without updating this handoff.
-

@@ -66,7 +66,7 @@ rg -n "compile_agent_graph|add_node|add_edge|AgentHarness|ToolCallContext|SqlExe
 
 1. Confirm scope from the SRS.
    - Backend, frontend, database, AI agentic flow, or cross-layer.
-   - Record every affected endpoint, UI route, table, graph node, Harness boundary, and tool integration.
+   - Record every affected endpoint, UI route, table, AI runtime component, execution/policy boundary, and tool integration.
 
 2. Perform horizontal analysis.
    - Search adjacent modules for the same implementation pattern.
@@ -76,9 +76,8 @@ rg -n "compile_agent_graph|add_node|add_edge|AgentHarness|ToolCallContext|SqlExe
 3. Resolve architecture boundaries.
    - Backend owns business rules, persistence, transactions, and RBAC enforcement.
    - Frontend owns interaction, form state, cache behavior, visible error states, and route/menu permission display.
-   - LangGraph owns orchestration, state transitions, routing, retry, and iterative logic.
-   - Harness owns deterministic execution, validation, policy enforcement, auditability, and security guardrails.
-   - Tools are scoped integrations only; they must not own orchestration or bypass Harness.
+   - AI runtime ownership follows the active SRS or approved architecture handoff.
+   - Tool integrations must not bypass declared validation, policy, or API contracts.
 
 4. Convert SRS requirements into implementation slices.
    - Slice by user-observable capability, not by vague technical layer.
@@ -86,7 +85,7 @@ rg -n "compile_agent_graph|add_node|add_edge|AgentHarness|ToolCallContext|SqlExe
    - Define data contracts before implementation details.
 
 5. Decide if an ADR is required.
-   - Required when package/module boundaries, transaction strategy, concurrency, permission model, AI orchestration, Harness policy, tool contract, database shape, or cross-layer contract changes.
+   - Required when package/module boundaries, transaction strategy, concurrency, permission model, AI runtime ownership, policy boundary, tool contract, database shape, or cross-layer contract changes.
    - Not required for a small implementation that follows an existing local pattern exactly; document the reused pattern instead.
 
 6. Produce coding handoff.
@@ -103,16 +102,11 @@ rg -n "compile_agent_graph|add_node|add_edge|AgentHarness|ToolCallContext|SqlExe
 
 When the feature touches AI chat, SQL agent, charting, draft generation, STT/TTS, or any LangGraph/Harness/tool flow:
 
-- Keep LangGraph, Harness, and tools separated in the design.
-- Define state keys and ownership.
-- Define Harness validation rules before tool invocation.
+- Define state keys and ownership according to the active SRS or architecture handoff.
+- Define validation and policy rules before tool invocation.
 - Define retry and fallback limits.
 - Define how bearer token, tenant id, role/permission, locale, and correlation id move through the system.
-- Classify every AI-related risk as one of:
-  - Logic flow / orchestration flaw.
-  - Execution guardrail flaw.
-  - Improper tool integration.
-  - Contract drift between layers.
+- Classify every AI-related risk against the current runtime flow, validation/policy boundary, tool integration, or contract drift.
 
 ## Output Location
 
