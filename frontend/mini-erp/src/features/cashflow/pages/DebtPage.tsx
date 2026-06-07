@@ -75,8 +75,8 @@ export function DebtPage() {
 
   useEffect(() => {
     const t = window.setTimeout(() => {
-    const visibleIds = new Set(debtsQuery.debts.map((d) => d.id))
-    setSelectedIds((prev) => prev.filter((id) => visibleIds.has(id)))
+      const visibleIds = new Set(debtsQuery.debts.map((d) => d.id))
+      setSelectedIds((prev) => prev.filter((id) => visibleIds.has(id)))
     }, 0)
     return () => window.clearTimeout(t)
   }, [debtsQuery.debts])
@@ -84,7 +84,12 @@ export function DebtPage() {
   // Summary stats
   const totalReceivable = debtsQuery.debts.filter(d => d.partnerType === 'Customer').reduce((sum, d) => sum + d.remainingAmount, 0)
   const totalPayable = debtsQuery.debts.filter(d => d.partnerType === 'Supplier').reduce((sum, d) => sum + d.remainingAmount, 0)
-  const overdueCount = debtsQuery.debts.filter(d => d.dueDate && new Date(d.dueDate) < new Date() && d.status !== 'Cleared').length
+  const overdueCount = debtsQuery.debts.filter(d => {
+    if (!d.dueDate || d.status === "Cleared") return false
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const due = new Date(d.dueDate); due.setHours(0, 0, 0, 0)
+    return due < today
+  }).length
 
   // Handlers
   const handleSelect = (id: number) => {

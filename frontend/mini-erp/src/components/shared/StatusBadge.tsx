@@ -60,9 +60,7 @@ export function StatusBadge({ status, context, type, shortageWarning }: StatusBa
     const label =
       resolvedContext === "finance" || resolvedContext === "order"
         ? "Chờ xử lý"
-        : resolvedContext === "audit"
-          ? "Chờ duyệt"
-          : "Chờ duyệt"
+        : "Chờ duyệt"
     config = { ...STATUS_CONFIG.Pending, label }
   }
 

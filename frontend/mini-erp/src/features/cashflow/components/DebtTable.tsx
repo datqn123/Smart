@@ -1,4 +1,5 @@
 import { Checkbox } from "@/components/ui/checkbox"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Eye, Edit2 } from "lucide-react"
@@ -116,7 +117,7 @@ export function DebtTable({ data, selectedIds, onSelect, onSelectAll, onView, on
                   {formatDueDate(item)}
                 </TableCell>
                 <TableCell className="px-4 text-center">
-                  <StatusBadge status={item.status === "Active" ? "Active_debt" : item.status} />
+                  <StatusBadge status={item.status === "InDebt" ? "Active_debt" : item.status} />
                 </TableCell>
                 <TableCell className={DATA_TABLE_ACTION_SINGLE_CELL_CLASS}>
                   <div className="flex items-center justify-center gap-1">
