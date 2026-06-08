@@ -475,7 +475,11 @@ def _introspect_distinct_values(
     return result
 
 
-def _build_snapshot(cur: Any, *, schema: str, desc_table: str, col_desc_table: str) -> _SchemaSnapshot:
+def _build_snapshot(
+    cur: Any, *, schema: str, desc_table: str, col_desc_table: str,
+    introspection_enabled: bool = True,
+    sample_limit: int = 5, distinct_limit: int = 100,
+) -> _SchemaSnapshot:
     rows = _fetch_descriptions(cur, schema=schema, table=desc_table)
     if not rows:
         raise RuntimeError("ai_table_description has no rows")
@@ -498,20 +502,21 @@ def _build_snapshot(cur: Any, *, schema: str, desc_table: str, col_desc_table: s
         logger.warning("ai_column_description registry unavailable: %s", exc)
     sample_rows: dict[str, list[dict[str, Any]]] = {}
     distinct_values: dict[str, dict[str, list[str]]] = {}
-    for tname in all_tables:
-        t_cols = cols.get(tname)
-        if not t_cols:
-            continue
-        try:
-            sample_rows[tname] = _introspect_sample_rows(cur, schema, tname, limit=5)
-        except Exception:
-            pass
-        try:
-            dv = _introspect_distinct_values(cur, schema, tname, t_cols, limit=100)
-            if dv:
-                distinct_values[tname] = dv
-        except Exception:
-            pass
+    if introspection_enabled:
+        for tname in all_tables:
+            t_cols = cols.get(tname)
+            if not t_cols:
+                continue
+            try:
+                sample_rows[tname] = _introspect_sample_rows(cur, schema, tname, limit=sample_limit)
+            except Exception:
+                pass
+            try:
+                dv = _introspect_distinct_values(cur, schema, tname, t_cols, limit=distinct_limit)
+                if dv:
+                    distinct_values[tname] = dv
+            except Exception:
+                pass
     return _SchemaSnapshot(
         rows=rows,
         desc_map=desc_map,
@@ -635,6 +640,9 @@ def build_schema_artifact_from_postgres(
                     schema=schema,
                     desc_table=desc_table,
                     col_desc_table=col_desc_table,
+                    introspection_enabled=bool(settings.sql_introspection_enabled),
+                    sample_limit=int(settings.sql_introspection_sample_limit),
+                    distinct_limit=int(settings.sql_introspection_distinct_limit),
                 )
         except Exception as exc:
             logger.warning("pg schema build failed: %s", exc, exc_info=True)
@@ -719,6 +727,9 @@ def list_registry_tables(settings: GraphSettings) -> tuple[list[tuple[str, str]]
                     schema=schema,
                     desc_table=desc_table,
                     col_desc_table=(settings.pg_ai_column_description_table or "ai_column_description").strip(),
+                    introspection_enabled=bool(settings.sql_introspection_enabled),
+                    sample_limit=int(settings.sql_introspection_sample_limit),
+                    distinct_limit=int(settings.sql_introspection_distinct_limit),
                 )
         except Exception as exc:
             return [], str(exc)
@@ -795,6 +806,9 @@ def build_schema_artifact_for_table_names(
                     schema=schema,
                     desc_table=desc_table,
                     col_desc_table=col_desc_table,
+                    introspection_enabled=bool(settings.sql_introspection_enabled),
+                    sample_limit=int(settings.sql_introspection_sample_limit),
+                    distinct_limit=int(settings.sql_introspection_distinct_limit),
                 )
         except Exception as exc:
             logger.warning("pg schema build for tables failed: %s", exc, exc_info=True)
@@ -893,6 +907,9 @@ class SchemaWarmupWarmer:
             with conn.cursor() as cur:
                 snapshot = _build_snapshot(
                     cur, schema=schema, desc_table=desc_table, col_desc_table=col_desc_table,
+                    introspection_enabled=bool(self._settings.sql_introspection_enabled),
+                    sample_limit=int(self._settings.sql_introspection_sample_limit),
+                    distinct_limit=int(self._settings.sql_introspection_distinct_limit),
                 )
             conn.close()
             namespace = _cache_namespace(self._settings, dsn)
