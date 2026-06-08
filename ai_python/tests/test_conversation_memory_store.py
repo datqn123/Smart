@@ -219,3 +219,4 @@ async def test_memory_saves_turn_after_dispatch() -> None:
     ctx2 = store.get_context("th1")
     assert len(ctx2.recent_turns) >= 1
     assert ctx2.recent_turns[-1].user_message == "test question"
+    assert ctx2.recent_turns[-1].ai_answer == "Đã xử lý.", "ai_answer should be captured from FinalAnswerEvent"
