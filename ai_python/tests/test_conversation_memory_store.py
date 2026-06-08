@@ -166,3 +166,56 @@ async def test_memory_enriches_scratchpad_at_dispatch() -> None:
         isinstance(m, SystemMessage) and "sản phẩm tokboki" in (m.content or "")
         for m in scratchpad.messages
     ), "Memory context should be prepended as SystemMessage"
+
+
+class _FakeLlmClient:
+    last_usage = type("Usage", (), {"prompt_tokens": 10, "completion_tokens": 5, "cost_usd": 0.001})()
+
+    async def astructured_predict(self, messages, schema, **kwargs):
+        return schema(action="final_answer", final_answer="Đã xử lý.")
+
+
+class _FakeRegistry:
+    def __init__(self, client=None):
+        self._client = client or _FakeLlmClient()
+
+    def get(self, role: str):
+        return self._client
+
+
+@pytest.mark.asyncio
+async def test_memory_saves_turn_after_dispatch() -> None:
+    """After _dispatch completes, the turn should be saved to memory_store."""
+    from app.harness.memory_store import InMemoryConversationMemoryStore
+    from app.harness.orchestrator import (
+        FinalAnswerEvent, HarnessOrchestrator,
+    )
+    from app.harness.policy import HarnessPolicy
+    from app.harness.runtime import AgentHarness
+    from app.harness.scratchpad import TurnScratchpad
+    from app.harness.tool_registry import ToolRegistry
+    from app.config.graph_settings import GraphSettings
+    from langchain_core.messages import HumanMessage
+
+    store = InMemoryConversationMemoryStore()
+    orch = HarnessOrchestrator(
+        llm_registry=_FakeRegistry(),
+        tool_registry=ToolRegistry(),
+        policy=HarnessPolicy(),
+        settings=GraphSettings(),
+        harness=AgentHarness(enabled=False),
+        memory_store=store,
+    )
+
+    events = [
+        event
+        async for event in orch.run(
+            TurnScratchpad(messages=[HumanMessage(content="test question")]),
+            _ctx(),
+        )
+    ]
+
+    assert any(isinstance(e, FinalAnswerEvent) for e in events)
+    ctx2 = store.get_context("th1")
+    assert len(ctx2.recent_turns) >= 1
+    assert ctx2.recent_turns[-1].user_message == "test question"

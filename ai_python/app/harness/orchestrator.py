@@ -381,6 +381,7 @@ class HarnessOrchestrator:
                     self.last_metrics.cost_usd,
                     self.last_metrics.budget_hit or "-",
                 )
+            self._save_turn_to_memory(ctx, scratchpad)
 
     async def _resume_hitl(
         self,
@@ -459,6 +460,47 @@ class HarnessOrchestrator:
             SystemMessage(content="\n\n".join(blocks)),
         )
         return ctx
+
+    def _save_turn_to_memory(
+        self,
+        ctx: TurnContext,
+        scratchpad: TurnScratchpad,
+    ) -> None:
+        if self._memory_store is None:
+            return
+        thread_id = ctx.thread_id or ctx.correlation_id
+        if not thread_id:
+            return
+        # Extract user question and AI answer from scratchpad
+        user_msg = ""
+        ai_answer = ""
+        for m in reversed(scratchpad.messages):
+            content = str(getattr(m, "content", "") or "")
+            from langchain_core.messages import HumanMessage, AIMessage
+            if not ai_answer and isinstance(m, AIMessage) and content:
+                ai_answer = content
+            if not user_msg and isinstance(m, HumanMessage) and content:
+                user_msg = content
+                if ai_answer:
+                    break
+
+        if not user_msg:
+            return
+
+        # Get existing turn count
+        existing = self._memory_store.get_context(thread_id)
+        turn_index = len(existing.recent_turns) + 1
+
+        from app.harness.memory_store import MemoryTurnRecord
+        turn = MemoryTurnRecord(
+            thread_id=thread_id,
+            turn_index=turn_index,
+            user_message=user_msg,
+            ai_answer=ai_answer,
+            tool_names=list(self._turn_tools),
+            intent_type=str(getattr(self.last_metrics, "intent", "") or ""),
+        )
+        self._memory_store.append_turn(thread_id, turn)
 
     @staticmethod
     def _effective_question(scratchpad: TurnScratchpad) -> str:
