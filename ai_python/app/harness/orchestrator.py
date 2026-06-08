@@ -138,6 +138,10 @@ class HarnessOrchestrator:
         self._turn_hitl: int = 0
         # Semantic intent key for template lookup + K15 aggregation (LOW-4).
         self._turn_intent_key: str = ""
+        # In-memory bridge for conversation memory — captured at yield-site so
+        # _save_turn_to_memory can write the AI answer even when the reactive loop
+        # does not append an AIMessage to scratchpad.
+        self._ai_answer: str = ""
 
     async def run(
         self,
@@ -278,7 +282,8 @@ class HarnessOrchestrator:
                     if recorder is not None:
                         recorder.record_budget_hit(exc.kind)
                     self._audit_warn(f"{exc.kind}_budget_exhausted", ctx)
-                    yield FinalAnswerEvent(scratchpad.observation_summary())
+                    self._ai_answer = scratchpad.observation_summary()
+                    yield FinalAnswerEvent(self._ai_answer)
                     return
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("harness decision failed", exc_info=True)
@@ -287,7 +292,8 @@ class HarnessOrchestrator:
 
                 yield ProgressEvent(f"Bước {step + 1}: {decision.action}")
                 if decision.action == "final_answer":
-                    yield FinalAnswerEvent(decision.final_answer or "")
+                    self._ai_answer = decision.final_answer or ""
+                    yield FinalAnswerEvent(self._ai_answer)
                     return
 
                 if decision.action == "clarify":
@@ -296,7 +302,8 @@ class HarnessOrchestrator:
                     if not questions:
                         # Planner asked to clarify but gave no question — answer directly
                         # rather than emitting an empty bubble.
-                        yield FinalAnswerEvent(decision.final_answer or "")
+                        self._ai_answer = decision.final_answer or ""
+                        yield FinalAnswerEvent(self._ai_answer)
                         return
                     yield ClarifyEvent(
                         questions=questions,
@@ -319,7 +326,8 @@ class HarnessOrchestrator:
                 if signature in seen_tool_calls:
                     self._audit_warn("duplicate_tool_call_short_circuit", ctx)
                     self._turn_degraded_reason = "duplicate"
-                    yield FinalAnswerEvent(scratchpad.observation_summary())
+                    self._ai_answer = scratchpad.observation_summary()
+                    yield FinalAnswerEvent(self._ai_answer)
                     return
                 seen_tool_calls.add(signature)
 
@@ -335,7 +343,8 @@ class HarnessOrchestrator:
                     if recorder is not None:
                         recorder.record_budget_hit(exc.kind)
                     self._audit_warn(f"{exc.kind}_budget_exhausted", ctx)
-                    yield FinalAnswerEvent(scratchpad.observation_summary())
+                    self._ai_answer = scratchpad.observation_summary()
+                    yield FinalAnswerEvent(self._ai_answer)
                     return
                 except HarnessPolicyError as exc:
                     yield ErrorEvent(str(exc), "HARNESS_POLICY_BLOCK")
@@ -367,7 +376,8 @@ class HarnessOrchestrator:
 
             self._audit_warn("step_budget_exhausted", ctx)
             self._turn_degraded_reason = self._turn_degraded_reason or "step_budget"
-            yield FinalAnswerEvent(scratchpad.observation_summary())
+            self._ai_answer = scratchpad.observation_summary()
+            yield FinalAnswerEvent(self._ai_answer)
         finally:
             if recorder is not None:
                 self.last_metrics = recorder.finalize()
@@ -421,7 +431,8 @@ class HarnessOrchestrator:
             payload = {k: v for k, v in result.sse_payload.items() if k != "_event"}
             yield SsePayloadEvent(event_name, payload)
         scratchpad.add_observation(result, tool_name)
-        yield FinalAnswerEvent(result.observation_text)
+        self._ai_answer = result.observation_text
+        yield FinalAnswerEvent(self._ai_answer)
 
     @staticmethod
     def _original_question(scratchpad: TurnScratchpad) -> str:
@@ -473,12 +484,10 @@ class HarnessOrchestrator:
             return
         # Extract user question and AI answer from scratchpad
         user_msg = ""
-        ai_answer = ""
+        ai_answer = self._ai_answer
         for m in reversed(scratchpad.messages):
             content = str(getattr(m, "content", "") or "")
-            from langchain_core.messages import HumanMessage, AIMessage
-            if not ai_answer and isinstance(m, AIMessage) and content:
-                ai_answer = content
+            from langchain_core.messages import HumanMessage
             if not user_msg and isinstance(m, HumanMessage) and content:
                 user_msg = content
                 if ai_answer:
@@ -630,7 +639,8 @@ class HarnessOrchestrator:
                 plan = await planner.plan(intent_dump, "", manifest)
             except Exception:  # noqa: BLE001
                 logger.warning("planner failed; falling back to reactive summary", exc_info=True)
-                yield FinalAnswerEvent(self._plan_error_answer(scratchpad))
+                self._ai_answer = self._plan_error_answer(scratchpad)
+                yield FinalAnswerEvent(self._ai_answer)
                 return
 
         if results:
@@ -651,7 +661,8 @@ class HarnessOrchestrator:
                 )
             except Exception:  # noqa: BLE001
                 logger.warning("plan execution failed", exc_info=True)
-                yield FinalAnswerEvent(self._plan_error_answer(scratchpad))
+                self._ai_answer = self._plan_error_answer(scratchpad)
+                yield FinalAnswerEvent(self._ai_answer)
                 return
             results = outcome.results
             if outcome.degraded:
@@ -677,7 +688,8 @@ class HarnessOrchestrator:
                 )
             except Exception:  # noqa: BLE001
                 logger.warning("plan execution failed", exc_info=True)
-                yield FinalAnswerEvent(self._plan_error_answer(scratchpad))
+                self._ai_answer = self._plan_error_answer(scratchpad)
+                yield FinalAnswerEvent(self._ai_answer)
                 return
 
         for result in results:
@@ -700,7 +712,8 @@ class HarnessOrchestrator:
         self._turn_plan = plan
         if degraded_reason:
             self._turn_degraded_reason = degraded_reason
-        yield FinalAnswerEvent(final_text)
+        self._ai_answer = final_text
+        yield FinalAnswerEvent(self._ai_answer)
 
     async def _execute_v3_plan(
         self,

@@ -1,0 +1,1071 @@
+diff --git a/ai_python/app/api/auth.py b/ai_python/app/api/auth.py
+index efe03fa1..1c8ada41 100644
+--- a/ai_python/app/api/auth.py
++++ b/ai_python/app/api/auth.py
+@@ -2,6 +2,7 @@
+ 
+ from __future__ import annotations
+ 
++import re
+ from functools import lru_cache
+ from typing import Any
+ 
+@@ -12,6 +13,18 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
+ ALLOWED_JWT_ALGS = ("RS256", "RS384", "RS512", "ES256", "ES384", "ES512")
+ USER_ID_CLAIM_KEYS = ("user_id", "uid", "sub")
+ TENANT_ID_CLAIM_KEYS = ("tenant_id", "tenant", "tid", "tenantId")
++ROLE_CLAIM_KEYS = ("role", "roles", "authority", "authorities")
++# JWT claim keys that may carry live permission flags. Spring embeds menu
++# permissions as the ``mp`` claim (see ERP guide 02_permissions).
++PERMISSION_CLAIM_KEYS = ("mp", "permissions", "perms", "scope", "scopes")
++
++# AI capability tokens implied by a privileged live role. The role is itself a
++# validated JWT claim, so this is the live source of truth (SRS-006 FR-5.4) — not
++# an advisory K6 mapping. Unprivileged roles must be granted via explicit flags.
++_ROLE_IMPLIED_CAPABILITIES: dict[str, tuple[str, ...]] = {
++    "owner": ("draft_create", "data_read"),
++    "admin": ("draft_create", "data_read"),
++}
+ 
+ 
+ class AuthSettings(BaseSettings):
+@@ -131,6 +144,46 @@ def derive_identity_context(claims: dict[str, Any]) -> tuple[str, str]:
+     return user_id, tenant_id
+ 
+ 
++def _coerce_permission_flags(value: Any) -> set[str]:
++    """Normalize a permission claim (str / list / dict-of-bool) into flag strings."""
++    flags: set[str] = set()
++    if value is None:
++        return flags
++    if isinstance(value, str):
++        for part in re.split(r"[\s,]+", value):
++            token = part.strip()
++            if token:
++                flags.add(token)
++    elif isinstance(value, dict):
++        for key, enabled in value.items():
++            if enabled:
++                token = str(key).strip()
++                if token:
++                    flags.add(token)
++    elif isinstance(value, (list, tuple, set)):
++        for item in value:
++            token = str(item).strip()
++            if token:
++                flags.add(token)
++    return flags
++
++
++def derive_role_permissions(claims: dict[str, Any]) -> tuple[str | None, tuple[str, ...]]:
++    """Extract the live role and permission set from validated JWT claims.
++
++    This is server-authoritative: callers must overwrite any client-supplied
++    role/permissions with this result. Missing claims yield ``(None, ())`` so
++    protected tools fail closed (FR-5.4).
++    """
++    role = _read_claim(claims, ROLE_CLAIM_KEYS)
++    perms: set[str] = set()
++    for key in PERMISSION_CLAIM_KEYS:
++        perms |= _coerce_permission_flags(claims.get(key))
++    if role:
++        perms |= set(_ROLE_IMPLIED_CAPABILITIES.get(role.strip().lower(), ()))
++    return role, tuple(sorted(perms))
++
++
+ @lru_cache(maxsize=1)
+ def get_jwt_validator() -> JwtValidator:
+     return JwtValidator(load_auth_settings())
+diff --git a/ai_python/app/api/routes.py b/ai_python/app/api/routes.py
+index bdc4e0f9..3b81a2ba 100644
+--- a/ai_python/app/api/routes.py
++++ b/ai_python/app/api/routes.py
+@@ -10,7 +10,12 @@ import jwt
+ from fastapi import APIRouter, Depends, File, Form, Header, UploadFile
+ from fastapi.responses import Response, StreamingResponse
+ 
+-from app.api.auth import JwtValidator, derive_identity_context, get_jwt_validator
++from app.api.auth import (
++    JwtValidator,
++    derive_identity_context,
++    derive_role_permissions,
++    get_jwt_validator,
++)
+ from app.api.errors import ApiError
+ from app.api.runtime import GraphRuntime, get_graph_runtime
+ from app.graph.correlation import set_correlation_id
+@@ -95,6 +100,13 @@ def _enforce_identity_context(
+     *,
+     correlation_id: str,
+ ) -> None:
++    # Server-authoritative role/permissions from the validated JWT. Client-supplied
++    # metadata.role / metadata.permissions are ignored — overwritten here so the
++    # harness policy gate sees the live claim as the single source of truth (FR-5.4).
++    role, permissions = derive_role_permissions(claims)
++    request.metadata.role = role
++    request.metadata.permissions = permissions
++
+     if claims.get("auth_dev_bypass"):
+         return
+ 
+diff --git a/ai_python/app/api/runtime.py b/ai_python/app/api/runtime.py
+index 560d44bc..df86a466 100644
+--- a/ai_python/app/api/runtime.py
++++ b/ai_python/app/api/runtime.py
+@@ -326,6 +326,14 @@ class LangHarnessRuntime:
+                     "questions": list(event.questions),
+                     "suggestedRewrite": event.suggested_rewrite,
+                     "originalQuestion": event.original_question,
++                    # AC-18 in-flight plan state. Clarify is currently emitted before
++                    # any plan node runs, so these are empty; carrying them keeps the
++                    # record shape correct and lets resume guarantee no side-effect
++                    # node is ever replayed (resume reruns the loop, FR-13.3).
++                    "planGraphHash": getattr(event, "plan_graph_hash", None),
++                    "completedNodeIds": list(getattr(event, "completed_node_ids", []) or []),
++                    "sideEffectNodeIds": list(getattr(event, "side_effect_node_ids", []) or []),
++                    "resumeMode": getattr(event, "resume_mode", "replan") or "replan",
+                 },
+                 tenant_id=tenant_id,
+                 user_id=user_id,
+diff --git a/ai_python/app/api/schemas.py b/ai_python/app/api/schemas.py
+index 15bc945b..02553c75 100644
+--- a/ai_python/app/api/schemas.py
++++ b/ai_python/app/api/schemas.py
+@@ -23,6 +23,11 @@ class ChatMetadata(BaseModel):
+     tenant_id: str = Field(min_length=1)
+     thread_id: str | None = None
+     schema_version: str = Field(default="v1", min_length=1)
++    # Server-authoritative identity context. Any client-supplied value is
++    # overwritten from the validated JWT claims in _enforce_identity_context
++    # (SRS-006 FR-5.4: live claim is the single source of truth).
++    role: str | None = None
++    permissions: tuple[str, ...] = ()
+ 
+ 
+ class ChatOptions(BaseModel):
+diff --git a/ai_python/app/config/graph_settings.py b/ai_python/app/config/graph_settings.py
+index 6aebdd0f..18ea7f70 100644
+--- a/ai_python/app/config/graph_settings.py
++++ b/ai_python/app/config/graph_settings.py
+@@ -2,7 +2,7 @@
+ 
+ from __future__ import annotations
+ 
+-from typing import Literal
++from typing import ClassVar, Literal
+ 
+ from pydantic import Field, field_validator, model_validator
+ from pydantic_settings import BaseSettings, SettingsConfigDict
+@@ -411,12 +411,24 @@ class GraphSettings(BaseSettings):
+         le=1.0,
+         description="Minimum K12 route accuracy required before agentic_v3_enabled may roll out.",
+     )
++    agentic_v3_measured_route_accuracy: float = Field(
++        default=0.0,
++        ge=0.0,
++        le=1.0,
++        description="Last measured K12 route accuracy (written by the eval/CI step). Template promotion is disabled until this meets the threshold (FR-11.7).",
++    )
+     agentic_v3_observation_sample_limit: int = Field(
+         default=20,
+         ge=1,
+         le=200,
+         description="Max masked sample rows in an ObservationEnvelope; full data stays behind result_ref.",
+     )
++    agentic_v3_template_promote_after: int = Field(
++        default=3,
++        ge=1,
++        le=50,
++        description="Clean successes of a planner-generated plan before it is promoted to a fast-path template (FR-11.3).",
++    )
+ 
+     @field_validator("ai_display_timezone", mode="before")
+     @classmethod
+@@ -550,6 +562,7 @@ class GraphSettings(BaseSettings):
+         "semantic_expire_days",
+         "opt_escalate_replan_count",
+         "agentic_v3_observation_sample_limit",
++        "agentic_v3_template_promote_after",
+         mode="before",
+     )
+     @classmethod
+@@ -574,6 +587,34 @@ class GraphSettings(BaseSettings):
+             return [item.strip() for item in s.split(",") if item.strip()]
+         return v
+ 
++    # Sub-features that the v3 planner-brain model depends on. Turning on the single
++    # master switch AGENTIC_V3_ENABLED cascades these ON, so an operator flips one
++    # flag instead of eight. Any flag the operator sets explicitly is respected, so
++    # e.g. AGENTIC_V3_ENABLED=1 + AGENTIC_ASYNC_ENABLED=0 keeps async off.
++    _V3_IMPLIED_FLAGS: ClassVar[tuple[str, ...]] = (
++        "harness_loop_enabled",
++        "agentic_plan_dag_enabled",
++        "agentic_intent_object_enabled",
++        "agentic_answer_composer_enabled",
++        "agentic_data_validator_enabled",
++        "agentic_capability_guard_enabled",
++        "agentic_async_enabled",
++        "agentic_v3_plan_template_enabled",
++    )
++
++    @model_validator(mode="after")
++    def apply_v3_cascade(self) -> "GraphSettings":
++        """AGENTIC_V3_ENABLED is the single switch from legacy to the v3 model.
++
++        Legacy/rollback (NFR-7, AC-9) = AGENTIC_V3_ENABLED unset/0: every sub-flag
++        keeps its own default and traffic stays on the legacy graph.
++        """
++        if self.agentic_v3_enabled:
++            for name in self._V3_IMPLIED_FLAGS:
++                if name not in self.model_fields_set:
++                    object.__setattr__(self, name, True)
++        return self
++
+     @model_validator(mode="after")
+     def validate_prod_sql_mode(self) -> "GraphSettings":
+         if self.app_env in ("prod", "production") and self.sql_executor_mode != "http_spring":
+diff --git a/ai_python/app/graph/tools/_result_ref.py b/ai_python/app/graph/tools/_result_ref.py
+index 15658cc8..96970674 100644
+--- a/ai_python/app/graph/tools/_result_ref.py
++++ b/ai_python/app/graph/tools/_result_ref.py
+@@ -13,20 +13,26 @@ def rows_from_args_or_ref(args: dict[str, Any], ctx: TurnContext) -> tuple[list[
+         return rows, None
+ 
+     result_ref = str(args.get("result_ref") or "").strip()
+-    if not result_ref:
++    if result_ref:
++        store = getattr(ctx, "result_store", None)
++        if store is None or not hasattr(store, "get"):
++            return [], "result_ref store is unavailable"
++        record = store.get(result_ref, ctx=ctx)
++        if record is None:
++            return [], "result_ref is missing, expired, or outside tenant scope"
++        data = record.data if isinstance(record.data, dict) else {}
++        stored_rows = data.get("rows")
++        if not isinstance(stored_rows, list):
++            query_result = data.get("query_result")
++            if isinstance(query_result, dict):
++                stored_rows = query_result.get("rows")
++        if not isinstance(stored_rows, list):
++            return [], "result_ref does not contain tabular rows"
++        return [row for row in stored_rows if isinstance(row, dict)], None
++
++    # An explicit (possibly empty) `rows` key is a valid zero-row input; but if the
++    # planner bound neither real rows nor a result_ref, surface it as a failure so
++    # the turn replans instead of silently rendering an empty artifact (LOW-5).
++    if "rows" in args:
+         return [], None
+-    store = getattr(ctx, "result_store", None)
+-    if store is None or not hasattr(store, "get"):
+-        return [], "result_ref store is unavailable"
+-    record = store.get(result_ref, ctx=ctx)
+-    if record is None:
+-        return [], "result_ref is missing, expired, or outside tenant scope"
+-    data = record.data if isinstance(record.data, dict) else {}
+-    stored_rows = data.get("rows")
+-    if not isinstance(stored_rows, list):
+-        query_result = data.get("query_result")
+-        if isinstance(query_result, dict):
+-            stored_rows = query_result.get("rows")
+-    if not isinstance(stored_rows, list):
+-        return [], "result_ref does not contain tabular rows"
+-    return [row for row in stored_rows if isinstance(row, dict)], None
++    return [], "no input rows or result_ref provided"
+diff --git a/ai_python/app/graph/tools/answer_composer.py b/ai_python/app/graph/tools/answer_composer.py
+index 916906d2..84190cd0 100644
+--- a/ai_python/app/graph/tools/answer_composer.py
++++ b/ai_python/app/graph/tools/answer_composer.py
+@@ -37,23 +37,23 @@ class AnswerComposerTool:
+         observations = args.get("observations") or []
+         assumptions = [str(item) for item in (args.get("assumptions") or []) if str(item).strip()]
+         rows = _first_rows(observations)
+-        summary = _first_observation_summary(observations)
+-        if summary:
+-            answer = summary
+-        elif not rows:
++        row_count = _total_row_count(observations)
++
++        if not rows:
+             answer = (
+                 "Không tìm thấy dữ liệu phù hợp với yêu cầu hiện tại. "
+                 "Bạn có thể hỏi lại cụ thể hơn, ví dụ: doanh thu tháng này hoặc tồn kho của một sản phẩm cụ thể."
+             )
+         else:
+-            answer = f"Tôi đã tổng hợp được {len(rows)} dòng dữ liệu phù hợp. Điểm chính: {_summarize_first_row(rows[0])}."
++            answer = _build_answer(rows, row_count)
++
+         if assumptions:
+-            answer += "\n\nGiả định: " + "; ".join(assumptions)
++            answer += "\n\n**Giả định:** " + "; ".join(assumptions)
+         follow_ups = [
+             "Bạn có muốn xem chi tiết theo thời gian không?",
+             "Bạn có muốn so sánh với kỳ trước không?",
+         ]
+-        answer += "\n\nGợi ý tiếp theo:\n" + "\n".join(f"- {item}" for item in follow_ups)
++        answer += "\n\n**Gợi ý tiếp theo:**\n" + "\n".join(f"- {item}" for item in follow_ups)
+         output = AnswerComposerOutput(
+             answer_markdown=answer,
+             assumptions=assumptions,
+@@ -79,26 +79,82 @@ def _first_rows(observations: Any) -> list[dict[str, Any]]:
+     return []
+ 
+ 
+-def _first_observation_summary(observations: Any) -> str:
++def _total_row_count(observations: Any) -> int:
+     if not isinstance(observations, list):
+-        return ""
++        return 0
+     for item in observations:
+         if not isinstance(item, dict):
+             continue
+-        row_count = item.get("row_count")
+-        if isinstance(row_count, int):
+-            sample_rows = item.get("sample_rows")
+-            sample = ""
+-            if isinstance(sample_rows, list) and sample_rows and isinstance(sample_rows[0], dict):
+-                sample = " Mẫu: " + _summarize_first_row(sample_rows[0]) + "."
+-            artifact_refs = item.get("artifact_refs")
+-            artifact = ""
+-            if isinstance(artifact_refs, list) and artifact_refs:
+-                artifact = " Kết quả chi tiết nằm trong artifact đã tạo."
+-            return f"Tôi đã tổng hợp được {row_count} dòng dữ liệu phù hợp.{sample}{artifact}"
+-    return ""
+-
+-
+-def _summarize_first_row(row: dict[str, Any]) -> str:
+-    parts = [f"{key}={value}" for key, value in list(row.items())[:3]]
+-    return ", ".join(parts) if parts else "có dữ liệu"
++        rc = item.get("row_count")
++        if isinstance(rc, int):
++            return rc
++        rows = item.get("rows")
++        if isinstance(rows, list):
++            return len(rows)
++    return 0
++
++
++# Column-name heuristics for detecting common metrics.
++_NAME_COLS = ("product_name", "name", "item_name", "customer_name", "ten", "tên")
++_QTY_COLS = ("total_quantity_sold", "quantity", "total_qty", "qty", "so_luong", "sl")
++_REVENUE_COLS = ("total_revenue", "revenue", "doanh_thu", "amount", "line_total", "tong_tien")
++_STOCK_COLS = ("stock", "ton_kho", "available_qty", "inventory")
++
++
++def _fmt_number(value: Any) -> str:
++    try:
++        n = float(value)
++        if n == int(n):
++            return f"{int(n):,}"
++        return f"{n:,.2f}"
++    except (TypeError, ValueError):
++        return str(value)
++
++
++def _pick(row: dict[str, Any], candidates: tuple[str, ...]) -> Any:
++    for key in candidates:
++        if key in row:
++            return row[key]
++        # case-insensitive fallback
++        for k in row:
++            if k.lower() == key.lower():
++                return row[k]
++    return None
++
++
++def _build_answer(rows: list[dict[str, Any]], row_count: int) -> str:
++    total = row_count or len(rows)
++    display_rows = rows[:10]
++
++    lines: list[str] = []
++    for i, row in enumerate(display_rows, 1):
++        name = _pick(row, _NAME_COLS)
++        qty = _pick(row, _QTY_COLS)
++        revenue = _pick(row, _REVENUE_COLS)
++        stock = _pick(row, _STOCK_COLS)
++
++        if name is not None:
++            label = f"**{i}. {name}**"
++        else:
++            # Generic row: render first 3 key=value pairs
++            label = "**" + str(i) + ".** " + ", ".join(
++                f"{k}: {v}" for k, v in list(row.items())[:3]
++            )
++
++        parts: list[str] = [label]
++        if qty is not None:
++            parts.append(f"Số lượng: {_fmt_number(qty)}")
++        if revenue is not None:
++            parts.append(f"Doanh thu: {_fmt_number(revenue)}đ")
++        if stock is not None and qty is None and revenue is None:
++            parts.append(f"Tồn kho: {_fmt_number(stock)}")
++
++        lines.append(" — ".join(parts))
++
++    header = f"Tìm được **{total}** bản ghi phù hợp."
++    if total > len(display_rows):
++        header += f" Hiển thị top {len(display_rows)}:"
++    else:
++        header += " Kết quả:"
++
++    return header + "\n\n" + "\n\n".join(lines)
+diff --git a/ai_python/app/graph/tools/sql_query.py b/ai_python/app/graph/tools/sql_query.py
+index d2c9dfc0..7dc77f49 100644
+--- a/ai_python/app/graph/tools/sql_query.py
++++ b/ai_python/app/graph/tools/sql_query.py
+@@ -230,7 +230,7 @@ class SqlQueryTool:
+ 
+         async def execute(sql: str) -> list[dict[str, Any]]:
+             result = await self._deps.sql_executor.aexecute(
+-                sql,
++                sql.rstrip("; \t\n"),
+                 tenant_id=ctx.tenant_id,
+                 correlation_id=ctx.correlation_id,
+                 bearer_token=ctx.bearer_token,
+diff --git a/ai_python/app/harness/__init__.py b/ai_python/app/harness/__init__.py
+index 33195a73..f3e6dd64 100644
+--- a/ai_python/app/harness/__init__.py
++++ b/ai_python/app/harness/__init__.py
+@@ -11,7 +11,7 @@ from app.harness.policy import HarnessPolicy, HarnessPolicyError
+ from app.harness.capability import CapabilityMatrix, IdempotencyGuard, sanitize_user_data
+ from app.harness.compact import CompactOutput, CompactSubagent
+ from app.harness.cache import InMemorySemanticCache
+-from app.harness.intent import IntentAnalysisResult, IntentContext, IntentContextBuilder, IntentDecision, IntentObject, IntentObjectOutput, IntentSubagent, RequiredDataItem
++from app.harness.intent import IntentAnalysisResult, IntentContext, IntentContextBuilder, IntentSubagent, RequiredDataItem
+ from app.harness.memory import EpisodicMemory, InMemorySemanticStore, SemanticRecord, WorkingMemory
+ from app.harness.model_router import ModelRouter
+ from app.harness.observability import TraceRecorder, TurnMetrics, aggregate_metrics
+@@ -68,9 +68,6 @@ __all__ = [
+     "IntentAnalysisResult",
+     "IntentContext",
+     "IntentContextBuilder",
+-    "IntentDecision",
+-    "IntentObject",
+-    "IntentObjectOutput",
+     "IntentSubagent",
+     "RequiredDataItem",
+     "InMemorySemanticStore",
+diff --git a/ai_python/app/harness/intent.py b/ai_python/app/harness/intent.py
+index 1b8e9162..63e4a6a2 100644
+--- a/ai_python/app/harness/intent.py
++++ b/ai_python/app/harness/intent.py
+@@ -52,12 +52,6 @@ class IntentAnalysisResult(BaseModel):
+         return v
+ 
+ 
+-# Backward-compat aliases — orchestrator và tests cũ dùng tên cũ
+-IntentObject = IntentAnalysisResult
+-IntentObjectOutput = IntentAnalysisResult
+-IntentDecision = IntentAnalysisResult
+-
+-
+ class IntentContext(BaseModel):
+     schema_text: str = ""
+     history_text: str = ""
+@@ -175,10 +169,6 @@ class IntentSubagent:
+         except Exception:
+             return self._heuristic(question)
+ 
+-    def decide(self, intent: IntentAnalysisResult) -> IntentAnalysisResult:
+-        # Stub — orchestrator will be updated in Task 5 to read intent.mode directly
+-        return intent
+-
+     @staticmethod
+     def _heuristic(question: str) -> IntentAnalysisResult:
+         text = (question or "").lower()
+diff --git a/ai_python/app/harness/observation.py b/ai_python/app/harness/observation.py
+index 8303a14f..4784b288 100644
+--- a/ai_python/app/harness/observation.py
++++ b/ai_python/app/harness/observation.py
+@@ -182,8 +182,10 @@ def build_observation(
+     masked_sample, masked = _mask_rows(sample)
+     truncated = row_count > len(sample)
+ 
++    # Store a handle for any ok tabular result, including an empty (zero-row) set,
++    # so downstream artifact builders can render a valid "no data" table (P2-1).
+     result_ref: str | None = None
+-    if result_store is not None and rows:
++    if result_store is not None:
+         result_ref = result_store.put(tool_name=tool_name, data={"rows": rows}, ctx=ctx)
+ 
+     return ObservationEnvelope(
+diff --git a/ai_python/app/harness/orchestrator.py b/ai_python/app/harness/orchestrator.py
+index 9623c16e..dcf92a97 100644
+--- a/ai_python/app/harness/orchestrator.py
++++ b/ai_python/app/harness/orchestrator.py
+@@ -2,6 +2,7 @@
+ 
+ from __future__ import annotations
+ 
++import hashlib
+ import json
+ import logging
+ from collections.abc import AsyncIterator
+@@ -13,12 +14,16 @@ from langchain_core.messages import HumanMessage
+ from app.config.graph_settings import GraphSettings
+ from app.harness.budget import BudgetExceeded, TurnBudget
+ from app.harness.cache import InMemorySemanticCache
+-from app.harness.intent import IntentSubagent
++from app.harness.intent import IntentContextBuilder, IntentSubagent
+ from app.harness.memory import WorkingMemory
+ from app.harness.model_router import ModelRouter
++from app.harness.eval_gate import v3_rollout_allowed
+ from app.harness.observability import TraceRecorder
+ from app.harness.history_store import (
++    STATUS_CLARIFY_PENDING,
+     STATUS_DEGRADED,
++    STATUS_FAILURE,
++    STATUS_HITL_PENDING,
+     STATUS_SUCCESS,
+     IntentHistoryStore,
+     build_history_event,
+@@ -32,8 +37,14 @@ from app.harness.plan_graph import (
+     degraded_final_answer,
+     run_planner_owned_plan,
+ )
+-from app.harness.plan_template_store import PlanTemplateStore, normalize_intent_key
+-from app.harness.plan_template_store import plan_graph_hash
++from app.harness.plan_template_store import (
++    PLANNER_GENERATED,
++    PlanTemplateRecord,
++    PlanTemplateStore,
++    build_intent_key,
++    normalize_intent_key,
++    plan_graph_hash,
++)
+ from app.harness.result_store import InMemoryResultRefStore
+ from app.harness.policy import POLICY_VERSION, HarnessPolicy, HarnessPolicyError
+ from app.harness.runtime import AgentHarness, ToolCallContext
+@@ -118,6 +129,13 @@ class HarnessOrchestrator:
+         # P8 — last finalized metrics, exposed for observability/tests.
+         self.last_metrics: Any = None
+         self._replan_count = 0
++        # Per-turn accounting for the K15 history event (FR-9.1/9.5).
++        self._turn_tools: list[str] = []
++        self._turn_plan: PlanGraph | None = None
++        self._turn_degraded_reason: str = ""
++        self._turn_hitl: int = 0
++        # Semantic intent key for template lookup + K15 aggregation (LOW-4).
++        self._turn_intent_key: str = ""
+ 
+     async def run(
+         self,
+@@ -125,6 +143,52 @@ class HarnessOrchestrator:
+         ctx: TurnContext,
+     ) -> AsyncIterator[
+         ProgressEvent | SsePayloadEvent | FinalAnswerEvent | PendingHitlEvent | ClarifyEvent | ErrorEvent
++    ]:
++        """Run a turn and append exactly one K15 history event for its outcome.
++
++        Centralizing history here (instead of per-mode) satisfies FR-9.1 ("after
++        every turn") and FR-9.5 (distinct success/degraded/failure/hitl_pending/
++        clarify_pending statuses) across reactive, plan, and HITL-resume paths.
++        """
++        question = self._original_question(scratchpad)
++        self._turn_tools = []
++        self._turn_plan = None
++        self._turn_degraded_reason = ""
++        self._turn_hitl = 0
++        # Default to the raw-question key; replaced with the semantic key once the
++        # IntentObject is available (in _dispatch).
++        self._turn_intent_key = normalize_intent_key(question)
++        self._replan_count = 0
++        self._last_budget_hit = None
++        status = STATUS_FAILURE
++        try:
++            async for event in self._dispatch(scratchpad, ctx):
++                if isinstance(event, FinalAnswerEvent):
++                    status = (
++                        STATUS_DEGRADED
++                        if (self._turn_degraded_reason or self._last_budget_hit)
++                        else STATUS_SUCCESS
++                    )
++                elif isinstance(event, ClarifyEvent):
++                    status = STATUS_CLARIFY_PENDING
++                elif isinstance(event, PendingHitlEvent):
++                    status = STATUS_HITL_PENDING
++                elif isinstance(event, ErrorEvent):
++                    status = STATUS_FAILURE
++                yield event
++        finally:
++            self._record_turn_history(
++                ctx=ctx,
++                status=status,
++                failure_kind=(self._turn_degraded_reason or self._last_budget_hit) or None,
++            )
++
++    async def _dispatch(
++        self,
++        scratchpad: TurnScratchpad,
++        ctx: TurnContext,
++    ) -> AsyncIterator[
++        ProgressEvent | SsePayloadEvent | FinalAnswerEvent | PendingHitlEvent | ClarifyEvent | ErrorEvent
+     ]:
+         # Draft HITL resume (catalog/inventory) carries a pending tool; a data_query
+         # clarification reply has none and just re-runs the loop with the resolved
+@@ -154,16 +218,24 @@ class HarnessOrchestrator:
+             if bool(getattr(self._settings, "agentic_intent_object_enabled", False)):
+                 intent_agent = IntentSubagent(llm_registry=self._llm_registry, settings=self._settings)
+                 intent = await intent_agent.analyze(
+-                    self._original_question(scratchpad),
+-                    memory_text=self._memory_text(scratchpad),
+-                    dictionary_text="",
++                    self._effective_question(scratchpad),
++                    intent_context=IntentContextBuilder().build(
++                        schema_text=self._tool_registry.tools_manifest_text(),
++                        history_text=self._observations_text(scratchpad),
++                        memory_text=self._memory_text(scratchpad),
++                    ),
++                )
++                # Semantic intent key drives template lookup + K15 aggregation (LOW-4).
++                self._turn_intent_key = _intent_key_from(
++                    intent, fallback=self._original_question(scratchpad)
+                 )
+                 if recorder is not None:
+                     recorder._intent = intent.intent_type or "unknown"
+-                intent_decision = intent_agent.decide(intent)
+-                if intent_decision.mode == "clarify":
++                if intent.mode == "clarify":
++                    if recorder is not None:
++                        recorder.record_hitl()
+                     yield ClarifyEvent(
+-                        questions=intent_decision.clarify_questions,
++                        questions=intent.clarify_questions,
+                         suggested_rewrite="",
+                         original_question=self._original_question(scratchpad),
+                     )
+@@ -171,7 +243,7 @@ class HarnessOrchestrator:
+                 ctx = replace(
+                     ctx,
+                     intent_object=intent.model_dump(mode="json"),
+-                    assumptions=list(intent_decision.assumptions),
++                    assumptions=list(intent.assumptions),
+                 )
+                 # P2 — opt-in plan-driven DAG for read/report intents.
+                 if bool(getattr(self._settings, "agentic_plan_dag_enabled", False)) and (
+@@ -243,12 +315,14 @@ class HarnessOrchestrator:
+                 signature = f"{tool_name}:{json.dumps(args, sort_keys=True, ensure_ascii=False, default=str)}"
+                 if signature in seen_tool_calls:
+                     self._audit_warn("duplicate_tool_call_short_circuit", ctx)
++                    self._turn_degraded_reason = "duplicate"
+                     yield FinalAnswerEvent(scratchpad.observation_summary())
+                     return
+                 seen_tool_calls.add(signature)
+ 
+                 try:
+                     self._check_policy(tool_name, args, ctx)
++                    self._turn_tools.append(tool_name)
+                     result = await self._run_tool_cached(
+                         ToolInput(tool_name=tool_name, args=args, context=ctx)
+                     )
+@@ -275,6 +349,7 @@ class HarnessOrchestrator:
+                 if result.pending_hitl:
+                     if recorder is not None:
+                         recorder.record_hitl()
++                    self._turn_hitl += 1
+                     if result.sse_payload:
+                         yield SsePayloadEvent(result.pending_hitl.event_name, result.sse_payload)
+                     yield PendingHitlEvent(result.pending_hitl)
+@@ -288,6 +363,7 @@ class HarnessOrchestrator:
+                 scratchpad.add_observation(result, tool_name)
+ 
+             self._audit_warn("step_budget_exhausted", ctx)
++            self._turn_degraded_reason = self._turn_degraded_reason or "step_budget"
+             yield FinalAnswerEvent(scratchpad.observation_summary())
+         finally:
+             if recorder is not None:
+@@ -323,6 +399,7 @@ class HarnessOrchestrator:
+         args = {"request": "confirm"}
+         try:
+             self._check_policy(tool_name, args, ctx)
++            self._turn_tools.append(tool_name)
+             result = await self._harness_run_tool_async(ToolInput(tool_name=tool_name, args=args, context=ctx))
+         except HarnessPolicyError as exc:
+             yield ErrorEvent(str(exc), "HARNESS_POLICY_BLOCK")
+@@ -349,6 +426,35 @@ class HarnessOrchestrator:
+                 return str(msg.content)
+         return ""
+ 
++    @staticmethod
++    def _effective_question(scratchpad: TurnScratchpad) -> str:
++        """Return the question to use for intent analysis.
++
++        If the latest user message is very short (a follow-up refinement like "năm 2026"),
++        prepend the most recent substantive user question so the intent LLM has full context.
++        """
++        messages = scratchpad.messages
++        latest = ""
++        latest_idx = -1
++        for i, msg in enumerate(reversed(messages)):
++            if isinstance(msg, HumanMessage):
++                latest = str(msg.content).strip()
++                latest_idx = len(messages) - 1 - i
++                break
++        if not latest:
++            return ""
++        # A substantive question has at least 4 words or 20 chars; short ones are follow-ups.
++        if len(latest) > 20 or len(latest.split()) >= 4:
++            return latest
++        # Find the previous substantive user message.
++        for msg in reversed(messages[:latest_idx]):
++            if isinstance(msg, HumanMessage):
++                prev = str(msg.content).strip()
++                if len(prev) > 20:
++                    return f"{prev} — {latest}"
++                break
++        return latest
++
+     async def _decide(self, scratchpad: TurnScratchpad) -> DecisionSchema:
+         role = str(getattr(self._settings, "harness_planner_role", "harness_planner") or "harness_planner")
+         client = self._resolve_decision_client(role)
+@@ -382,6 +488,16 @@ class HarnessOrchestrator:
+             return result
+         return await self._harness_run_tool_async(tool_input)
+ 
++    def _plan_error_answer(self, scratchpad: TurnScratchpad, reason: str = "plan_error") -> str:
++        """Labeled degraded fallback so caught plan errors are not logged as success.
++
++        Sets the turn's degraded reason (so run() records K15 'degraded', not clean
++        'success' — FR-9.5) and labels the answer as incomplete (FR-1.6).
++        """
++        self._turn_degraded_reason = self._turn_degraded_reason or reason
++        summary = scratchpad.observation_summary()
++        return f"{degraded_final_answer(reason)}\n\n{summary}".strip()
++
+     async def _run_plan_mode(
+         self,
+         intent: Any,
+@@ -403,7 +519,7 @@ class HarnessOrchestrator:
+         if bool(getattr(self._settings, "agentic_v3_enabled", False)) and bool(
+             getattr(self._settings, "agentic_v3_plan_template_enabled", False)
+         ):
+-            template = self._get_plan_template(self._original_question(scratchpad), ctx)
++            template = self._get_plan_template(ctx)
+             if template is not None and self._plan_is_template_safe(template.plan_graph):
+                 template_hit = True
+                 plan = template.plan_graph
+@@ -421,15 +537,15 @@ class HarnessOrchestrator:
+                     )
+                 except Exception:  # noqa: BLE001
+                     logger.warning("template plan execution failed", exc_info=True)
+-                    self._record_plan_template_outcome(self._original_question(scratchpad), ctx, "failure")
++                    self._record_plan_template_outcome(ctx, "failure")
+                     outcome = None
+                 if outcome is None:
+                     template_hit = False
+                 elif not outcome.degraded:
+-                    self._record_plan_template_outcome(self._original_question(scratchpad), ctx, "success")
++                    self._record_plan_template_outcome(ctx, "success")
+                     results = outcome.results
+                 else:
+-                    self._record_plan_template_outcome(self._original_question(scratchpad), ctx, "degraded")
++                    self._record_plan_template_outcome(ctx, "degraded")
+                     template_hit = False
+                     degraded_reason = ""
+ 
+@@ -438,7 +554,7 @@ class HarnessOrchestrator:
+                 plan = await planner.plan(intent_dump, "", manifest)
+             except Exception:  # noqa: BLE001
+                 logger.warning("planner failed; falling back to reactive summary", exc_info=True)
+-                yield FinalAnswerEvent(scratchpad.observation_summary())
++                yield FinalAnswerEvent(self._plan_error_answer(scratchpad))
+                 return
+ 
+         if results:
+@@ -459,11 +575,15 @@ class HarnessOrchestrator:
+                 )
+             except Exception:  # noqa: BLE001
+                 logger.warning("plan execution failed", exc_info=True)
+-                yield FinalAnswerEvent(scratchpad.observation_summary())
++                yield FinalAnswerEvent(self._plan_error_answer(scratchpad))
+                 return
+             results = outcome.results
+             if outcome.degraded:
+                 degraded_reason = outcome.stopped_reason
++                self._note_template_non_success(ctx)
++            elif plan is not None:
++                # Clean success of a planner-generated plan feeds template promotion.
++                self._consider_template_promotion(plan, ctx)
+         else:
+             async def _replan(_current: PlanGraph, results: list[NodeResult], attempt: int) -> PlanGraph:
+                 self._replan_count = attempt
+@@ -481,7 +601,7 @@ class HarnessOrchestrator:
+                 )
+             except Exception:  # noqa: BLE001
+                 logger.warning("plan execution failed", exc_info=True)
+-                yield FinalAnswerEvent(scratchpad.observation_summary())
++                yield FinalAnswerEvent(self._plan_error_answer(scratchpad))
+                 return
+ 
+         for result in results:
+@@ -500,14 +620,10 @@ class HarnessOrchestrator:
+         if degraded_reason:
+             # FR-1.6: degraded answers must be explicitly labeled as incomplete.
+             final_text = f"{degraded_final_answer(degraded_reason)}\n\n{final_text}".strip()
+-        if plan is not None and bool(getattr(self._settings, "agentic_v3_enabled", False)):
+-            self._record_history(
+-                question=self._original_question(scratchpad),
+-                plan=plan,
+-                ctx=ctx,
+-                status=STATUS_DEGRADED if degraded_reason else STATUS_SUCCESS,
+-                failure_kind=degraded_reason or None,
+-            )
++        # Hand the plan + degraded reason to the turn-level K15 recorder in run().
++        self._turn_plan = plan
++        if degraded_reason:
++            self._turn_degraded_reason = degraded_reason
+         yield FinalAnswerEvent(final_text)
+ 
+     async def _execute_v3_plan(
+@@ -583,43 +699,88 @@ class HarnessOrchestrator:
+         except KeyError:
+             return False
+ 
+-    def _get_plan_template(self, question: str, ctx: TurnContext) -> Any | None:
++    def _get_plan_template(self, ctx: TurnContext) -> Any | None:
+         store = self._plan_template_store
+         if store is None:
+             return None
+         return store.get(
+-            normalize_intent_key(question),
++            self._turn_intent_key,
+             role_scope=_role_scope(ctx),
+             manifest_version=self._tool_registry.manifest_version,
+             policy_version=POLICY_VERSION,
+             asset_versions=_v3_asset_versions(),
+         )
+ 
+-    def _record_plan_template_outcome(self, question: str, ctx: TurnContext, status: str) -> None:
++    def _record_plan_template_outcome(self, ctx: TurnContext, status: str) -> None:
+         store = self._plan_template_store
+         if store is None:
+             return
+-        store.record_outcome(normalize_intent_key(question), role_scope=_role_scope(ctx), status=status)
++        store.record_outcome(self._turn_intent_key, role_scope=_role_scope(ctx), status=status)
+ 
+-    def _record_history(
++    def _consider_template_promotion(self, plan: PlanGraph, ctx: TurnContext) -> None:
++        """Feed a clean planner-generated success into the promotion streak (FR-11.3)."""
++        store = self._plan_template_store
++        if store is None or not hasattr(store, "consider_promotion"):
++            return
++        if not bool(getattr(self._settings, "agentic_v3_plan_template_enabled", False)):
++            return
++        # FR-11.7: only promote once K12 route accuracy has cleared the threshold.
++        # Until the eval/CI step writes a measured accuracy, promotion stays off.
++        if not v3_rollout_allowed(
++            float(getattr(self._settings, "agentic_v3_measured_route_accuracy", 0.0) or 0.0),
++            float(getattr(self._settings, "agentic_v3_route_accuracy_threshold", 0.8) or 0.8),
++        ):
++            return
++        candidate = PlanTemplateRecord(
++            normalized_intent_key=self._turn_intent_key,
++            plan_graph_hash=plan_graph_hash(plan),
++            plan_graph=plan,
++            manifest_version=self._tool_registry.manifest_version,
++            policy_version=POLICY_VERSION,
++            asset_versions=_v3_asset_versions(),
++            role_scope=_role_scope(ctx),
++            source=PLANNER_GENERATED,
++        )
++        promote_after = int(getattr(self._settings, "agentic_v3_template_promote_after", 3) or 3)
++        store.consider_promotion(candidate, promote_after=promote_after)
++
++    def _note_template_non_success(self, ctx: TurnContext) -> None:
++        store = self._plan_template_store
++        if store is None or not hasattr(store, "note_non_success"):
++            return
++        store.note_non_success(self._turn_intent_key, role_scope=_role_scope(ctx))
++
++    def _record_turn_history(
+         self,
+         *,
+-        question: str,
+-        plan: PlanGraph,
+         ctx: TurnContext,
+         status: str,
+         failure_kind: str | None = None,
+     ) -> None:
++        """Append one K15 event for the turn (FR-9.1/9.2/9.5).
++
++        Uses the executed plan when one ran (plan/template mode); otherwise derives
++        a reactive plan hash from the sequence of tools the loop actually called.
++        Aggregated under the semantic intent key (LOW-4).
++        """
+         store = self._history_store
+         if store is None:
+             return
++        plan = self._turn_plan
++        if plan is not None and plan.nodes:
++            plan_hash = plan_graph_hash(plan)
++            tools = [node.tool for node in plan.nodes]
++        else:
++            tools = list(self._turn_tools)
++            plan_hash = "reactive:" + hashlib.sha256(",".join(tools).encode("utf-8")).hexdigest()[:12]
+         event = build_history_event(
+             tenant_id=ctx.tenant_id,
+-            intent_key=normalize_intent_key(question),
+-            plan_hash=plan_graph_hash(plan),
+-            tools=[node.tool for node in plan.nodes],
++            intent_key=self._turn_intent_key,
++            plan_hash=plan_hash,
++            tools=tools,
+             status=status,
+             replan_count=self._replan_count,
++            hitl_count=self._turn_hitl,
+             cost_usd=float(self._last_llm_cost or 0.0),
+             asset_versions=_v3_asset_versions(),
+             failure_kind=failure_kind,
+@@ -663,6 +824,17 @@ class HarnessOrchestrator:
+         parts = [str(getattr(m, "content", "")) for m in scratchpad.messages[-6:]]
+         return "\n".join(p for p in parts if p)
+ 
++    @staticmethod
++    def _observations_text(scratchpad: TurnScratchpad) -> str:
++        if not scratchpad.observations:
++            return ""
++        parts = [
++            f"- {obs.tool_name}: {obs.observation_text}"
++            for obs in scratchpad.observations[-5:]
++            if obs.ok and obs.observation_text
++        ]
++        return "\n".join(parts)
++
+     async def _harness_run_tool_async(self, tool_input: ToolInput) -> ToolResult:
+         ctx = ToolCallContext(
+             tool_name=tool_input.tool_name,
+@@ -722,7 +894,34 @@ def _rows_of(output: Any) -> list[dict[str, Any]]:
+ 
+ 
+ def _role_scope(ctx: TurnContext) -> str:
+-    return str(ctx.role or "default").strip() or "default"
++    """Template scope = role + a fingerprint of live permissions (P2-2).
++
++    Two users with the same role but different live JWT permissions get distinct
++    scopes, so one cannot poison/demote the other's template history even though
++    policy is also re-checked per call (FR-5.4/AC-17).
++    """
++    role = str(ctx.role or "default").strip() or "default"
++    perms = sorted(str(p).strip().lower() for p in (getattr(ctx, "permissions", ()) or ()) if str(p).strip())
++    if not perms:
++        return role
++    digest = hashlib.sha256(",".join(perms).encode("utf-8")).hexdigest()[:8]
++    return f"{role}#{digest}"
++
++
++def _intent_key_from(intent: Any, *, fallback: str) -> str:
++    """Build the semantic intent key from an IntentObject, or fall back to raw."""
++    if intent is None:
++        return normalize_intent_key(fallback)
++    entities = [
++        getattr(e, "matched", "") for e in (getattr(intent, "resolved_entities", None) or [])
++    ]
++    return build_intent_key(
++        intent_type=getattr(intent, "intent_type", "") or "",
++        goal=getattr(intent, "goal", "") or "",
++        required_data=getattr(intent, "required_data", None) or [],
++        entities=entities,
++        fallback=fallback,
++    )
+ 
+ 
+ def _v3_asset_versions() -> dict[str, str]:
+diff --git a/ai_python/app/harness/plan_graph.py b/ai_python/app/harness/plan_graph.py
+index a07d12a5..3ce95d03 100644
+--- a/ai_python/app/harness/plan_graph.py
++++ b/ai_python/app/harness/plan_graph.py
+@@ -105,16 +105,39 @@ class PlanExecutor:
+         result_store: Any | None = None,
+     ) -> list[NodeResult]:
+         pending = {node.id: node for node in plan.nodes}
+-        completed: set[str] = set()
++        succeeded: set[str] = set()
++        failed: set[str] = set()
+         results: list[NodeResult] = []
+         # Outputs of completed nodes, addressable by downstream input_spec refs
+         # of the form ``${node_id.path}`` (data-flow binding between DAG nodes).
+         outputs: dict[str, dict[str, Any]] = {}
+         while pending:
++            # FR-6 / guardrail (P1-1): a node whose dependency FAILED must never run —
++            # otherwise a write/draft tool could execute after a failed lookup or
++            # validation. Skip it (mark failed) without executing.
++            blocked = [
++                node
++                for node in plan.nodes
++                if node.id in pending and any(dep in failed for dep in node.needs)
++            ]
++            if blocked:
++                for node in blocked:
++                    results.append(
++                        NodeResult(
++                            node_id=node.id,
++                            ok=False,
++                            output_meets_expect=False,
++                            error="skipped: dependency failed",
++                        )
++                    )
++                    failed.add(node.id)
++                    pending.pop(node.id, None)
++                continue
++
+             ready = [
+                 node
+                 for node in plan.nodes
+-                if node.id in pending and all(dep in completed for dep in node.needs)
++                if node.id in pending and all(dep in succeeded for dep in node.needs)
+             ]
+             if not ready:
+                 for node_id in list(pending):
+@@ -126,8 +149,10 @@ class PlanExecutor:
+                             error="plan dependency cycle or missing dependency",
+                         )
+                     )
++                    failed.add(node_id)
++                    pending.pop(node_id, None)
+                 break
+-            # Resolve each ready node's args against already-completed node outputs
++            # Resolve each ready node's args against already-succeeded node outputs
+             # BEFORE launching the layer (every dependency is guaranteed complete).
+             layer = [(node, _resolve_refs(dict(node.input_spec or {}), outputs)) for node in ready]
+             layer_results = await asyncio.gather(
+@@ -135,9 +160,12 @@ class PlanExecutor:
+             )
+             results.extend(layer_results)
+             for result in layer_results:
+-                completed.add(result.node_id)
+                 pending.pop(result.node_id, None)
+                 outputs[result.node_id] = result.tool_result if isinstance(result.tool_result, dict) else {}
++                if result.ok and result.output_meets_expect:
++                    succeeded.add(result.node_id)
++                else:
++                    failed.add(result.node_id)
+         return results
+ 
+     async def execute_with_replan(
+@@ -419,6 +447,8 @@ def degraded_final_answer(reason: str = "", missing: str = "") -> str:
+         "duplicate": "kế hoạch lặp lại cùng một lỗi nên đã dừng",
+         "non_idempotent_block": "thao tác ghi không thể tự thử lại an toàn",
+         "planner_stop": "chưa tìm được cách hoàn thành an toàn",
++        "plan_error": "gặp lỗi khi lập hoặc chạy kế hoạch",
++        "step_budget": "đã đạt giới hạn số bước xử lý",
+     }.get(reason, "chưa lấy đủ dữ liệu cần thiết")
+     text = f"⚠️ Câu trả lời chưa đầy đủ: {detail}."
+     if missing:
+@@ -432,13 +462,15 @@ def _output_meets_expect(result: ToolResult, output_expect: str) -> bool:
+         return True
+     output = result.output or {}
+     if "rows" in expect:
++        # A present rows key satisfies the expectation even when empty: an explicit
++        # zero-row result is a valid answer for a list/table request (P2-1). The
++        # sql tool already does its own empty-retry before returning here.
+         rows = output.get("rows")
+-        if isinstance(rows, list) and rows:
++        if isinstance(rows, list):
+             return True
+         query_result = output.get("query_result")
+         if isinstance(query_result, dict):
+-            nested_rows = query_result.get("rows")
+-            return isinstance(nested_rows, list) and bool(nested_rows)
++            return isinstance(query_result.get("rows"), list)
+         return False
+     if "answer" in expect:
+         return bool(output.get("answer_markdown") or result.observation_text)
