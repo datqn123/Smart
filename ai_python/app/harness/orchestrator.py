@@ -828,11 +828,16 @@ class HarnessOrchestrator:
     def _observations_text(scratchpad: TurnScratchpad) -> str:
         if not scratchpad.observations:
             return ""
-        parts = [
-            f"- {obs.tool_name}: {obs.observation_text}"
-            for obs in scratchpad.observations[-5:]
-            if obs.ok and obs.observation_text
-        ]
+        parts = []
+        for obs in scratchpad.observations[-5:]:
+            if not obs.observation_text:
+                continue
+            if obs.ok:
+                parts.append(f"- {obs.tool_name}: {obs.observation_text}")
+            else:
+                # Include failed observations so the intent LLM judge can see prior
+                # failures and avoid generating the same plan again.
+                parts.append(f"- {obs.tool_name} (failed): {obs.observation_text}")
         return "\n".join(parts)
 
     async def _harness_run_tool_async(self, tool_input: ToolInput) -> ToolResult:

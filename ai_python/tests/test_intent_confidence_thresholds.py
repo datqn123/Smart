@@ -42,6 +42,25 @@ class _Registry:
         return self.client
 
 
+def test_observations_text_includes_failed_obs() -> None:
+    """Failed observations must appear in _observations_text so intent LLM sees prior failures."""
+    from app.harness.orchestrator import HarnessOrchestrator
+    from app.harness.scratchpad import Observation, TurnScratchpad
+    from langchain_core.messages import HumanMessage
+
+    scratchpad = TurnScratchpad(messages=[HumanMessage(content="x")])
+    scratchpad.observations = [
+        Observation(tool_name="sql_query", observation_text="table not found", ok=False),
+        Observation(tool_name="answer_composer", observation_text="ok result", ok=True),
+    ]
+
+    text = HarnessOrchestrator._observations_text(scratchpad)
+
+    assert "sql_query" in text, "Failed observation tool name must appear in history text"
+    assert "(failed)" in text, "Failed label must be present"
+    assert "answer_composer" in text, "Successful observation must still appear"
+
+
 @pytest.mark.asyncio
 async def test_intent_low_entity_score_clarifies() -> None:
     from app.harness.orchestrator import ClarifyEvent, HarnessOrchestrator
