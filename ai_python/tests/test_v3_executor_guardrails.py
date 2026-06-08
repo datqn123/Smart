@@ -66,6 +66,80 @@ async def test_downstream_write_skipped_when_dependency_fails():
 
 
 @pytest.mark.asyncio
+async def test_validation_failed_does_not_block_dependent() -> None:
+    """ok=True but output_meets_expect=False must NOT cascade-block downstream nodes."""
+    ran: dict[str, int] = {"b": 0}
+
+    class ShapeMismatch:
+        """Returns ok=True but without a 'rows' key, triggering output_meets_expect=False."""
+        async def invoke(self, args, ctx):  # noqa: ANN001
+            return ToolResult(ok=True, output={"answer_markdown": "something"}, observation_text="ok")
+
+    class OkTool:
+        async def invoke(self, args, ctx):  # noqa: ANN001
+            ran["b"] += 1
+            return ToolResult(ok=True, output={"rows": [{"x": 1}]}, observation_text="ok")
+
+    registry = ToolRegistry()
+    registry.register(
+        ToolManifest(name="node_a", description="d", args_schema="{}", capability="data_read"),
+        ShapeMismatch(),
+    )
+    registry.register(
+        ToolManifest(name="node_b", description="d", args_schema="{}", capability="data_read"),
+        OkTool(),
+    )
+    plan = PlanGraph(nodes=[
+        PlanNode(id="a", tool="node_a", input_spec={}, output_expect="rows"),
+        PlanNode(id="b", tool="node_b", needs=["a"], input_spec={}, output_expect="rows"),
+    ])
+
+    results = await _executor(registry).execute(plan, _ctx())
+    by_id = {r.node_id: r for r in results}
+
+    assert ran["b"] == 1, "node_b should run even though node_a had output_meets_expect=False"
+    assert by_id["a"].ok is True
+    assert by_id["a"].output_meets_expect is False
+    assert by_id["b"].ok is True
+
+
+@pytest.mark.asyncio
+async def test_hard_failed_still_blocks_dependent() -> None:
+    """ok=False (hard failure) must still cascade-block all downstream nodes (FR-6)."""
+    ran: dict[str, int] = {"b": 0}
+
+    class HardFail:
+        async def invoke(self, args, ctx):  # noqa: ANN001
+            return ToolResult(ok=False, output={}, observation_text="", error_message="boom")
+
+    class OkTool:
+        async def invoke(self, args, ctx):  # noqa: ANN001
+            ran["b"] += 1
+            return ToolResult(ok=True, output={"rows": []}, observation_text="ok")
+
+    registry = ToolRegistry()
+    registry.register(
+        ToolManifest(name="node_a", description="d", args_schema="{}", capability="data_read"),
+        HardFail(),
+    )
+    registry.register(
+        ToolManifest(name="node_b", description="d", args_schema="{}", capability="data_read"),
+        OkTool(),
+    )
+    plan = PlanGraph(nodes=[
+        PlanNode(id="a", tool="node_a", input_spec={}, output_expect="rows"),
+        PlanNode(id="b", tool="node_b", needs=["a"], input_spec={}, output_expect="rows"),
+    ])
+
+    results = await _executor(registry).execute(plan, _ctx())
+    by_id = {r.node_id: r for r in results}
+
+    assert ran["b"] == 0, "node_b must NOT run after node_a hard-failed"
+    assert by_id["b"].ok is False
+    assert "skipped" in by_id["b"].error
+
+
+@pytest.mark.asyncio
 async def test_independent_node_still_runs_when_sibling_fails():
     ran = {"b": 0}
 

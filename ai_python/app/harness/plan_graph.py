@@ -106,19 +106,24 @@ class PlanExecutor:
     ) -> list[NodeResult]:
         pending = {node.id: node for node in plan.nodes}
         succeeded: set[str] = set()
-        failed: set[str] = set()
+        # hard_failed: ok=False — blocks all downstream nodes (FR-6 guardrail).
+        # validation_failed: ok=True but output_meets_expect=False — triggers replan
+        # but does NOT cascade-block dependents; the planner decides whether to retry.
+        hard_failed: set[str] = set()
+        validation_failed: set[str] = set()
         results: list[NodeResult] = []
         # Outputs of completed nodes, addressable by downstream input_spec refs
         # of the form ``${node_id.path}`` (data-flow binding between DAG nodes).
         outputs: dict[str, dict[str, Any]] = {}
         while pending:
-            # FR-6 / guardrail (P1-1): a node whose dependency FAILED must never run —
-            # otherwise a write/draft tool could execute after a failed lookup or
-            # validation. Skip it (mark failed) without executing.
+            # FR-6 / guardrail (P1-1): a node whose dependency HARD-FAILED must never
+            # run — otherwise a write/draft tool could execute after a failed lookup.
+            # Validation failures (ok=True but unexpected output shape) only set
+            # replan_required; they do not cascade-block downstream nodes.
             blocked = [
                 node
                 for node in plan.nodes
-                if node.id in pending and any(dep in failed for dep in node.needs)
+                if node.id in pending and any(dep in hard_failed for dep in node.needs)
             ]
             if blocked:
                 for node in blocked:
@@ -130,14 +135,15 @@ class PlanExecutor:
                             error="skipped: dependency failed",
                         )
                     )
-                    failed.add(node.id)
+                    hard_failed.add(node.id)
                     pending.pop(node.id, None)
                 continue
 
             ready = [
                 node
                 for node in plan.nodes
-                if node.id in pending and all(dep in succeeded for dep in node.needs)
+                if node.id in pending
+                and all(dep in succeeded or dep in validation_failed for dep in node.needs)
             ]
             if not ready:
                 for node_id in list(pending):
@@ -149,7 +155,7 @@ class PlanExecutor:
                             error="plan dependency cycle or missing dependency",
                         )
                     )
-                    failed.add(node_id)
+                    hard_failed.add(node_id)
                     pending.pop(node_id, None)
                 break
             # Resolve each ready node's args against already-succeeded node outputs
@@ -164,8 +170,10 @@ class PlanExecutor:
                 outputs[result.node_id] = result.tool_result if isinstance(result.tool_result, dict) else {}
                 if result.ok and result.output_meets_expect:
                     succeeded.add(result.node_id)
+                elif result.ok and not result.output_meets_expect:
+                    validation_failed.add(result.node_id)
                 else:
-                    failed.add(result.node_id)
+                    hard_failed.add(result.node_id)
         return results
 
     async def execute_with_replan(
