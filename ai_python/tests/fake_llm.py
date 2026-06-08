@@ -69,7 +69,7 @@ class FakeLlmClient:
         if schema.__name__ == "IntentOutput":
             intent_val = self._intent if self._intent is not None else "general_chat"
             return schema.model_validate({"intent": intent_val})  # type: ignore[return-value]
-        if schema.__name__ == "IntentObjectOutput":
+        if schema.__name__ in ("IntentObjectOutput", "IntentAnalysisResult"):
             intent_val = self._intent if self._intent is not None else "data_query"
             return schema.model_validate(  # type: ignore[return-value]
                 {

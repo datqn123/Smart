@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from difflib import SequenceMatcher
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ResolvedEntity(BaseModel):
@@ -20,24 +20,42 @@ class Ambiguity(BaseModel):
     reason: str = ""
 
 
-class IntentObject(BaseModel):
-    goal: str
-    intent_type: str
-    required_data: list[str] = Field(default_factory=list)
+class RequiredDataItem(BaseModel):
+    field: str
+    source: str = ""        # bảng/entity cung cấp data này
+    required: bool = True
+    resolved: bool = False  # đã có trong context chưa
+
+
+class IntentAnalysisResult(BaseModel):
+    goal: str = ""
+    intent_type: str = ""   # data_query | catalog_draft | inventory_draft | chart_report | chat
+    required_data: list[RequiredDataItem] = Field(default_factory=list)
     resolved_entities: list[ResolvedEntity] = Field(default_factory=list)
     confidence: float = 0.0
     ambiguities: list[Ambiguity] = Field(default_factory=list)
-    missing_required: list[str] = Field(default_factory=list)
-
-
-class IntentObjectOutput(IntentObject):
-    pass
-
-
-class IntentDecision(BaseModel):
-    mode: str
+    # --- LLM judge fields ---
+    mode: Literal["run", "clarify", "auto_assume"] = "run"
     clarify_questions: list[str] = Field(default_factory=list)
     assumptions: list[str] = Field(default_factory=list)
+    reasoning: str = ""     # LLM tự lý giải quyết định (lightweight CoT)
+    schema_refs: list[str] = Field(default_factory=list)  # bảng LLM đã tham chiếu
+    # --- backward-compat fields (old IntentObject) ---
+    missing_required: list[str] = Field(default_factory=list)
+
+    @field_validator("required_data", mode="before")
+    @classmethod
+    def _coerce_required_data(cls, v: object) -> object:
+        """Accept list[str] (legacy format) or list[RequiredDataItem]."""
+        if isinstance(v, list):
+            return [RequiredDataItem(field=item) if isinstance(item, str) else item for item in v]
+        return v
+
+
+# Backward-compat aliases — orchestrator và tests cũ dùng tên cũ
+IntentObject = IntentAnalysisResult
+IntentObjectOutput = IntentAnalysisResult
+IntentDecision = IntentAnalysisResult
 
 
 class EntityResolver:

@@ -3,6 +3,17 @@ from __future__ import annotations
 import pytest
 
 
+def test_required_data_item_schema() -> None:
+    from app.harness.intent import RequiredDataItem
+
+    item = RequiredDataItem(field="revenue", source="orders", required=True, resolved=False)
+
+    assert item.field == "revenue"
+    assert item.source == "orders"
+    assert item.required is True
+    assert item.resolved is False
+
+
 def _settings(**overrides):  # noqa: ANN003
     from types import SimpleNamespace
 
