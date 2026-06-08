@@ -60,6 +60,23 @@ def _lines_enriched(artifact: SchemaArtifact, table_names: list[str] | None) -> 
             )
             if fk_txt:
                 head += f"\nFKs: {fk_txt}"
+        dv = getattr(t, "distinct_values", None)
+        if dv:
+            dv_lines = []
+            for col_name, vals in dv.items():
+                preview = ", ".join(str(v) for v in vals[:8])
+                more = f" … and {len(vals) - 8} more" if len(vals) > 8 else ""
+                dv_lines.append(f"  {col_name}: [{preview}{more}]")
+            if dv_lines:
+                head += "\nKnown distinct values:\n" + "\n".join(dv_lines)
+        sample = getattr(t, "sample_rows", None)
+        if sample:
+            sample_lines = []
+            for i, row in enumerate(sample[:3]):
+                truncated = {k: (str(v)[:80] if v is not None else "NULL") for k, v in row.items()}
+                sample_lines.append(f"  row{i+1}: {truncated}")
+            if sample_lines:
+                head += "\nSample rows:\n" + "\n".join(sample_lines)
         blocks.append(head)
     return blocks
 
