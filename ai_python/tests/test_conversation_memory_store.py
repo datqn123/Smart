@@ -93,3 +93,23 @@ def test_sqlite_delete_thread() -> None:
         store.close()
     finally:
         os.unlink(db_path)
+
+
+def test_orchestrator_accepts_memory_store() -> None:
+    from app.harness.memory_store import InMemoryConversationMemoryStore
+    from app.harness.orchestrator import HarnessOrchestrator
+    from app.harness.policy import HarnessPolicy
+    from app.harness.runtime import AgentHarness
+    from app.harness.tool_registry import ToolRegistry
+    from app.config.graph_settings import GraphSettings
+
+    store = InMemoryConversationMemoryStore()
+    orch = HarnessOrchestrator(
+        llm_registry=None,
+        tool_registry=ToolRegistry(),
+        policy=HarnessPolicy(),
+        settings=GraphSettings(),
+        harness=AgentHarness(enabled=False),
+        memory_store=store,
+    )
+    assert orch._memory_store is store

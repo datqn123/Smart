@@ -107,6 +107,7 @@ class HarnessOrchestrator:
         harness: AgentHarness,
         plan_template_store: PlanTemplateStore | None = None,
         history_store: IntentHistoryStore | None = None,
+        memory_store: Any | None = None,
     ) -> None:
         self._llm_registry = llm_registry
         self._tool_registry = tool_registry
@@ -115,6 +116,7 @@ class HarnessOrchestrator:
         self._harness = harness
         self._plan_template_store = plan_template_store
         self._history_store = history_store
+        self._memory_store = memory_store
         self._budget = self._new_budget()
         self._last_budget_hit: str | None = None
         self._last_llm_tokens = 0
