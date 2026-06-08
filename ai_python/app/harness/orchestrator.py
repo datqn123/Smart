@@ -14,7 +14,7 @@ from langchain_core.messages import HumanMessage
 from app.config.graph_settings import GraphSettings
 from app.harness.budget import BudgetExceeded, TurnBudget
 from app.harness.cache import InMemorySemanticCache
-from app.harness.intent import IntentSubagent
+from app.harness.intent import IntentContextBuilder, IntentSubagent
 from app.harness.memory import WorkingMemory
 from app.harness.model_router import ModelRouter
 from app.harness.eval_gate import v3_rollout_allowed
@@ -219,8 +219,11 @@ class HarnessOrchestrator:
                 intent_agent = IntentSubagent(llm_registry=self._llm_registry, settings=self._settings)
                 intent = await intent_agent.analyze(
                     self._effective_question(scratchpad),
-                    memory_text=self._memory_text(scratchpad),
-                    dictionary_text="",
+                    intent_context=IntentContextBuilder().build(
+                        schema_text=self._tool_registry.tools_manifest_text(),
+                        history_text=self._observations_text(scratchpad),
+                        memory_text=self._memory_text(scratchpad),
+                    ),
                 )
                 # Semantic intent key drives template lookup + K15 aggregation (LOW-4).
                 self._turn_intent_key = _intent_key_from(
@@ -818,6 +821,17 @@ class HarnessOrchestrator:
     def _memory_text(scratchpad: TurnScratchpad) -> str:
         parts = [str(getattr(m, "content", "")) for m in scratchpad.messages[-6:]]
         return "\n".join(p for p in parts if p)
+
+    @staticmethod
+    def _observations_text(scratchpad: TurnScratchpad) -> str:
+        if not scratchpad.observations:
+            return ""
+        parts = [
+            f"- {obs.tool_name}: {obs.observation_text}"
+            for obs in scratchpad.observations[-5:]
+            if obs.ok and obs.observation_text
+        ]
+        return "\n".join(parts)
 
     async def _harness_run_tool_async(self, tool_input: ToolInput) -> ToolResult:
         ctx = ToolCallContext(

@@ -189,3 +189,76 @@ async def test_intent_llm_judge_mode_run_executes() -> None:
     ]
 
     assert any(isinstance(e, FinalAnswerEvent) for e in events)
+
+
+@pytest.mark.asyncio
+async def test_intent_analyze_receives_tool_manifest_context() -> None:
+    """Verify orchestrator injects tools_manifest_text as schema_text into analyze()."""
+    from app.harness.intent import IntentAnalysisResult
+    from app.harness.orchestrator import HarnessOrchestrator
+    from app.harness.policy import HarnessPolicy
+    from app.harness.runtime import AgentHarness
+    from app.harness.scratchpad import TurnScratchpad
+    from app.harness.tool_registry import ToolManifest, ToolRegistry
+    from langchain_core.messages import HumanMessage
+
+    captured: list[dict] = []
+
+    class CapturingClient:
+        last_usage = None
+
+        async def astructured_predict(self, messages, schema, **kwargs):
+            for m in messages:
+                if isinstance(m, dict) and m.get("role") == "system":
+                    captured.append({"system": m["content"]})
+                elif hasattr(m, "type") and m.type == "system":
+                    captured.append({"system": m.content})
+            return schema.model_validate({
+                "goal": "test",
+                "intent_type": "data_query",
+                "required_data": [],
+                "confidence": 0.95,
+                "mode": "run",
+                "clarify_questions": [],
+                "assumptions": [],
+                "reasoning": "test",
+                "schema_refs": [],
+            })
+
+        def invoke_text(self, *a, **kw): return "ok"
+        def stream_text(self, *a, **kw): return iter(["ok"])
+        def structured_predict(self, messages, schema, **kwargs):
+            import asyncio
+            return asyncio.get_event_loop().run_until_complete(
+                self.astructured_predict(messages, schema, **kwargs)
+            )
+
+    class Registry:
+        def get(self, role): return CapturingClient()
+
+    registry = ToolRegistry()
+    registry.register(
+        ToolManifest(name="sql_query", description="Run SQL queries", args_schema={}),
+        impl=None,  # type: ignore[arg-type]
+    )
+
+    orchestrator = HarnessOrchestrator(
+        llm_registry=Registry(),
+        tool_registry=registry,
+        policy=HarnessPolicy(),
+        settings=_settings(),
+        harness=AgentHarness(enabled=False),
+    )
+
+    events = [
+        event
+        async for event in orchestrator.run(
+            TurnScratchpad(messages=[HumanMessage(content="tồn kho sản phẩm A")]),
+            _ctx(),
+        )
+    ]
+
+    assert captured, "No system message captured — intent_context not injected"
+    assert any("sql_query" in c["system"] for c in captured), (
+        "Tool manifest not found in system prompt — schema_text not injected"
+    )
