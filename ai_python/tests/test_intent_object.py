@@ -43,6 +43,8 @@ def test_intent_high_confidence_runs() -> None:
 
 
 def test_intent_missing_required_clarifies() -> None:
+    # decide() is now a pass-through stub; mode is set by the LLM in analyze().
+    # Test that an intent with mode="clarify" passes through decide() unchanged.
     from app.harness.intent import IntentObject, IntentSubagent
 
     intent = IntentObject(
@@ -51,6 +53,8 @@ def test_intent_missing_required_clarifies() -> None:
         required_data=["revenue"],
         confidence=0.95,
         missing_required=["time_period"],
+        mode="clarify",
+        clarify_questions=["Bạn muốn xem trong khoảng thời gian nào?"],
     )
 
     decision = IntentSubagent(settings=_settings()).decide(intent)
@@ -61,6 +65,8 @@ def test_intent_missing_required_clarifies() -> None:
 
 
 def test_intent_mid_confidence_auto_assume() -> None:
+    # decide() is now a pass-through stub; mode is set by the LLM in analyze().
+    # Test that an intent with mode="auto_assume" passes through decide() unchanged.
     from app.harness.intent import IntentObject, IntentSubagent
 
     intent = IntentObject(
@@ -68,6 +74,8 @@ def test_intent_mid_confidence_auto_assume() -> None:
         intent_type="data_query",
         required_data=["inventory"],
         confidence=0.8,
+        mode="auto_assume",
+        assumptions=["Tôi sẽ hiểu yêu cầu là: Xem tồn kho."],
     )
 
     decision = IntentSubagent(settings=_settings()).decide(intent)
@@ -127,3 +135,48 @@ def test_intent_context_builder_assembles_blocks() -> None:
     assert "SELECT" in ctx.history_text
     assert "revenue" in ctx.memory_text
     assert ctx.to_prompt_blocks()  # returns non-empty string
+
+
+@pytest.mark.asyncio
+async def test_intent_subagent_uses_full_context() -> None:
+    from app.harness.intent import IntentAnalysisResult, IntentContextBuilder, IntentSubagent
+
+    captured_messages: list = []
+
+    class CapturingClient:
+        last_usage = None
+
+        async def astructured_predict(self, messages, schema, **kwargs):
+            captured_messages.extend(messages)
+            return schema.model_validate({
+                "goal": "Xem doanh thu",
+                "intent_type": "data_query",
+                "required_data": [{"field": "revenue", "source": "orders", "required": True, "resolved": False}],
+                "confidence": 0.95,
+                "mode": "run",
+                "clarify_questions": [],
+                "assumptions": [],
+                "reasoning": "User asked about revenue clearly",
+                "schema_refs": ["orders"],
+            })
+
+    class Registry:
+        def get(self, role):
+            return CapturingClient()
+
+    ctx = IntentContextBuilder().build(
+        schema_text="Table: orders(id, total)",
+        history_text="Q: doanh thu → SELECT SUM(total) FROM orders",
+        memory_text="prev: hỏi về doanh thu",
+    )
+
+    agent = IntentSubagent(llm_registry=Registry(), settings=_settings())
+    result = await agent.analyze("doanh thu tháng này", intent_context=ctx)
+
+    assert isinstance(result, IntentAnalysisResult)
+    assert result.mode == "run"
+    assert result.reasoning
+    # Verify context was injected into prompt
+    prompt_text = " ".join(str(m) for m in captured_messages)
+    assert "orders" in prompt_text
+    assert "SELECT" in prompt_text

@@ -71,6 +71,19 @@ class FakeLlmClient:
             return schema.model_validate({"intent": intent_val})  # type: ignore[return-value]
         if schema.__name__ in ("IntentObjectOutput", "IntentAnalysisResult"):
             intent_val = self._intent if self._intent is not None else "data_query"
+            # Derive mode from intent state so decide() stub pass-through works correctly
+            if self._intent_missing:
+                mode = "clarify"
+                clarify_questions = ["Bạn muốn xem trong khoảng thời gian nào? Vui lòng chọn ví dụ: hôm nay, tháng này hoặc một khoảng ngày cụ thể."]
+            elif self._intent_entity_score < 0.6:
+                mode = "clarify"
+                clarify_questions = ["Bạn muốn dùng chính xác đối tượng nào? Vui lòng chọn hoặc nhập lại tên đầy đủ."]
+            elif self._intent_confidence < 0.9:
+                mode = "auto_assume"
+                clarify_questions = []
+            else:
+                mode = "run"
+                clarify_questions = []
             return schema.model_validate(  # type: ignore[return-value]
                 {
                     "goal": "fake goal",
@@ -82,6 +95,9 @@ class FakeLlmClient:
                     "confidence": self._intent_confidence,
                     "ambiguities": [],
                     "missing_required": self._intent_missing,
+                    "mode": mode,
+                    "clarify_questions": clarify_questions,
+                    "reasoning": "fake llm decision",
                 }
             )
         if schema.__name__ == "AgentPlannerOutput":
