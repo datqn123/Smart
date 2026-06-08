@@ -420,9 +420,8 @@ def _build_db_fingerprint(
 def _introspect_sample_rows(
     cur: Any, schema: str, table: str, limit: int = 5,
 ) -> list[dict[str, Any]]:
-    safe_name = pysql.Identifier(schema, table) if pysql else table
-    sql = pysql.SQL("SELECT * FROM {} LIMIT %s").format(safe_name) if pysql else f"SELECT * FROM {table} LIMIT %s"
-    cur.execute(sql, (limit,))
+    safe_name = pysql.Identifier(schema, table)
+    cur.execute(pysql.SQL("SELECT * FROM {} LIMIT %s").format(safe_name), (limit,))
     col_names = [desc[0] for desc in cur.description] if cur.description else []
     rows: list[dict[str, Any]] = []
     for row in cur.fetchall():
@@ -430,9 +429,9 @@ def _introspect_sample_rows(
         for i, c in enumerate(col_names):
             val = row[i]
             if isinstance(val, (bytes, bytearray)):
-                val = str(val)[:200]
+                val = str(val)[:80]
             elif not isinstance(val, (str, int, float, bool, type(None))):
-                val = str(val)[:200]
+                val = str(val)[:80]
             d[c] = val
         rows.append(d)
     return rows
@@ -911,15 +910,11 @@ class SchemaWarmupWarmer:
                     sample_limit=int(self._settings.sql_introspection_sample_limit),
                     distinct_limit=int(self._settings.sql_introspection_distinct_limit),
                 )
+                fp = _build_db_fingerprint(
+                    cur, schema=schema, desc_table=desc_table, col_desc_table=col_desc_table,
+                )
             conn.close()
             namespace = _cache_namespace(self._settings, dsn)
-            conn2 = psycopg2.connect(dsn, connect_timeout=timeout)
-            conn2.set_session(readonly=True, autocommit=True)
-            with conn2.cursor() as cur2:
-                fp = _build_db_fingerprint(
-                    cur2, schema=schema, desc_table=desc_table, col_desc_table=col_desc_table,
-                )
-            conn2.close()
             cache_key = f"{namespace}|{fp}" if fp else f"{namespace}|warmup"
             _SCHEMA_CACHE.set(
                 cache_key, snapshot,
