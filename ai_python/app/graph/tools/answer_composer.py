@@ -37,23 +37,23 @@ class AnswerComposerTool:
         observations = args.get("observations") or []
         assumptions = [str(item) for item in (args.get("assumptions") or []) if str(item).strip()]
         rows = _first_rows(observations)
-        summary = _first_observation_summary(observations)
-        if summary:
-            answer = summary
-        elif not rows:
+        row_count = _total_row_count(observations)
+
+        if not rows:
             answer = (
                 "Không tìm thấy dữ liệu phù hợp với yêu cầu hiện tại. "
                 "Bạn có thể hỏi lại cụ thể hơn, ví dụ: doanh thu tháng này hoặc tồn kho của một sản phẩm cụ thể."
             )
         else:
-            answer = f"Tôi đã tổng hợp được {len(rows)} dòng dữ liệu phù hợp. Điểm chính: {_summarize_first_row(rows[0])}."
+            answer = _build_answer(rows, row_count)
+
         if assumptions:
-            answer += "\n\nGiả định: " + "; ".join(assumptions)
+            answer += "\n\n**Giả định:** " + "; ".join(assumptions)
         follow_ups = [
             "Bạn có muốn xem chi tiết theo thời gian không?",
             "Bạn có muốn so sánh với kỳ trước không?",
         ]
-        answer += "\n\nGợi ý tiếp theo:\n" + "\n".join(f"- {item}" for item in follow_ups)
+        answer += "\n\n**Gợi ý tiếp theo:**\n" + "\n".join(f"- {item}" for item in follow_ups)
         output = AnswerComposerOutput(
             answer_markdown=answer,
             assumptions=assumptions,
@@ -79,26 +79,82 @@ def _first_rows(observations: Any) -> list[dict[str, Any]]:
     return []
 
 
-def _first_observation_summary(observations: Any) -> str:
+def _total_row_count(observations: Any) -> int:
     if not isinstance(observations, list):
-        return ""
+        return 0
     for item in observations:
         if not isinstance(item, dict):
             continue
-        row_count = item.get("row_count")
-        if isinstance(row_count, int):
-            sample_rows = item.get("sample_rows")
-            sample = ""
-            if isinstance(sample_rows, list) and sample_rows and isinstance(sample_rows[0], dict):
-                sample = " Mẫu: " + _summarize_first_row(sample_rows[0]) + "."
-            artifact_refs = item.get("artifact_refs")
-            artifact = ""
-            if isinstance(artifact_refs, list) and artifact_refs:
-                artifact = " Kết quả chi tiết nằm trong artifact đã tạo."
-            return f"Tôi đã tổng hợp được {row_count} dòng dữ liệu phù hợp.{sample}{artifact}"
-    return ""
+        rc = item.get("row_count")
+        if isinstance(rc, int):
+            return rc
+        rows = item.get("rows")
+        if isinstance(rows, list):
+            return len(rows)
+    return 0
 
 
-def _summarize_first_row(row: dict[str, Any]) -> str:
-    parts = [f"{key}={value}" for key, value in list(row.items())[:3]]
-    return ", ".join(parts) if parts else "có dữ liệu"
+# Column-name heuristics for detecting common metrics.
+_NAME_COLS = ("product_name", "name", "item_name", "customer_name", "ten", "tên")
+_QTY_COLS = ("total_quantity_sold", "quantity", "total_qty", "qty", "so_luong", "sl")
+_REVENUE_COLS = ("total_revenue", "revenue", "doanh_thu", "amount", "line_total", "tong_tien")
+_STOCK_COLS = ("stock", "ton_kho", "available_qty", "inventory")
+
+
+def _fmt_number(value: Any) -> str:
+    try:
+        n = float(value)
+        if n == int(n):
+            return f"{int(n):,}"
+        return f"{n:,.2f}"
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _pick(row: dict[str, Any], candidates: tuple[str, ...]) -> Any:
+    for key in candidates:
+        if key in row:
+            return row[key]
+        # case-insensitive fallback
+        for k in row:
+            if k.lower() == key.lower():
+                return row[k]
+    return None
+
+
+def _build_answer(rows: list[dict[str, Any]], row_count: int) -> str:
+    total = row_count or len(rows)
+    display_rows = rows[:10]
+
+    lines: list[str] = []
+    for i, row in enumerate(display_rows, 1):
+        name = _pick(row, _NAME_COLS)
+        qty = _pick(row, _QTY_COLS)
+        revenue = _pick(row, _REVENUE_COLS)
+        stock = _pick(row, _STOCK_COLS)
+
+        if name is not None:
+            label = f"**{i}. {name}**"
+        else:
+            # Generic row: render first 3 key=value pairs
+            label = "**" + str(i) + ".** " + ", ".join(
+                f"{k}: {v}" for k, v in list(row.items())[:3]
+            )
+
+        parts: list[str] = [label]
+        if qty is not None:
+            parts.append(f"Số lượng: {_fmt_number(qty)}")
+        if revenue is not None:
+            parts.append(f"Doanh thu: {_fmt_number(revenue)}đ")
+        if stock is not None and qty is None and revenue is None:
+            parts.append(f"Tồn kho: {_fmt_number(stock)}")
+
+        lines.append(" — ".join(parts))
+
+    header = f"Tìm được **{total}** bản ghi phù hợp."
+    if total > len(display_rows):
+        header += f" Hiển thị top {len(display_rows)}:"
+    else:
+        header += " Kết quả:"
+
+    return header + "\n\n" + "\n\n".join(lines)

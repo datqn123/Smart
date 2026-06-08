@@ -63,6 +63,59 @@ def test_clarify_event_persists_pending_state() -> None:
     assert record.payload["questions"] == ["Khoảng thời gian nào?"]
 
 
+def test_clarify_record_carries_inflight_plan_fields() -> None:
+    # AC-18: the durable clarify record has plan-state fields (safe defaults today,
+    # since clarify is emitted before any plan node runs).
+    store = InMemoryPendingHitlStore()
+    runtime = _runtime(_ClarifyOrchestrator(), store)
+
+    list(runtime.stream(_request("doanh thu"), correlation_id="cid"))
+
+    record = store.get("thread-1")
+    assert record is not None
+    assert record.payload["completedNodeIds"] == []
+    assert record.payload["sideEffectNodeIds"] == []
+    assert record.payload["resumeMode"] == "replan"
+    assert "planGraphHash" in record.payload
+
+
+def test_clarify_resume_does_not_replay_side_effect_node() -> None:
+    # AC-18 / FR-13.3: even if the record names a completed side-effect node, resume
+    # reruns the loop fresh and never re-executes it.
+    store = InMemoryPendingHitlStore()
+    store.put(
+        "thread-1",
+        PendingHitlRecord(
+            tool_name="clarify_user",
+            payload={
+                "clarifyKind": "harness_data_query",
+                "originalQuestion": "tạo phiếu nhập",
+                "completedNodeIds": ["draft1"],
+                "sideEffectNodeIds": ["draft1"],
+                "resumeMode": "replan",
+            },
+            tenant_id="t1",
+            user_id="u1",
+            thread_id="thread-1",
+            created_at=time.time(),
+        ),
+    )
+    orchestrator = _CaptureOrchestrator()
+    runtime = _runtime(orchestrator, store)
+    req = _request(
+        "kho A",
+        clarification=ClarificationOptions(clarify_id="abc", clarify_kind="harness_data_query"),
+    )
+
+    events = list(runtime.stream(req, correlation_id="cid"))
+
+    # resume reran the loop with the recombined question; no plan-node replay machinery
+    assert "tạo phiếu nhập" in orchestrator.message
+    assert "kho A" in orchestrator.message
+    assert any(getattr(e, "__class__", None).__name__ for e in events)
+    assert store.get("thread-1") is None  # cleared after resume
+
+
 def test_clarify_resume_after_runtime_recreation_uses_stored_original_question() -> None:
     store = InMemoryPendingHitlStore()
     store.put(

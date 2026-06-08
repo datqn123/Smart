@@ -182,8 +182,10 @@ def build_observation(
     masked_sample, masked = _mask_rows(sample)
     truncated = row_count > len(sample)
 
+    # Store a handle for any ok tabular result, including an empty (zero-row) set,
+    # so downstream artifact builders can render a valid "no data" table (P2-1).
     result_ref: str | None = None
-    if result_store is not None and rows:
+    if result_store is not None:
         result_ref = result_store.put(tool_name=tool_name, data={"rows": rows}, ctx=ctx)
 
     return ObservationEnvelope(

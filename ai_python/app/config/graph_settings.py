@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -411,11 +411,23 @@ class GraphSettings(BaseSettings):
         le=1.0,
         description="Minimum K12 route accuracy required before agentic_v3_enabled may roll out.",
     )
+    agentic_v3_measured_route_accuracy: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Last measured K12 route accuracy (written by the eval/CI step). Template promotion is disabled until this meets the threshold (FR-11.7).",
+    )
     agentic_v3_observation_sample_limit: int = Field(
         default=20,
         ge=1,
         le=200,
         description="Max masked sample rows in an ObservationEnvelope; full data stays behind result_ref.",
+    )
+    agentic_v3_template_promote_after: int = Field(
+        default=3,
+        ge=1,
+        le=50,
+        description="Clean successes of a planner-generated plan before it is promoted to a fast-path template (FR-11.3).",
     )
 
     @field_validator("ai_display_timezone", mode="before")
@@ -550,6 +562,7 @@ class GraphSettings(BaseSettings):
         "semantic_expire_days",
         "opt_escalate_replan_count",
         "agentic_v3_observation_sample_limit",
+        "agentic_v3_template_promote_after",
         mode="before",
     )
     @classmethod
@@ -573,6 +586,34 @@ class GraphSettings(BaseSettings):
                 return v
             return [item.strip() for item in s.split(",") if item.strip()]
         return v
+
+    # Sub-features that the v3 planner-brain model depends on. Turning on the single
+    # master switch AGENTIC_V3_ENABLED cascades these ON, so an operator flips one
+    # flag instead of eight. Any flag the operator sets explicitly is respected, so
+    # e.g. AGENTIC_V3_ENABLED=1 + AGENTIC_ASYNC_ENABLED=0 keeps async off.
+    _V3_IMPLIED_FLAGS: ClassVar[tuple[str, ...]] = (
+        "harness_loop_enabled",
+        "agentic_plan_dag_enabled",
+        "agentic_intent_object_enabled",
+        "agentic_answer_composer_enabled",
+        "agentic_data_validator_enabled",
+        "agentic_capability_guard_enabled",
+        "agentic_async_enabled",
+        "agentic_v3_plan_template_enabled",
+    )
+
+    @model_validator(mode="after")
+    def apply_v3_cascade(self) -> "GraphSettings":
+        """AGENTIC_V3_ENABLED is the single switch from legacy to the v3 model.
+
+        Legacy/rollback (NFR-7, AC-9) = AGENTIC_V3_ENABLED unset/0: every sub-flag
+        keeps its own default and traffic stays on the legacy graph.
+        """
+        if self.agentic_v3_enabled:
+            for name in self._V3_IMPLIED_FLAGS:
+                if name not in self.model_fields_set:
+                    object.__setattr__(self, name, True)
+        return self
 
     @model_validator(mode="after")
     def validate_prod_sql_mode(self) -> "GraphSettings":

@@ -23,6 +23,11 @@ class ChatMetadata(BaseModel):
     tenant_id: str = Field(min_length=1)
     thread_id: str | None = None
     schema_version: str = Field(default="v1", min_length=1)
+    # Server-authoritative identity context. Any client-supplied value is
+    # overwritten from the validated JWT claims in _enforce_identity_context
+    # (SRS-006 FR-5.4: live claim is the single source of truth).
+    role: str | None = None
+    permissions: tuple[str, ...] = ()
 
 
 class ChatOptions(BaseModel):

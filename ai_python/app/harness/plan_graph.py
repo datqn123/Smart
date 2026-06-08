@@ -105,16 +105,39 @@ class PlanExecutor:
         result_store: Any | None = None,
     ) -> list[NodeResult]:
         pending = {node.id: node for node in plan.nodes}
-        completed: set[str] = set()
+        succeeded: set[str] = set()
+        failed: set[str] = set()
         results: list[NodeResult] = []
         # Outputs of completed nodes, addressable by downstream input_spec refs
         # of the form ``${node_id.path}`` (data-flow binding between DAG nodes).
         outputs: dict[str, dict[str, Any]] = {}
         while pending:
+            # FR-6 / guardrail (P1-1): a node whose dependency FAILED must never run —
+            # otherwise a write/draft tool could execute after a failed lookup or
+            # validation. Skip it (mark failed) without executing.
+            blocked = [
+                node
+                for node in plan.nodes
+                if node.id in pending and any(dep in failed for dep in node.needs)
+            ]
+            if blocked:
+                for node in blocked:
+                    results.append(
+                        NodeResult(
+                            node_id=node.id,
+                            ok=False,
+                            output_meets_expect=False,
+                            error="skipped: dependency failed",
+                        )
+                    )
+                    failed.add(node.id)
+                    pending.pop(node.id, None)
+                continue
+
             ready = [
                 node
                 for node in plan.nodes
-                if node.id in pending and all(dep in completed for dep in node.needs)
+                if node.id in pending and all(dep in succeeded for dep in node.needs)
             ]
             if not ready:
                 for node_id in list(pending):
@@ -126,8 +149,10 @@ class PlanExecutor:
                             error="plan dependency cycle or missing dependency",
                         )
                     )
+                    failed.add(node_id)
+                    pending.pop(node_id, None)
                 break
-            # Resolve each ready node's args against already-completed node outputs
+            # Resolve each ready node's args against already-succeeded node outputs
             # BEFORE launching the layer (every dependency is guaranteed complete).
             layer = [(node, _resolve_refs(dict(node.input_spec or {}), outputs)) for node in ready]
             layer_results = await asyncio.gather(
@@ -135,9 +160,12 @@ class PlanExecutor:
             )
             results.extend(layer_results)
             for result in layer_results:
-                completed.add(result.node_id)
                 pending.pop(result.node_id, None)
                 outputs[result.node_id] = result.tool_result if isinstance(result.tool_result, dict) else {}
+                if result.ok and result.output_meets_expect:
+                    succeeded.add(result.node_id)
+                else:
+                    failed.add(result.node_id)
         return results
 
     async def execute_with_replan(
@@ -419,6 +447,8 @@ def degraded_final_answer(reason: str = "", missing: str = "") -> str:
         "duplicate": "kế hoạch lặp lại cùng một lỗi nên đã dừng",
         "non_idempotent_block": "thao tác ghi không thể tự thử lại an toàn",
         "planner_stop": "chưa tìm được cách hoàn thành an toàn",
+        "plan_error": "gặp lỗi khi lập hoặc chạy kế hoạch",
+        "step_budget": "đã đạt giới hạn số bước xử lý",
     }.get(reason, "chưa lấy đủ dữ liệu cần thiết")
     text = f"⚠️ Câu trả lời chưa đầy đủ: {detail}."
     if missing:
@@ -432,13 +462,15 @@ def _output_meets_expect(result: ToolResult, output_expect: str) -> bool:
         return True
     output = result.output or {}
     if "rows" in expect:
+        # A present rows key satisfies the expectation even when empty: an explicit
+        # zero-row result is a valid answer for a list/table request (P2-1). The
+        # sql tool already does its own empty-retry before returning here.
         rows = output.get("rows")
-        if isinstance(rows, list) and rows:
+        if isinstance(rows, list):
             return True
         query_result = output.get("query_result")
         if isinstance(query_result, dict):
-            nested_rows = query_result.get("rows")
-            return isinstance(nested_rows, list) and bool(nested_rows)
+            return isinstance(query_result.get("rows"), list)
         return False
     if "answer" in expect:
         return bool(output.get("answer_markdown") or result.observation_text)

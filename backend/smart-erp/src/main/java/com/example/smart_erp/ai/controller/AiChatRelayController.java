@@ -5,11 +5,13 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.net.ConnectException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpClient.Version;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.channels.ClosedChannelException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Objects;
@@ -84,6 +86,15 @@ public class AiChatRelayController {
 	 * {@code "Relay error"} in the SSE payload.
 	 */
 	private static String relayErrorDetail(Throwable e) {
+		// Connection-level failures (Python/uvicorn down or wrong port) often carry a null message and a
+		// cause chain of ConnectException → ClosedChannelException, which would render as a useless
+		// "ConnectException (ConnectException)". Surface an actionable hint instead.
+		for (Throwable t = e; t != null; t = t.getCause()) {
+			if (t instanceof ConnectException || t instanceof ClosedChannelException) {
+				return "Không kết nối được service AI (Python/uvicorn). Kiểm tra service ai_python đang chạy và "
+						+ "AI_PYTHON_BASE_URL / app.ai.python.base-url khớp cổng (mặc định 9000).";
+			}
+		}
 		String m = e.getMessage();
 		if (m != null && !m.isBlank()) {
 			return m;
@@ -117,7 +128,14 @@ public class AiChatRelayController {
 					emitter.complete();
 				}
 				catch (Exception ignored) {
-					emitter.completeWithError(ignored);
+					// Initial SSE send failed (client already gone); close quietly. Avoid completeWithError(),
+					// which would re-dispatch through Spring's @ExceptionHandler and fail to write JSON onto SSE.
+					try {
+						emitter.complete();
+					}
+					catch (Exception alsoIgnored) {
+						// nothing more we can do
+					}
 				}
 			});
 			return emitter;
@@ -173,7 +191,14 @@ public class AiChatRelayController {
 					emitter.complete();
 				}
 				catch (Exception ignored) {
-					emitter.completeWithError(ignored);
+					// Initial SSE send failed (client already gone); close quietly. Avoid completeWithError(),
+					// which would re-dispatch through Spring's @ExceptionHandler and fail to write JSON onto SSE.
+					try {
+						emitter.complete();
+					}
+					catch (Exception alsoIgnored) {
+						// nothing more we can do
+					}
 				}
 			});
 			return emitter;
@@ -255,9 +280,13 @@ public class AiChatRelayController {
 					emitter.send(SseEmitter.event().name("error").data(relayErrorDetail(e)));
 				}
 				catch (Exception ignored) {
-					// ignore secondary failure
+					// ignore secondary failure (client likely disconnected)
 				}
-				emitter.completeWithError(e);
+				// The error is already communicated to the client as an SSE "error" event, so complete the
+				// stream cleanly. Calling completeWithError() here would re-dispatch the exception through Spring
+				// MVC's @ExceptionHandler chain, which then tries to write a JSON ApiErrorResponse onto an
+				// already-committed text/event-stream response → HttpMessageNotWritableException noise.
+				emitter.complete();
 			}
 		});
 

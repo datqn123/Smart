@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from functools import lru_cache
 from typing import Any
 
@@ -12,6 +13,18 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 ALLOWED_JWT_ALGS = ("RS256", "RS384", "RS512", "ES256", "ES384", "ES512")
 USER_ID_CLAIM_KEYS = ("user_id", "uid", "sub")
 TENANT_ID_CLAIM_KEYS = ("tenant_id", "tenant", "tid", "tenantId")
+ROLE_CLAIM_KEYS = ("role", "roles", "authority", "authorities")
+# JWT claim keys that may carry live permission flags. Spring embeds menu
+# permissions as the ``mp`` claim (see ERP guide 02_permissions).
+PERMISSION_CLAIM_KEYS = ("mp", "permissions", "perms", "scope", "scopes")
+
+# AI capability tokens implied by a privileged live role. The role is itself a
+# validated JWT claim, so this is the live source of truth (SRS-006 FR-5.4) — not
+# an advisory K6 mapping. Unprivileged roles must be granted via explicit flags.
+_ROLE_IMPLIED_CAPABILITIES: dict[str, tuple[str, ...]] = {
+    "owner": ("draft_create", "data_read"),
+    "admin": ("draft_create", "data_read"),
+}
 
 
 class AuthSettings(BaseSettings):
@@ -129,6 +142,46 @@ def derive_identity_context(claims: dict[str, Any]) -> tuple[str, str]:
     if missing:
         raise ValueError(f"JWT claims missing required identity: {', '.join(missing)}.")
     return user_id, tenant_id
+
+
+def _coerce_permission_flags(value: Any) -> set[str]:
+    """Normalize a permission claim (str / list / dict-of-bool) into flag strings."""
+    flags: set[str] = set()
+    if value is None:
+        return flags
+    if isinstance(value, str):
+        for part in re.split(r"[\s,]+", value):
+            token = part.strip()
+            if token:
+                flags.add(token)
+    elif isinstance(value, dict):
+        for key, enabled in value.items():
+            if enabled:
+                token = str(key).strip()
+                if token:
+                    flags.add(token)
+    elif isinstance(value, (list, tuple, set)):
+        for item in value:
+            token = str(item).strip()
+            if token:
+                flags.add(token)
+    return flags
+
+
+def derive_role_permissions(claims: dict[str, Any]) -> tuple[str | None, tuple[str, ...]]:
+    """Extract the live role and permission set from validated JWT claims.
+
+    This is server-authoritative: callers must overwrite any client-supplied
+    role/permissions with this result. Missing claims yield ``(None, ())`` so
+    protected tools fail closed (FR-5.4).
+    """
+    role = _read_claim(claims, ROLE_CLAIM_KEYS)
+    perms: set[str] = set()
+    for key in PERMISSION_CLAIM_KEYS:
+        perms |= _coerce_permission_flags(claims.get(key))
+    if role:
+        perms |= set(_ROLE_IMPLIED_CAPABILITIES.get(role.strip().lower(), ()))
+    return role, tuple(sorted(perms))
 
 
 @lru_cache(maxsize=1)

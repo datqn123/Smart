@@ -126,3 +126,23 @@ async def test_answer_composer_uses_observation_summary_without_full_table() -> 
     assert result.ok is True
     assert "30" in result.observation_text
     assert "sp29" not in result.observation_text
+
+
+@pytest.mark.asyncio
+async def test_data_table_builder_fails_when_no_rows_or_ref_bound() -> None:
+    """LOW-5: an unbound artifact node must fail (replan), not render an empty table."""
+    from app.graph.tools.data_table_builder import DataTableBuilderTool
+
+    result = await DataTableBuilderTool().invoke({"title": "Bảng"}, _ctx())
+    assert result.ok is False
+    assert result.error_message
+
+
+@pytest.mark.asyncio
+async def test_data_table_builder_allows_explicit_empty_rows() -> None:
+    """An explicit empty rows key is a valid zero-row input, not a failure."""
+    from app.graph.tools.data_table_builder import DataTableBuilderTool
+
+    result = await DataTableBuilderTool().invoke({"rows": [], "title": "Bảng"}, _ctx())
+    assert result.ok is True
+    assert result.output["row_count"] == 0

@@ -230,7 +230,7 @@ class SqlQueryTool:
 
         async def execute(sql: str) -> list[dict[str, Any]]:
             result = await self._deps.sql_executor.aexecute(
-                sql,
+                sql.rstrip("; \t\n"),
                 tenant_id=ctx.tenant_id,
                 correlation_id=ctx.correlation_id,
                 bearer_token=ctx.bearer_token,

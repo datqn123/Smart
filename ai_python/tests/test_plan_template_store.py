@@ -8,9 +8,38 @@ from app.harness.plan_template_store import (
     InMemoryPlanTemplateStore,
     PlanTemplateRecord,
     SqlitePlanTemplateStore,
+    build_intent_key,
     normalize_intent_key,
     plan_graph_hash,
 )
+
+
+# --- build_intent_key (LOW-4 semantic key) --------------------------------
+
+def test_intent_key_stable_across_phrasing_when_intent_fields_match():
+    a = build_intent_key(intent_type="data_query", goal="doanh thu tháng này", required_data=["revenue"])
+    b = build_intent_key(intent_type="data_query", goal="Doanh thu   tháng này", required_data=["revenue"])
+    assert a == b  # case + whitespace normalized
+
+
+def test_intent_key_distinguishes_time_window():
+    this_month = build_intent_key(intent_type="data_query", goal="doanh thu tháng này", required_data=["revenue"])
+    last_month = build_intent_key(intent_type="data_query", goal="doanh thu tháng trước", required_data=["revenue"])
+    assert this_month != last_month  # must NOT collapse different windows
+
+
+def test_intent_key_distinguishes_required_data_and_entities():
+    base = build_intent_key(intent_type="data_query", goal="tồn kho", required_data=["stock"])
+    other_metric = build_intent_key(intent_type="data_query", goal="tồn kho", required_data=["revenue"])
+    with_entity = build_intent_key(
+        intent_type="data_query", goal="tồn kho", required_data=["stock"], entities=["Sản phẩm A"]
+    )
+    assert base != other_metric
+    assert base != with_entity
+
+
+def test_intent_key_falls_back_to_raw_question_without_intent_fields():
+    assert build_intent_key(fallback="Doanh thu  tháng này") == normalize_intent_key("Doanh thu  tháng này")
 
 
 def _plan() -> PlanGraph:
@@ -177,6 +206,68 @@ def test_success_outcome_keeps_template():
     )
     assert got is not None
     assert got.success_count == 1
+
+
+# --- runtime promotion (FR-11.3/11.7) -------------------------------------
+
+def _get(store):
+    return store.get(
+        "doanh thu tháng này",
+        role_scope="owner",
+        manifest_version="mv1",
+        policy_version="pv1",
+        asset_versions={"K12": "1.0"},
+    )
+
+
+def test_consider_promotion_promotes_after_threshold():
+    store = InMemoryPlanTemplateStore()
+    assert store.consider_promotion(_record(), promote_after=3) is False
+    assert _get(store) is None  # not active after 1 success
+    assert store.consider_promotion(_record(), promote_after=3) is False
+    assert _get(store) is None  # not active after 2
+    assert store.consider_promotion(_record(), promote_after=3) is True
+    active = _get(store)
+    assert active is not None
+    assert active.plan_graph.nodes[0].tool == "sql_query"
+
+
+def test_consider_promotion_rejects_non_planner_provenance():
+    store = InMemoryPlanTemplateStore()
+    assert store.consider_promotion(_record(source="hand_authored"), promote_after=1) is False
+    assert _get(store) is None
+
+
+def test_non_success_resets_promotion_streak():
+    store = InMemoryPlanTemplateStore()
+    store.consider_promotion(_record(), promote_after=2)  # streak = 1
+    store.note_non_success("doanh thu tháng này", role_scope="owner")
+    assert store.consider_promotion(_record(), promote_after=2) is False  # back to 1
+    assert _get(store) is None
+
+
+def test_version_change_restarts_streak():
+    store = InMemoryPlanTemplateStore()
+    store.consider_promotion(_record(), promote_after=2)  # mv1 streak = 1
+    # a manifest change => different pinned version => fresh candidate, not promoted
+    assert store.consider_promotion(_record(manifest_version="mv2"), promote_after=2) is False
+    assert _get(store) is None
+
+
+def test_sqlite_consider_promotion_survives_reload(tmp_path):
+    db = str(tmp_path / "promo.db")
+    store = SqlitePlanTemplateStore(path=db)
+    try:
+        assert store.consider_promotion(_record(), promote_after=2) is False
+    finally:
+        store.close()
+    # reopen — candidate streak persisted; second success promotes
+    store2 = SqlitePlanTemplateStore(path=db)
+    try:
+        assert store2.consider_promotion(_record(), promote_after=2) is True
+        assert _get(store2) is not None
+    finally:
+        store2.close()
 
 
 # --- SQLite roundtrip ------------------------------------------------------

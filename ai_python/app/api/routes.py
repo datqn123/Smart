@@ -10,7 +10,12 @@ import jwt
 from fastapi import APIRouter, Depends, File, Form, Header, UploadFile
 from fastapi.responses import Response, StreamingResponse
 
-from app.api.auth import JwtValidator, derive_identity_context, get_jwt_validator
+from app.api.auth import (
+    JwtValidator,
+    derive_identity_context,
+    derive_role_permissions,
+    get_jwt_validator,
+)
 from app.api.errors import ApiError
 from app.api.runtime import GraphRuntime, get_graph_runtime
 from app.graph.correlation import set_correlation_id
@@ -95,6 +100,13 @@ def _enforce_identity_context(
     *,
     correlation_id: str,
 ) -> None:
+    # Server-authoritative role/permissions from the validated JWT. Client-supplied
+    # metadata.role / metadata.permissions are ignored — overwritten here so the
+    # harness policy gate sees the live claim as the single source of truth (FR-5.4).
+    role, permissions = derive_role_permissions(claims)
+    request.metadata.role = role
+    request.metadata.permissions = permissions
+
     if claims.get("auth_dev_bypass"):
         return
 

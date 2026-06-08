@@ -326,6 +326,14 @@ class LangHarnessRuntime:
                     "questions": list(event.questions),
                     "suggestedRewrite": event.suggested_rewrite,
                     "originalQuestion": event.original_question,
+                    # AC-18 in-flight plan state. Clarify is currently emitted before
+                    # any plan node runs, so these are empty; carrying them keeps the
+                    # record shape correct and lets resume guarantee no side-effect
+                    # node is ever replayed (resume reruns the loop, FR-13.3).
+                    "planGraphHash": getattr(event, "plan_graph_hash", None),
+                    "completedNodeIds": list(getattr(event, "completed_node_ids", []) or []),
+                    "sideEffectNodeIds": list(getattr(event, "side_effect_node_ids", []) or []),
+                    "resumeMode": getattr(event, "resume_mode", "replan") or "replan",
                 },
                 tenant_id=tenant_id,
                 user_id=user_id,
