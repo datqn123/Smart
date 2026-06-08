@@ -155,7 +155,10 @@ class IntentSubagent:
                             "Decide the mode: 'run' if you have enough info, 'clarify' if critical info is missing, "
                             "'auto_assume' if you can make safe assumptions. "
                             "Write contextual clarify_questions in Vietnamese if mode='clarify'. "
-                            "Write a 1-2 sentence reasoning explaining your decision.\n\n"
+                            "Write a 1-2 sentence reasoning explaining your decision. "
+                            "If [CONVERSATION] context is available, treat it as already-known information — "
+                            "do NOT ask for clarification about facts or entities already present in the conversation history; "
+                            "instead, use 'run' or 'auto_assume' mode with higher confidence.\n\n"
                             f"{prompt_blocks}"
                         ),
                     },
