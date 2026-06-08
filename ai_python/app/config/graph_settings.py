@@ -111,6 +111,23 @@ class GraphSettings(BaseSettings):
         le=12,
         description="Global SQL repair attempts budget (retry loop cap).",
     )
+    # --- Schema data introspection (sample rows + distinct values for LLM) ---
+    sql_introspection_enabled: bool = Field(
+        default=True,
+        description="Collect sample rows + distinct values during schema snapshot build.",
+    )
+    sql_introspection_sample_limit: int = Field(
+        default=5, ge=0, le=20,
+        description="Max sample rows per table during introspection.",
+    )
+    sql_introspection_distinct_limit: int = Field(
+        default=100, ge=0, le=500,
+        description="Max distinct values per column during introspection.",
+    )
+    sql_introspection_warmup_enabled: bool = Field(
+        default=True,
+        description="Build schema snapshot + introspection at app startup.",
+    )
     # --- Task007 SQL-Factory-lite (defaults off / safe fallbacks) ---
     sql_enriched_schema_prompt: bool = Field(
         default=False,
@@ -514,6 +531,8 @@ class GraphSettings(BaseSettings):
         "sql_exploit_on_retry",
         "sql_separate_select_tables_node",
         "sql_schema_explorer_enabled",
+        "sql_introspection_enabled",
+        "sql_introspection_warmup_enabled",
         "sql_ledger_first_prompts",
         "sql_validate_ledger_metric",
         "chart_readiness_enabled",
