@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import logging
 import re
 from threading import RLock
@@ -26,6 +26,8 @@ class _SchemaSnapshot:
     pks: dict[str, list[str]]
     fks: dict[str, list[dict[str, Any]]]
     col_desc_map: dict[tuple[str, str], str]
+    sample_rows: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    distinct_values: dict[str, dict[str, list[str]]] = field(default_factory=dict)
 
 
 @dataclass

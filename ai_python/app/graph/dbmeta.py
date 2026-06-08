@@ -31,6 +31,14 @@ class TableMeta(BaseModel):
         default=None,
         description="Business description merged from registry/YAML; omitted in prompts when absent.",
     )
+    sample_rows: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Up to N sample rows for LLM to infer data format.",
+    )
+    distinct_values: dict[str, list[str]] = Field(
+        default_factory=dict,
+        description="Column name -> distinct non-null values for enum-like text columns.",
+    )
 
 
 class SchemaArtifact(BaseModel):
