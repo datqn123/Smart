@@ -11,7 +11,7 @@ from app.harness.policy import HarnessPolicy, HarnessPolicyError
 from app.harness.capability import CapabilityMatrix, IdempotencyGuard, sanitize_user_data
 from app.harness.compact import CompactOutput, CompactSubagent
 from app.harness.cache import InMemorySemanticCache
-from app.harness.intent import IntentDecision, IntentObject, IntentObjectOutput, IntentSubagent
+from app.harness.intent import IntentAnalysisResult, IntentDecision, IntentObject, IntentObjectOutput, IntentSubagent, RequiredDataItem
 from app.harness.memory import EpisodicMemory, InMemorySemanticStore, SemanticRecord, WorkingMemory
 from app.harness.model_router import ModelRouter
 from app.harness.observability import TraceRecorder, TurnMetrics, aggregate_metrics
@@ -65,10 +65,12 @@ __all__ = [
     "HarnessPolicyError",
     "HitlSpec",
     "IdempotencyGuard",
+    "IntentAnalysisResult",
     "IntentDecision",
     "IntentObject",
     "IntentObjectOutput",
     "IntentSubagent",
+    "RequiredDataItem",
     "InMemorySemanticStore",
     "InMemorySemanticCache",
     "ModelRouter",

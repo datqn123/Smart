@@ -77,7 +77,7 @@ class _MultiClient:
     async def astructured_predict(self, messages, schema, **kwargs):  # noqa: ANN001
         name = schema.__name__
         self.schemas.append(name)
-        if name == "IntentObjectOutput":
+        if name in ("IntentObjectOutput", "IntentAnalysisResult"):
             return schema(goal="doanh thu", intent_type=self._intent_type, required_data=["revenue"], confidence=self._confidence)
         if name == "PlanGraphOutput":
             return schema(nodes=self._plan_nodes or [])

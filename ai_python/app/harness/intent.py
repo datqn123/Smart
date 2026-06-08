@@ -28,8 +28,8 @@ class RequiredDataItem(BaseModel):
 
 
 class IntentAnalysisResult(BaseModel):
-    goal: str = ""
-    intent_type: str = ""   # data_query | catalog_draft | inventory_draft | chart_report | chat
+    goal: str
+    intent_type: str        # data_query | catalog_draft | inventory_draft | chart_report | chat
     required_data: list[RequiredDataItem] = Field(default_factory=list)
     resolved_entities: list[ResolvedEntity] = Field(default_factory=list)
     confidence: float = 0.0
@@ -130,26 +130,34 @@ class IntentSubagent:
     def decide(self, intent: IntentObject) -> IntentDecision:
         if intent.missing_required:
             return IntentDecision(
+                goal=intent.goal,
+                intent_type=intent.intent_type,
                 mode="clarify",
                 clarify_questions=[_missing_question(intent.missing_required)],
             )
         min_entity = min([e.score for e in intent.resolved_entities], default=1.0)
         if intent.confidence < _float_setting(self._settings, "intent_confidence_hitl", 0.75):
             return IntentDecision(
+                goal=intent.goal,
+                intent_type=intent.intent_type,
                 mode="clarify",
                 clarify_questions=[_low_confidence_question(intent)],
             )
         if min_entity < _float_setting(self._settings, "entity_score_hitl", 0.6):
             return IntentDecision(
+                goal=intent.goal,
+                intent_type=intent.intent_type,
                 mode="clarify",
                 clarify_questions=[_entity_question(intent)],
             )
         if intent.confidence < _float_setting(self._settings, "intent_confidence_run", 0.9):
             return IntentDecision(
+                goal=intent.goal,
+                intent_type=intent.intent_type,
                 mode="auto_assume",
                 assumptions=[f"Tôi sẽ hiểu yêu cầu là: {intent.goal or intent.intent_type}."],
             )
-        return IntentDecision(mode="run")
+        return IntentDecision(goal=intent.goal, intent_type=intent.intent_type, mode="run")
 
     @staticmethod
     def _heuristic(question: str) -> IntentObjectOutput:
