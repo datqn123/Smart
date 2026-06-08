@@ -702,6 +702,7 @@ def get_graph_runtime() -> GraphRuntime:
         harness=deps.harness,
         plan_template_store=_build_plan_template_store(deps.settings),
         history_store=_build_history_store(deps.settings),
+        memory_store=_build_conversation_memory_store(deps.settings),
     )
     logger.info("runtime=LangHarnessRuntime harness_loop_enabled=True intents=%s", HARNESS_LOOP_INTENTS)
     return LangHarnessRuntime(compiled, orchestrator, graph_settings=deps.settings)
@@ -723,3 +724,14 @@ def _build_history_store(settings: Any) -> Any | None:
     if path:
         return SqliteIntentHistoryStore(str(path))
     return InMemoryIntentHistoryStore()
+
+
+def _build_conversation_memory_store(settings: Any) -> Any | None:
+    if not bool(getattr(settings, "conversation_memory_enabled", True)):
+        return None
+    path = getattr(settings, "conversation_memory_store_path", None)
+    if path:
+        from app.harness.memory_store import SqliteConversationMemoryStore
+        return SqliteConversationMemoryStore(str(path))
+    from app.harness.memory_store import InMemoryConversationMemoryStore
+    return InMemoryConversationMemoryStore()
