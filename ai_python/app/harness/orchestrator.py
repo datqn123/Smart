@@ -216,6 +216,7 @@ class HarnessOrchestrator:
             getattr(self._settings, "working_memory_pairs", 0)
         ):
             scratchpad.messages = self._working_memory.attach(scratchpad.messages)
+        ctx = self._enrich_from_memory(ctx, scratchpad)
         try:
             if bool(getattr(self._settings, "agentic_intent_object_enabled", False)):
                 intent_agent = IntentSubagent(llm_registry=self._llm_registry, settings=self._settings)
@@ -427,6 +428,37 @@ class HarnessOrchestrator:
             if isinstance(msg, HumanMessage):
                 return str(msg.content)
         return ""
+
+    def _enrich_from_memory(
+        self,
+        ctx: TurnContext,
+        scratchpad: TurnScratchpad,
+    ) -> TurnContext:
+        """Prepend conversation memory as a SystemMessage into scratchpad."""
+        if self._memory_store is None:
+            return ctx
+        thread_id = ctx.thread_id or ctx.correlation_id
+        if not thread_id:
+            return ctx
+        memory = self._memory_store.get_context(thread_id)
+        blocks: list[str] = []
+        if memory.summary:
+            blocks.append(f"[Lịch sử hội thoại]\n{memory.summary}")
+        if memory.recent_turns:
+            turn_lines = []
+            for t in memory.recent_turns:
+                turn_lines.append(f"Người dùng: {t.user_message}")
+                if t.ai_answer:
+                    turn_lines.append(f"Trợ lý: {t.ai_answer}")
+            blocks.append("[Các lượt gần đây]\n" + "\n".join(turn_lines))
+        if not blocks:
+            return ctx
+        from langchain_core.messages import SystemMessage
+        scratchpad.messages.insert(
+            0,
+            SystemMessage(content="\n\n".join(blocks)),
+        )
+        return ctx
 
     @staticmethod
     def _effective_question(scratchpad: TurnScratchpad) -> str:

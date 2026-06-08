@@ -8,6 +8,16 @@ from app.harness.memory_store import (
 )
 
 
+def _ctx():
+    from app.harness.tool_registry import TurnContext
+    return TurnContext(
+        tenant_id="t1", user_id="u1",
+        thread_id="th1",
+        correlation_id="corr-1",
+        bearer_token=None, schema_version=None,
+    )
+
+
 def test_inmemory_append_and_get_context() -> None:
     store = InMemoryConversationMemoryStore()
 
@@ -113,3 +123,46 @@ def test_orchestrator_accepts_memory_store() -> None:
         memory_store=store,
     )
     assert orch._memory_store is store
+
+
+import pytest
+
+
+@pytest.mark.asyncio
+async def test_memory_enriches_scratchpad_at_dispatch() -> None:
+    """When memory_store has prior turns, a SystemMessage is prepended to scratchpad."""
+    from app.harness.memory_store import InMemoryConversationMemoryStore, MemoryTurnRecord
+    from app.harness.orchestrator import HarnessOrchestrator
+    from app.harness.policy import HarnessPolicy
+    from app.harness.runtime import AgentHarness
+    from app.harness.scratchpad import TurnScratchpad
+    from app.harness.tool_registry import ToolRegistry
+    from app.config.graph_settings import GraphSettings
+    from langchain_core.messages import HumanMessage, SystemMessage
+
+    store = InMemoryConversationMemoryStore()
+    store.append_turn("th1", MemoryTurnRecord(
+        thread_id="th1", turn_index=1,
+        user_message="sản phẩm tokboki", ai_answer="Đây là sản phẩm A",
+        tool_names=["sql_query"], intent_type="data_query",
+    ))
+
+    orch = HarnessOrchestrator(
+        llm_registry=None,
+        tool_registry=ToolRegistry(),
+        policy=HarnessPolicy(),
+        settings=GraphSettings(),
+        harness=AgentHarness(enabled=False),
+        memory_store=store,
+    )
+    scratchpad = TurnScratchpad(
+        messages=[HumanMessage(content="tốc độ bán hết bao lâu?")],
+    )
+    # Simulate the enrichment that happens at _dispatch start
+    ctx = _ctx()
+    ctx = orch._enrich_from_memory(ctx, scratchpad)
+
+    assert any(
+        isinstance(m, SystemMessage) and "sản phẩm tokboki" in (m.content or "")
+        for m in scratchpad.messages
+    ), "Memory context should be prepended as SystemMessage"
