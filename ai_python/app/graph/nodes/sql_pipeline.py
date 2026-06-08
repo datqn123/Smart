@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from datetime import datetime
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -371,6 +372,10 @@ def _build_gen_sql_system(
             "you MUST use generate_series + LEFT JOIN so every month in range appears; "
             "use COALESCE(COUNT(...), 0) for empty months.\n"
         )
+    now = datetime.now()
+    parts.append(f"\nCurrent date: {now.strftime('%Y-%m-%d')}. "
+                 f"When the user says \"năm nay\" (this year) or a month without a year, "
+                 f"use {now.year}.\n")
     parts.append("\n" + enum_literals_prompt_block())
     return "".join(parts)
 
