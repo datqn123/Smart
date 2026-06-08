@@ -267,3 +267,37 @@ async def test_intent_analyze_receives_tool_manifest_context() -> None:
     assert any("[CONVERSATION]" in c["system"] for c in captured), (
         "Conversation block not found — memory_text not injected"
     )
+
+
+@pytest.mark.asyncio
+async def test_intent_clarify_sets_hitl_true_in_metrics() -> None:
+    from app.harness.orchestrator import ClarifyEvent, HarnessOrchestrator
+    from app.harness.policy import HarnessPolicy
+    from app.harness.runtime import AgentHarness
+    from app.harness.scratchpad import TurnScratchpad
+    from app.harness.tool_registry import ToolRegistry
+    from langchain_core.messages import HumanMessage
+    from tests.fake_llm import FakeLlmClient
+
+    orchestrator = HarnessOrchestrator(
+        llm_registry=_Registry(FakeLlmClient(intent="data_query", intent_missing=["time_period"])),
+        tool_registry=ToolRegistry(),
+        policy=HarnessPolicy(),
+        settings=_settings(),
+        harness=AgentHarness(enabled=False),
+    )
+
+    events = [
+        event
+        async for event in orchestrator.run(
+            TurnScratchpad(messages=[HumanMessage(content="báo cáo bán hàng")]),
+            _ctx(),
+        )
+    ]
+
+    clarify_events = [e for e in events if isinstance(e, ClarifyEvent)]
+    assert clarify_events, "Expected ClarifyEvent"
+    assert orchestrator.last_metrics is not None, "Expected last_metrics to be populated"
+    assert orchestrator.last_metrics.hitl, (
+        f"Expected hitl=True, got hitl={orchestrator.last_metrics.hitl}"
+    )

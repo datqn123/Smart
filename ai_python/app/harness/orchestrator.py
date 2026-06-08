@@ -232,6 +232,8 @@ class HarnessOrchestrator:
                 if recorder is not None:
                     recorder._intent = intent.intent_type or "unknown"
                 if intent.mode == "clarify":
+                    if recorder is not None:
+                        recorder.record_hitl()
                     yield ClarifyEvent(
                         questions=intent.clarify_questions,
                         suggested_rewrite="",
