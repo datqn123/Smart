@@ -48,6 +48,29 @@ def test_missing_claims_fail_closed():
     assert perms == ()
 
 
+def test_derive_role_permissions_list_valued_role_claim() -> None:
+    """JWT roles=['admin'] (list) must grant same implied caps as role='admin' (str)."""
+    role, perms = derive_role_permissions({"roles": ["admin"]})
+    assert role == "admin", f"Expected 'admin', got {role!r}"
+    assert "draft_create" in perms
+    assert "data_read" in perms
+
+
+def test_derive_role_permissions_list_first_element_wins() -> None:
+    """When roles is a multi-element list, the first element is used."""
+    role, perms = derive_role_permissions({"roles": ["owner", "staff"]})
+    assert role == "owner"
+    assert "draft_create" in perms
+    assert "data_read" in perms
+
+
+def test_derive_role_permissions_string_role_still_works() -> None:
+    """String role claim must continue to work unchanged after the list fix."""
+    role, perms = derive_role_permissions({"role": "admin"})
+    assert role == "admin"
+    assert "draft_create" in perms
+
+
 # --- _enforce_identity_context injects server-authoritative claims --------
 
 def test_enforce_identity_overwrites_client_supplied_role_and_permissions():

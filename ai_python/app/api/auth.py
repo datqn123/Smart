@@ -124,6 +124,12 @@ def _read_claim(claims: dict[str, Any], keys: tuple[str, ...]) -> str | None:
             normalized = value.strip()
             if normalized:
                 return normalized
+        elif isinstance(value, (list, tuple)):
+            # e.g. roles=["admin", "staff"] — take the first non-empty element
+            for item in value:
+                normalized = str(item).strip()
+                if normalized:
+                    return normalized
         elif value is not None:
             normalized = str(value).strip()
             if normalized:
