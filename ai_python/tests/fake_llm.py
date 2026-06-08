@@ -28,6 +28,7 @@ class FakeLlmClient:
         intent_confidence: float = 0.95,
         intent_missing: list[str] | None = None,
         intent_entity_score: float = 0.95,
+        intent_mode: str = "run",
         sql_review_failures: int = 0,
         table_pick: list[str] | None = None,
         plan_nodes: list[dict] | None = None,
@@ -42,6 +43,7 @@ class FakeLlmClient:
         self._intent_confidence = intent_confidence
         self._intent_missing = intent_missing or []
         self._intent_entity_score = intent_entity_score
+        self._intent_mode = intent_mode
         self._sql_review_fail_left = sql_review_failures
         self._table_pick = table_pick
         self._plan_nodes = plan_nodes
@@ -74,30 +76,35 @@ class FakeLlmClient:
             # Derive mode from intent state so decide() stub pass-through works correctly
             if self._intent_missing:
                 mode = "clarify"
-                clarify_questions = ["Bạn muốn xem trong khoảng thời gian nào? Vui lòng chọn ví dụ: hôm nay, tháng này hoặc một khoảng ngày cụ thể."]
+                clarify_questions = ["Bạn muốn xem trong khoảng thời gian nào?"]
             elif self._intent_entity_score < 0.6:
                 mode = "clarify"
-                clarify_questions = ["Bạn muốn dùng chính xác đối tượng nào? Vui lòng chọn hoặc nhập lại tên đầy đủ."]
+                clarify_questions = ["Bạn muốn dùng chính xác đối tượng nào?"]
             elif self._intent_confidence < 0.9:
                 mode = "auto_assume"
                 clarify_questions = []
             else:
-                mode = "run"
+                mode = self._intent_mode
                 clarify_questions = []
+            required = [
+                {"field": "revenue", "source": "orders", "required": True, "resolved": not bool(self._intent_missing)}
+            ]
             return schema.model_validate(  # type: ignore[return-value]
                 {
                     "goal": "fake goal",
                     "intent_type": intent_val,
-                    "required_data": ["revenue"],
+                    "required_data": required,
                     "resolved_entities": [
                         {"raw": "x", "matched": "y", "score": self._intent_entity_score}
                     ],
                     "confidence": self._intent_confidence,
                     "ambiguities": [],
-                    "missing_required": self._intent_missing,
                     "mode": mode,
                     "clarify_questions": clarify_questions,
-                    "reasoning": "fake llm decision",
+                    "assumptions": [],
+                    "reasoning": "fake reasoning",
+                    "schema_refs": ["orders"],
+                    "missing_required": self._intent_missing,
                 }
             )
         if schema.__name__ == "AgentPlannerOutput":
