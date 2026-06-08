@@ -194,7 +194,6 @@ async def test_intent_llm_judge_mode_run_executes() -> None:
 @pytest.mark.asyncio
 async def test_intent_analyze_receives_tool_manifest_context() -> None:
     """Verify orchestrator injects tools_manifest_text as schema_text into analyze()."""
-    from app.harness.intent import IntentAnalysisResult
     from app.harness.orchestrator import HarnessOrchestrator
     from app.harness.policy import HarnessPolicy
     from app.harness.runtime import AgentHarness
@@ -261,4 +260,10 @@ async def test_intent_analyze_receives_tool_manifest_context() -> None:
     assert captured, "No system message captured — intent_context not injected"
     assert any("sql_query" in c["system"] for c in captured), (
         "Tool manifest not found in system prompt — schema_text not injected"
+    )
+    assert any("[SCHEMA]" in c["system"] for c in captured), (
+        "SCHEMA context block not found"
+    )
+    assert any("[CONVERSATION]" in c["system"] for c in captured), (
+        "Conversation block not found — memory_text not injected"
     )
