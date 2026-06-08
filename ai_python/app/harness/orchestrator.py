@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -16,9 +17,13 @@ from app.harness.cache import InMemorySemanticCache
 from app.harness.intent import IntentSubagent
 from app.harness.memory import WorkingMemory
 from app.harness.model_router import ModelRouter
+from app.harness.eval_gate import v3_rollout_allowed
 from app.harness.observability import TraceRecorder
 from app.harness.history_store import (
+    STATUS_CLARIFY_PENDING,
     STATUS_DEGRADED,
+    STATUS_FAILURE,
+    STATUS_HITL_PENDING,
     STATUS_SUCCESS,
     IntentHistoryStore,
     build_history_event,
@@ -32,8 +37,14 @@ from app.harness.plan_graph import (
     degraded_final_answer,
     run_planner_owned_plan,
 )
-from app.harness.plan_template_store import PlanTemplateStore, normalize_intent_key
-from app.harness.plan_template_store import plan_graph_hash
+from app.harness.plan_template_store import (
+    PLANNER_GENERATED,
+    PlanTemplateRecord,
+    PlanTemplateStore,
+    build_intent_key,
+    normalize_intent_key,
+    plan_graph_hash,
+)
 from app.harness.result_store import InMemoryResultRefStore
 from app.harness.policy import POLICY_VERSION, HarnessPolicy, HarnessPolicyError
 from app.harness.runtime import AgentHarness, ToolCallContext
@@ -118,8 +129,61 @@ class HarnessOrchestrator:
         # P8 — last finalized metrics, exposed for observability/tests.
         self.last_metrics: Any = None
         self._replan_count = 0
+        # Per-turn accounting for the K15 history event (FR-9.1/9.5).
+        self._turn_tools: list[str] = []
+        self._turn_plan: PlanGraph | None = None
+        self._turn_degraded_reason: str = ""
+        self._turn_hitl: int = 0
+        # Semantic intent key for template lookup + K15 aggregation (LOW-4).
+        self._turn_intent_key: str = ""
 
     async def run(
+        self,
+        scratchpad: TurnScratchpad,
+        ctx: TurnContext,
+    ) -> AsyncIterator[
+        ProgressEvent | SsePayloadEvent | FinalAnswerEvent | PendingHitlEvent | ClarifyEvent | ErrorEvent
+    ]:
+        """Run a turn and append exactly one K15 history event for its outcome.
+
+        Centralizing history here (instead of per-mode) satisfies FR-9.1 ("after
+        every turn") and FR-9.5 (distinct success/degraded/failure/hitl_pending/
+        clarify_pending statuses) across reactive, plan, and HITL-resume paths.
+        """
+        question = self._original_question(scratchpad)
+        self._turn_tools = []
+        self._turn_plan = None
+        self._turn_degraded_reason = ""
+        self._turn_hitl = 0
+        # Default to the raw-question key; replaced with the semantic key once the
+        # IntentObject is available (in _dispatch).
+        self._turn_intent_key = normalize_intent_key(question)
+        self._replan_count = 0
+        self._last_budget_hit = None
+        status = STATUS_FAILURE
+        try:
+            async for event in self._dispatch(scratchpad, ctx):
+                if isinstance(event, FinalAnswerEvent):
+                    status = (
+                        STATUS_DEGRADED
+                        if (self._turn_degraded_reason or self._last_budget_hit)
+                        else STATUS_SUCCESS
+                    )
+                elif isinstance(event, ClarifyEvent):
+                    status = STATUS_CLARIFY_PENDING
+                elif isinstance(event, PendingHitlEvent):
+                    status = STATUS_HITL_PENDING
+                elif isinstance(event, ErrorEvent):
+                    status = STATUS_FAILURE
+                yield event
+        finally:
+            self._record_turn_history(
+                ctx=ctx,
+                status=status,
+                failure_kind=(self._turn_degraded_reason or self._last_budget_hit) or None,
+            )
+
+    async def _dispatch(
         self,
         scratchpad: TurnScratchpad,
         ctx: TurnContext,
@@ -154,16 +218,19 @@ class HarnessOrchestrator:
             if bool(getattr(self._settings, "agentic_intent_object_enabled", False)):
                 intent_agent = IntentSubagent(llm_registry=self._llm_registry, settings=self._settings)
                 intent = await intent_agent.analyze(
-                    self._original_question(scratchpad),
+                    self._effective_question(scratchpad),
                     memory_text=self._memory_text(scratchpad),
                     dictionary_text="",
                 )
+                # Semantic intent key drives template lookup + K15 aggregation (LOW-4).
+                self._turn_intent_key = _intent_key_from(
+                    intent, fallback=self._original_question(scratchpad)
+                )
                 if recorder is not None:
                     recorder._intent = intent.intent_type or "unknown"
-                intent_decision = intent_agent.decide(intent)
-                if intent_decision.mode == "clarify":
+                if intent.mode == "clarify":
                     yield ClarifyEvent(
-                        questions=intent_decision.clarify_questions,
+                        questions=intent.clarify_questions,
                         suggested_rewrite="",
                         original_question=self._original_question(scratchpad),
                     )
@@ -171,7 +238,7 @@ class HarnessOrchestrator:
                 ctx = replace(
                     ctx,
                     intent_object=intent.model_dump(mode="json"),
-                    assumptions=list(intent_decision.assumptions),
+                    assumptions=list(intent.assumptions),
                 )
                 # P2 — opt-in plan-driven DAG for read/report intents.
                 if bool(getattr(self._settings, "agentic_plan_dag_enabled", False)) and (
@@ -243,12 +310,14 @@ class HarnessOrchestrator:
                 signature = f"{tool_name}:{json.dumps(args, sort_keys=True, ensure_ascii=False, default=str)}"
                 if signature in seen_tool_calls:
                     self._audit_warn("duplicate_tool_call_short_circuit", ctx)
+                    self._turn_degraded_reason = "duplicate"
                     yield FinalAnswerEvent(scratchpad.observation_summary())
                     return
                 seen_tool_calls.add(signature)
 
                 try:
                     self._check_policy(tool_name, args, ctx)
+                    self._turn_tools.append(tool_name)
                     result = await self._run_tool_cached(
                         ToolInput(tool_name=tool_name, args=args, context=ctx)
                     )
@@ -275,6 +344,7 @@ class HarnessOrchestrator:
                 if result.pending_hitl:
                     if recorder is not None:
                         recorder.record_hitl()
+                    self._turn_hitl += 1
                     if result.sse_payload:
                         yield SsePayloadEvent(result.pending_hitl.event_name, result.sse_payload)
                     yield PendingHitlEvent(result.pending_hitl)
@@ -288,6 +358,7 @@ class HarnessOrchestrator:
                 scratchpad.add_observation(result, tool_name)
 
             self._audit_warn("step_budget_exhausted", ctx)
+            self._turn_degraded_reason = self._turn_degraded_reason or "step_budget"
             yield FinalAnswerEvent(scratchpad.observation_summary())
         finally:
             if recorder is not None:
@@ -323,6 +394,7 @@ class HarnessOrchestrator:
         args = {"request": "confirm"}
         try:
             self._check_policy(tool_name, args, ctx)
+            self._turn_tools.append(tool_name)
             result = await self._harness_run_tool_async(ToolInput(tool_name=tool_name, args=args, context=ctx))
         except HarnessPolicyError as exc:
             yield ErrorEvent(str(exc), "HARNESS_POLICY_BLOCK")
@@ -348,6 +420,35 @@ class HarnessOrchestrator:
             if isinstance(msg, HumanMessage):
                 return str(msg.content)
         return ""
+
+    @staticmethod
+    def _effective_question(scratchpad: TurnScratchpad) -> str:
+        """Return the question to use for intent analysis.
+
+        If the latest user message is very short (a follow-up refinement like "năm 2026"),
+        prepend the most recent substantive user question so the intent LLM has full context.
+        """
+        messages = scratchpad.messages
+        latest = ""
+        latest_idx = -1
+        for i, msg in enumerate(reversed(messages)):
+            if isinstance(msg, HumanMessage):
+                latest = str(msg.content).strip()
+                latest_idx = len(messages) - 1 - i
+                break
+        if not latest:
+            return ""
+        # A substantive question has at least 4 words or 20 chars; short ones are follow-ups.
+        if len(latest) > 20 or len(latest.split()) >= 4:
+            return latest
+        # Find the previous substantive user message.
+        for msg in reversed(messages[:latest_idx]):
+            if isinstance(msg, HumanMessage):
+                prev = str(msg.content).strip()
+                if len(prev) > 20:
+                    return f"{prev} — {latest}"
+                break
+        return latest
 
     async def _decide(self, scratchpad: TurnScratchpad) -> DecisionSchema:
         role = str(getattr(self._settings, "harness_planner_role", "harness_planner") or "harness_planner")
@@ -382,6 +483,16 @@ class HarnessOrchestrator:
             return result
         return await self._harness_run_tool_async(tool_input)
 
+    def _plan_error_answer(self, scratchpad: TurnScratchpad, reason: str = "plan_error") -> str:
+        """Labeled degraded fallback so caught plan errors are not logged as success.
+
+        Sets the turn's degraded reason (so run() records K15 'degraded', not clean
+        'success' — FR-9.5) and labels the answer as incomplete (FR-1.6).
+        """
+        self._turn_degraded_reason = self._turn_degraded_reason or reason
+        summary = scratchpad.observation_summary()
+        return f"{degraded_final_answer(reason)}\n\n{summary}".strip()
+
     async def _run_plan_mode(
         self,
         intent: Any,
@@ -403,7 +514,7 @@ class HarnessOrchestrator:
         if bool(getattr(self._settings, "agentic_v3_enabled", False)) and bool(
             getattr(self._settings, "agentic_v3_plan_template_enabled", False)
         ):
-            template = self._get_plan_template(self._original_question(scratchpad), ctx)
+            template = self._get_plan_template(ctx)
             if template is not None and self._plan_is_template_safe(template.plan_graph):
                 template_hit = True
                 plan = template.plan_graph
@@ -421,15 +532,15 @@ class HarnessOrchestrator:
                     )
                 except Exception:  # noqa: BLE001
                     logger.warning("template plan execution failed", exc_info=True)
-                    self._record_plan_template_outcome(self._original_question(scratchpad), ctx, "failure")
+                    self._record_plan_template_outcome(ctx, "failure")
                     outcome = None
                 if outcome is None:
                     template_hit = False
                 elif not outcome.degraded:
-                    self._record_plan_template_outcome(self._original_question(scratchpad), ctx, "success")
+                    self._record_plan_template_outcome(ctx, "success")
                     results = outcome.results
                 else:
-                    self._record_plan_template_outcome(self._original_question(scratchpad), ctx, "degraded")
+                    self._record_plan_template_outcome(ctx, "degraded")
                     template_hit = False
                     degraded_reason = ""
 
@@ -438,7 +549,7 @@ class HarnessOrchestrator:
                 plan = await planner.plan(intent_dump, "", manifest)
             except Exception:  # noqa: BLE001
                 logger.warning("planner failed; falling back to reactive summary", exc_info=True)
-                yield FinalAnswerEvent(scratchpad.observation_summary())
+                yield FinalAnswerEvent(self._plan_error_answer(scratchpad))
                 return
 
         if results:
@@ -459,11 +570,15 @@ class HarnessOrchestrator:
                 )
             except Exception:  # noqa: BLE001
                 logger.warning("plan execution failed", exc_info=True)
-                yield FinalAnswerEvent(scratchpad.observation_summary())
+                yield FinalAnswerEvent(self._plan_error_answer(scratchpad))
                 return
             results = outcome.results
             if outcome.degraded:
                 degraded_reason = outcome.stopped_reason
+                self._note_template_non_success(ctx)
+            elif plan is not None:
+                # Clean success of a planner-generated plan feeds template promotion.
+                self._consider_template_promotion(plan, ctx)
         else:
             async def _replan(_current: PlanGraph, results: list[NodeResult], attempt: int) -> PlanGraph:
                 self._replan_count = attempt
@@ -481,7 +596,7 @@ class HarnessOrchestrator:
                 )
             except Exception:  # noqa: BLE001
                 logger.warning("plan execution failed", exc_info=True)
-                yield FinalAnswerEvent(scratchpad.observation_summary())
+                yield FinalAnswerEvent(self._plan_error_answer(scratchpad))
                 return
 
         for result in results:
@@ -500,14 +615,10 @@ class HarnessOrchestrator:
         if degraded_reason:
             # FR-1.6: degraded answers must be explicitly labeled as incomplete.
             final_text = f"{degraded_final_answer(degraded_reason)}\n\n{final_text}".strip()
-        if plan is not None and bool(getattr(self._settings, "agentic_v3_enabled", False)):
-            self._record_history(
-                question=self._original_question(scratchpad),
-                plan=plan,
-                ctx=ctx,
-                status=STATUS_DEGRADED if degraded_reason else STATUS_SUCCESS,
-                failure_kind=degraded_reason or None,
-            )
+        # Hand the plan + degraded reason to the turn-level K15 recorder in run().
+        self._turn_plan = plan
+        if degraded_reason:
+            self._turn_degraded_reason = degraded_reason
         yield FinalAnswerEvent(final_text)
 
     async def _execute_v3_plan(
@@ -583,43 +694,88 @@ class HarnessOrchestrator:
         except KeyError:
             return False
 
-    def _get_plan_template(self, question: str, ctx: TurnContext) -> Any | None:
+    def _get_plan_template(self, ctx: TurnContext) -> Any | None:
         store = self._plan_template_store
         if store is None:
             return None
         return store.get(
-            normalize_intent_key(question),
+            self._turn_intent_key,
             role_scope=_role_scope(ctx),
             manifest_version=self._tool_registry.manifest_version,
             policy_version=POLICY_VERSION,
             asset_versions=_v3_asset_versions(),
         )
 
-    def _record_plan_template_outcome(self, question: str, ctx: TurnContext, status: str) -> None:
+    def _record_plan_template_outcome(self, ctx: TurnContext, status: str) -> None:
         store = self._plan_template_store
         if store is None:
             return
-        store.record_outcome(normalize_intent_key(question), role_scope=_role_scope(ctx), status=status)
+        store.record_outcome(self._turn_intent_key, role_scope=_role_scope(ctx), status=status)
 
-    def _record_history(
+    def _consider_template_promotion(self, plan: PlanGraph, ctx: TurnContext) -> None:
+        """Feed a clean planner-generated success into the promotion streak (FR-11.3)."""
+        store = self._plan_template_store
+        if store is None or not hasattr(store, "consider_promotion"):
+            return
+        if not bool(getattr(self._settings, "agentic_v3_plan_template_enabled", False)):
+            return
+        # FR-11.7: only promote once K12 route accuracy has cleared the threshold.
+        # Until the eval/CI step writes a measured accuracy, promotion stays off.
+        if not v3_rollout_allowed(
+            float(getattr(self._settings, "agentic_v3_measured_route_accuracy", 0.0) or 0.0),
+            float(getattr(self._settings, "agentic_v3_route_accuracy_threshold", 0.8) or 0.8),
+        ):
+            return
+        candidate = PlanTemplateRecord(
+            normalized_intent_key=self._turn_intent_key,
+            plan_graph_hash=plan_graph_hash(plan),
+            plan_graph=plan,
+            manifest_version=self._tool_registry.manifest_version,
+            policy_version=POLICY_VERSION,
+            asset_versions=_v3_asset_versions(),
+            role_scope=_role_scope(ctx),
+            source=PLANNER_GENERATED,
+        )
+        promote_after = int(getattr(self._settings, "agentic_v3_template_promote_after", 3) or 3)
+        store.consider_promotion(candidate, promote_after=promote_after)
+
+    def _note_template_non_success(self, ctx: TurnContext) -> None:
+        store = self._plan_template_store
+        if store is None or not hasattr(store, "note_non_success"):
+            return
+        store.note_non_success(self._turn_intent_key, role_scope=_role_scope(ctx))
+
+    def _record_turn_history(
         self,
         *,
-        question: str,
-        plan: PlanGraph,
         ctx: TurnContext,
         status: str,
         failure_kind: str | None = None,
     ) -> None:
+        """Append one K15 event for the turn (FR-9.1/9.2/9.5).
+
+        Uses the executed plan when one ran (plan/template mode); otherwise derives
+        a reactive plan hash from the sequence of tools the loop actually called.
+        Aggregated under the semantic intent key (LOW-4).
+        """
         store = self._history_store
         if store is None:
             return
+        plan = self._turn_plan
+        if plan is not None and plan.nodes:
+            plan_hash = plan_graph_hash(plan)
+            tools = [node.tool for node in plan.nodes]
+        else:
+            tools = list(self._turn_tools)
+            plan_hash = "reactive:" + hashlib.sha256(",".join(tools).encode("utf-8")).hexdigest()[:12]
         event = build_history_event(
             tenant_id=ctx.tenant_id,
-            intent_key=normalize_intent_key(question),
-            plan_hash=plan_graph_hash(plan),
-            tools=[node.tool for node in plan.nodes],
+            intent_key=self._turn_intent_key,
+            plan_hash=plan_hash,
+            tools=tools,
             status=status,
             replan_count=self._replan_count,
+            hitl_count=self._turn_hitl,
             cost_usd=float(self._last_llm_cost or 0.0),
             asset_versions=_v3_asset_versions(),
             failure_kind=failure_kind,
@@ -722,7 +878,34 @@ def _rows_of(output: Any) -> list[dict[str, Any]]:
 
 
 def _role_scope(ctx: TurnContext) -> str:
-    return str(ctx.role or "default").strip() or "default"
+    """Template scope = role + a fingerprint of live permissions (P2-2).
+
+    Two users with the same role but different live JWT permissions get distinct
+    scopes, so one cannot poison/demote the other's template history even though
+    policy is also re-checked per call (FR-5.4/AC-17).
+    """
+    role = str(ctx.role or "default").strip() or "default"
+    perms = sorted(str(p).strip().lower() for p in (getattr(ctx, "permissions", ()) or ()) if str(p).strip())
+    if not perms:
+        return role
+    digest = hashlib.sha256(",".join(perms).encode("utf-8")).hexdigest()[:8]
+    return f"{role}#{digest}"
+
+
+def _intent_key_from(intent: Any, *, fallback: str) -> str:
+    """Build the semantic intent key from an IntentObject, or fall back to raw."""
+    if intent is None:
+        return normalize_intent_key(fallback)
+    entities = [
+        getattr(e, "matched", "") for e in (getattr(intent, "resolved_entities", None) or [])
+    ]
+    return build_intent_key(
+        intent_type=getattr(intent, "intent_type", "") or "",
+        goal=getattr(intent, "goal", "") or "",
+        required_data=getattr(intent, "required_data", None) or [],
+        entities=entities,
+        fallback=fallback,
+    )
 
 
 def _v3_asset_versions() -> dict[str, str]:

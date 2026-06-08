@@ -141,3 +141,51 @@ async def test_intent_llm_error_fallback_heuristic() -> None:
     ]
 
     assert any(isinstance(event, FinalAnswerEvent) and event.text == "fallback ok" for event in events)
+
+
+@pytest.mark.asyncio
+async def test_intent_llm_judge_mode_run_executes() -> None:
+    from app.harness.orchestrator import FinalAnswerEvent, HarnessOrchestrator
+    from app.harness.policy import HarnessPolicy
+    from app.harness.runtime import AgentHarness
+    from app.harness.scratchpad import TurnScratchpad
+    from app.harness.tool_registry import ToolRegistry
+    from langchain_core.messages import HumanMessage
+    from tests.fake_llm import FakeLlmClient
+
+    class _TestClient:
+        async def astructured_predict(self, messages, schema, **kwargs):  # noqa: ANN001
+            if schema.__name__ in ("IntentObjectOutput", "IntentAnalysisResult"):
+                return schema.model_validate({
+                    "goal": "fake goal",
+                    "intent_type": "data_query",
+                    "required_data": [{"field": "revenue", "source": "orders", "required": True, "resolved": True}],
+                    "resolved_entities": [{"raw": "x", "matched": "y", "score": 0.95}],
+                    "confidence": 0.95,
+                    "ambiguities": [],
+                    "mode": "run",
+                    "clarify_questions": [],
+                    "assumptions": [],
+                    "reasoning": "fake reasoning",
+                    "schema_refs": ["orders"],
+                    "missing_required": [],
+                })
+            return schema(action="final_answer", final_answer="doanh thu: 100đ")
+
+    orchestrator = HarnessOrchestrator(
+        llm_registry=_Registry(_TestClient()),
+        tool_registry=ToolRegistry(),
+        policy=HarnessPolicy(),
+        settings=_settings(),
+        harness=AgentHarness(enabled=False),
+    )
+
+    events = [
+        event
+        async for event in orchestrator.run(
+            TurnScratchpad(messages=[HumanMessage(content="doanh thu")]),
+            _ctx(),
+        )
+    ]
+
+    assert any(isinstance(e, FinalAnswerEvent) for e in events)
