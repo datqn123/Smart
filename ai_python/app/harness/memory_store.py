@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import json
+import sqlite3
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Protocol
 
 
@@ -65,3 +68,114 @@ class InMemoryConversationMemoryStore:
     def delete_thread(self, thread_id: str) -> None:
         self._turns.pop(thread_id, None)
         self._summaries.pop(thread_id, None)
+
+
+class SqliteConversationMemoryStore:
+    def __init__(self, path: str, max_turns: int = 10) -> None:
+        self._max_turns = max_turns
+        self._conn = sqlite3.connect(path, check_same_thread=False)
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS conversation_memory (
+                thread_id TEXT NOT NULL,
+                turn_index INTEGER NOT NULL,
+                user_message TEXT NOT NULL,
+                ai_answer TEXT,
+                tool_names TEXT,
+                intent_type TEXT,
+                timestamp REAL NOT NULL,
+                PRIMARY KEY (thread_id, turn_index)
+            )
+        """)
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS conversation_thread (
+                thread_id TEXT PRIMARY KEY,
+                summary TEXT DEFAULT '',
+                turn_count INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+        self._conn.commit()
+
+    def close(self) -> None:
+        self._conn.close()
+
+    def append_turn(self, thread_id: str, turn: MemoryTurnRecord) -> None:
+        self._conn.execute(
+            """INSERT OR REPLACE INTO conversation_memory
+               (thread_id, turn_index, user_message, ai_answer,
+                tool_names, intent_type, timestamp)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (
+                thread_id, turn.turn_index,
+                turn.user_message, turn.ai_answer,
+                json.dumps(turn.tool_names, ensure_ascii=False),
+                turn.intent_type, turn.timestamp,
+            ),
+        )
+        self._conn.execute(
+            """INSERT INTO conversation_thread (thread_id, turn_count, summary)
+               VALUES (?, 1, '')
+               ON CONFLICT(thread_id) DO UPDATE SET
+                   turn_count = turn_count + 1""",
+            (thread_id,),
+        )
+        self._conn.commit()
+
+    def get_context(self, thread_id: str) -> ConversationContext:
+        cursor = self._conn.execute(
+            "SELECT summary FROM conversation_thread WHERE thread_id = ?",
+            (thread_id,),
+        )
+        row = cursor.fetchone()
+        summary = row[0] if row else ""
+
+        cursor = self._conn.execute(
+            """SELECT turn_index, user_message, ai_answer, tool_names, intent_type, timestamp
+               FROM conversation_memory
+               WHERE thread_id = ?
+               ORDER BY turn_index ASC""",
+            (thread_id,),
+        )
+        turns = []
+        for row in cursor.fetchall():
+            turns.append(MemoryTurnRecord(
+                thread_id=thread_id,
+                turn_index=row[0],
+                user_message=row[1],
+                ai_answer=row[2] or "",
+                tool_names=json.loads(row[3]) if row[3] else [],
+                intent_type=row[4] or "",
+                timestamp=row[5],
+            ))
+        return ConversationContext(summary=summary, recent_turns=turns)
+
+    def compact(self, thread_id: str, summary_text: str) -> None:
+        cursor = self._conn.execute(
+            "SELECT turn_index FROM conversation_memory WHERE thread_id = ? ORDER BY turn_index ASC",
+            (thread_id,),
+        )
+        all_turns = [r[0] for r in cursor.fetchall()]
+        if not all_turns:
+            return
+        keep_count = min(self._max_turns, len(all_turns))
+        keep_count = max(keep_count, 1)
+        cutoff = all_turns[-keep_count]
+        self._conn.execute(
+            "DELETE FROM conversation_memory WHERE thread_id = ? AND turn_index < ?",
+            (thread_id, cutoff),
+        )
+        self._conn.execute(
+            "UPDATE conversation_thread SET summary = ? WHERE thread_id = ?",
+            (summary_text, thread_id),
+        )
+        self._conn.commit()
+
+    def delete_thread(self, thread_id: str) -> None:
+        self._conn.execute(
+            "DELETE FROM conversation_memory WHERE thread_id = ?",
+            (thread_id,),
+        )
+        self._conn.execute(
+            "DELETE FROM conversation_thread WHERE thread_id = ?",
+            (thread_id,),
+        )
+        self._conn.commit()
