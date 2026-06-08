@@ -388,3 +388,61 @@ def _safe_manifest(deps, sq, se, cd, iv):
         se.SchemaExploreTool.__init__ = orig["se"]
         cd.CatalogDraftTool.__init__ = orig["cd"]
         iv.InventoryDraftTool.__init__ = orig["iv"]
+
+
+# --------------------------------------------------------------------------- #
+# P6 — cross-turn conversation memory context retention.
+# --------------------------------------------------------------------------- #
+@pytest.mark.asyncio
+async def test_conversation_memory_cross_turn_context() -> None:
+    """Verify that a follow-up question sees prior turn context in scratchpad."""
+    from app.harness.memory_store import (
+        InMemoryConversationMemoryStore,
+        MemoryTurnRecord,
+    )
+    from app.harness.orchestrator import HarnessOrchestrator
+    from app.harness.policy import HarnessPolicy
+    from app.harness.runtime import AgentHarness
+    from app.harness.scratchpad import TurnScratchpad
+    from app.harness.tool_registry import ToolRegistry
+    from langchain_core.messages import HumanMessage, SystemMessage
+    from tests.fake_llm import FakeLlmClient
+
+    store = InMemoryConversationMemoryStore()
+    store.append_turn("th1", MemoryTurnRecord(
+        thread_id="th1", turn_index=1,
+        user_message="sản phẩm tokboki",
+        ai_answer="sản phẩm tokboki mã SP001, tồn 50",
+        tool_names=["sql_query"],
+        intent_type="data_query",
+    ))
+
+    orch = HarnessOrchestrator(
+        llm_registry=_Registry(FakeLlmClient(intent="data_query", intent_confidence=0.95)),
+        tool_registry=ToolRegistry(),
+        policy=HarnessPolicy(),
+        settings=_settings(agentic_intent_object_enabled=True),
+        harness=AgentHarness(enabled=False),
+        memory_store=store,
+    )
+
+    # Turn 2 — follow-up question
+    scratchpad = TurnScratchpad(
+        messages=[HumanMessage(content="tốc độ bán hết bao lâu?")],
+    )
+    ctx = _ctx()
+    # Override thread_id to match stored memory
+    import dataclasses
+    ctx = dataclasses.replace(ctx, thread_id="th1")
+    ctx = orch._enrich_from_memory(ctx, scratchpad)
+
+    # The scratchpad should now have a SystemMessage with prior context
+    system_msgs = [
+        m for m in scratchpad.messages
+        if isinstance(m, SystemMessage)
+    ]
+    assert system_msgs, "Expected SystemMessage with memory context"
+    combined = " ".join(str(m.content) for m in system_msgs)
+    assert "tokboki" in combined, (
+        f"Prior turn context 'tokboki' should appear in memory context, got: {combined[:200]}"
+    )
