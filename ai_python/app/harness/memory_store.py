@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
+from typing import Protocol
 
 
 
@@ -24,3 +25,10 @@ class MemoryTurnRecord:
 class ConversationContext:
     summary: str = ""
     recent_turns: list[MemoryTurnRecord] = field(default_factory=list)
+
+
+class ConversationMemoryStore(Protocol):
+    def append_turn(self, thread_id: str, turn: MemoryTurnRecord) -> None: ...
+    def get_context(self, thread_id: str) -> ConversationContext: ...
+    def compact(self, thread_id: str, summary_text: str) -> None: ...
+    def delete_thread(self, thread_id: str) -> None: ...
