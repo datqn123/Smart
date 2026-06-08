@@ -12,6 +12,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.harness.orchestrator import (
+    ClarifyEvent,
     FinalAnswerEvent,
     HarnessOrchestrator,
     SsePayloadEvent,
@@ -446,3 +447,81 @@ async def test_conversation_memory_cross_turn_context() -> None:
     assert "tokboki" in combined, (
         f"Prior turn context 'tokboki' should appear in memory context, got: {combined[:200]}"
     )
+
+
+# --------------------------------------------------------------------------- #
+# P6 — intent judge receives [CONVERSATION] context in its system prompt.
+# --------------------------------------------------------------------------- #
+@pytest.mark.asyncio
+async def test_intent_judge_receives_memory_context() -> None:
+    """Verify that the intent judge system prompt includes [CONVERSATION] when memory exists."""
+    from app.harness.memory_store import InMemoryConversationMemoryStore, MemoryTurnRecord
+    from app.harness.orchestrator import HarnessOrchestrator
+    from app.harness.policy import HarnessPolicy
+    from app.harness.runtime import AgentHarness
+    from app.harness.scratchpad import TurnScratchpad
+    from app.harness.tool_registry import ToolRegistry
+    from langchain_core.messages import HumanMessage
+
+    class _RecordingLlmClient:
+        last_usage = InvokeUsage(prompt_tokens=10, completion_tokens=5, cost_usd=0.001)
+        intent_messages: list = []
+
+        async def astructured_predict(self, messages, schema, **kwargs):
+            name = schema.__name__
+            if name == "IntentAnalysisResult":
+                self.intent_messages = messages
+                return schema(
+                    goal="test", intent_type="data_query",
+                    required_data=[], confidence=0.95,
+                    mode="run", clarify_questions=[],
+                    assumptions=[], reasoning="ok",
+                    schema_refs=[],
+                )
+            if name == "DecisionSchema":
+                return schema(action="final_answer", final_answer="Trả lời từ memory context.")
+            raise NotImplementedError(name)
+
+    store = InMemoryConversationMemoryStore()
+    store.append_turn("th1", MemoryTurnRecord(
+        thread_id="th1", turn_index=1,
+        user_message="sản phẩm tokboki",
+        ai_answer="sản phẩm tokboki mã SP001",
+        tool_names=["sql_query"],
+        intent_type="data_query",
+    ))
+
+    client = _RecordingLlmClient()
+    orch = HarnessOrchestrator(
+        llm_registry=_Registry(client),
+        tool_registry=ToolRegistry(),
+        policy=HarnessPolicy(),
+        settings=_settings(agentic_intent_object_enabled=True),
+        harness=AgentHarness(enabled=False),
+        memory_store=store,
+    )
+    import dataclasses
+    ctx = dataclasses.replace(_ctx(), thread_id="th1")
+    scratchpad = TurnScratchpad(messages=[HumanMessage(content="tốc độ bán hết bao lâu?")])
+    events = [e async for e in orch.run(scratchpad, ctx)]
+
+    assert not any(isinstance(e, ClarifyEvent) for e in events), (
+        "Intent judge should NOT clarify when memory context provides the entity"
+    )
+    # Verify the system prompt sent to the intent judge includes [CONVERSATION]
+    if client.intent_messages:
+        system_content = ""
+        for m in client.intent_messages:
+            if isinstance(m, dict) and m.get("role") == "system":
+                system_content = m.get("content", "") or ""
+                break
+            from langchain_core.messages import SystemMessage
+            if isinstance(m, SystemMessage):
+                system_content = str(m.content or "")
+                break
+        assert "[CONVERSATION]" in system_content, (
+            "Intent judge system prompt should contain [CONVERSATION] block"
+        )
+        assert "tokboki" in system_content, (
+            "Intent judge system prompt should contain prior turn user message"
+        )
