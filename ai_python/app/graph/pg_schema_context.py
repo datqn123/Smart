@@ -6,6 +6,7 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 import logging
 import re
+import threading
 from threading import RLock
 from time import monotonic
 from typing import Any
@@ -854,3 +855,60 @@ def build_schema_artifact_for_table_names(
         ),
         None,
     )
+
+
+class SchemaWarmupWarmer:
+    """Build schema + introspection cache at startup for zero-latency first query."""
+
+    def __init__(self, settings: GraphSettings) -> None:
+        self._settings = settings
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        if not self._settings.sql_introspection_warmup_enabled:
+            logger.info("schema warmup disabled by config")
+            return
+        dsn = _metadata_dsn(self._settings)
+        if not dsn:
+            logger.info("schema warmup skipped — no metadata DSN configured")
+            return
+        self._thread = threading.Thread(target=self._run, name="schema-warmer", daemon=True)
+        self._thread.start()
+        logger.info("schema warmup thread started")
+
+    def _run(self) -> None:
+        try:
+            import psycopg2
+        except ImportError:
+            logger.warning("schema warmup: psycopg2 not installed")
+            return
+        dsn = _metadata_dsn(self._settings)
+        schema = (self._settings.pg_metadata_schema or "public").strip()
+        desc_table = (self._settings.pg_ai_description_table or "ai_table_description").strip()
+        col_desc_table = (self._settings.pg_ai_column_description_table or "ai_column_description").strip()
+        timeout = int(self._settings.pg_metadata_connect_timeout_seconds)
+        try:
+            conn = psycopg2.connect(dsn, connect_timeout=timeout)
+            conn.set_session(readonly=True, autocommit=True)
+            with conn.cursor() as cur:
+                snapshot = _build_snapshot(
+                    cur, schema=schema, desc_table=desc_table, col_desc_table=col_desc_table,
+                )
+            conn.close()
+            namespace = _cache_namespace(self._settings, dsn)
+            conn2 = psycopg2.connect(dsn, connect_timeout=timeout)
+            conn2.set_session(readonly=True, autocommit=True)
+            with conn2.cursor() as cur2:
+                fp = _build_db_fingerprint(
+                    cur2, schema=schema, desc_table=desc_table, col_desc_table=col_desc_table,
+                )
+            conn2.close()
+            cache_key = f"{namespace}|{fp}" if fp else f"{namespace}|warmup"
+            _SCHEMA_CACHE.set(
+                cache_key, snapshot,
+                ttl_seconds=int(self._settings.schema_cache_ttl_seconds),
+                max_items=int(self._settings.schema_cache_max_items),
+            )
+            logger.info("schema warmup complete (tables=%d)", len(snapshot.reg_names))
+        except Exception:
+            logger.warning("schema warmup failed — will lazy-build on first query", exc_info=True)

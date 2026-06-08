@@ -6,8 +6,10 @@ from fastapi import FastAPI
 
 from app.api.errors import register_error_handlers
 from app.api.routes import router as chat_router
+from app.config.graph_settings import load_graph_settings
 from app.config.settings import load_llm_settings, validate_llm_required
 from app.graph.correlation import setup_correlation_logging
+from app.graph.pg_schema_context import SchemaWarmupWarmer
 from app.logging_setup import setup_app_package_stderr_logging
 
 
@@ -17,6 +19,9 @@ async def lifespan(_app: FastAPI):
     setup_correlation_logging()
     setup_app_package_stderr_logging()
     validate_llm_required(load_llm_settings())
+    gs = load_graph_settings()
+    warmer = SchemaWarmupWarmer(gs)
+    warmer.start()
     yield
 
 
