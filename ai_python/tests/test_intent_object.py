@@ -27,61 +27,52 @@ def _settings(**overrides):  # noqa: ANN003
 
 
 def test_intent_high_confidence_runs() -> None:
-    from app.harness.intent import IntentObject, IntentSubagent
+    from app.harness.intent import IntentAnalysisResult
 
-    intent = IntentObject(
+    # LLM returns mode="run" directly — no decide() needed
+    intent = IntentAnalysisResult(
         goal="Xem doanh thu",
         intent_type="data_query",
-        required_data=["revenue"],
+        required_data=[],
         confidence=0.95,
-        resolved_entities=[],
+        mode="run",
     )
 
-    decision = IntentSubagent(settings=_settings()).decide(intent)
-
-    assert decision.mode == "run"
+    assert intent.mode == "run"
 
 
 def test_intent_missing_required_clarifies() -> None:
-    # decide() is now a pass-through stub; mode is set by the LLM in analyze().
-    # Test that an intent with mode="clarify" passes through decide() unchanged.
-    from app.harness.intent import IntentObject, IntentSubagent
+    from app.harness.intent import IntentAnalysisResult
 
-    intent = IntentObject(
+    # LLM returns mode="clarify" with contextual question
+    intent = IntentAnalysisResult(
         goal="Xem báo cáo",
         intent_type="data_query",
-        required_data=["revenue"],
+        required_data=[],
         confidence=0.95,
-        missing_required=["time_period"],
         mode="clarify",
         clarify_questions=["Bạn muốn xem trong khoảng thời gian nào?"],
     )
 
-    decision = IntentSubagent(settings=_settings()).decide(intent)
-
-    assert decision.mode == "clarify"
-    assert decision.clarify_questions
-    assert "thời gian" in decision.clarify_questions[0].lower()
+    assert intent.mode == "clarify"
+    assert intent.clarify_questions
+    assert "thời gian" in intent.clarify_questions[0].lower()
 
 
 def test_intent_mid_confidence_auto_assume() -> None:
-    # decide() is now a pass-through stub; mode is set by the LLM in analyze().
-    # Test that an intent with mode="auto_assume" passes through decide() unchanged.
-    from app.harness.intent import IntentObject, IntentSubagent
+    from app.harness.intent import IntentAnalysisResult
 
-    intent = IntentObject(
+    intent = IntentAnalysisResult(
         goal="Xem tồn kho",
         intent_type="data_query",
-        required_data=["inventory"],
+        required_data=[],
         confidence=0.8,
         mode="auto_assume",
-        assumptions=["Tôi sẽ hiểu yêu cầu là: Xem tồn kho."],
+        assumptions=["Tôi sẽ xử lý theo khoảng thời gian gần nhất."],
     )
 
-    decision = IntentSubagent(settings=_settings()).decide(intent)
-
-    assert decision.mode == "auto_assume"
-    assert decision.assumptions
+    assert intent.mode == "auto_assume"
+    assert intent.assumptions
 
 
 def test_entity_resolver_fuzzy_fallback() -> None:
@@ -103,7 +94,7 @@ def test_entity_resolver_fuzzy_fallback() -> None:
 
 @pytest.mark.asyncio
 async def test_intent_subagent_llm_output() -> None:
-    from app.harness.intent import IntentObjectOutput, IntentSubagent
+    from app.harness.intent import IntentAnalysisResult, IntentSubagent
     from tests.fake_llm import FakeLlmClient
 
     class Registry:
@@ -116,9 +107,10 @@ async def test_intent_subagent_llm_output() -> None:
         dictionary_text="",
     )
 
-    assert isinstance(out, IntentObjectOutput)
+    assert isinstance(out, IntentAnalysisResult)
     assert out.intent_type == "data_query"
     assert out.confidence == 0.95
+    assert out.mode in ("run", "clarify", "auto_assume")
 
 
 def test_intent_context_builder_assembles_blocks() -> None:
