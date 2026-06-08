@@ -35,7 +35,17 @@ def _lines_simple(artifact: SchemaArtifact, table_names: list[str] | None) -> li
         if allow and t.name.lower() not in allow:
             continue
         col_names = ", ".join(c.name for c in t.columns)
-        lines.append(f"- {t.name}({col_names})")
+        line = f"- {t.name}({col_names})"
+        if t.distinct_values:
+            dv_preview = "; ".join(
+                f"{k}=[{', '.join(str(v) for v in vs[:5])}]"
+                for k, vs in t.distinct_values.items()
+            )
+            line += f"\n  distinct: {dv_preview}"
+        if t.sample_rows:
+            row0 = {k: (str(v)[:40] if v is not None else "NULL") for k, v in t.sample_rows[0].items()}
+            line += f"\n  sample: {row0}"
+        lines.append(line)
     return lines
 
 
