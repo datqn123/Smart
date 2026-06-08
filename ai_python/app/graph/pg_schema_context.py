@@ -13,6 +13,11 @@ from typing import Any
 from app.config.graph_settings import GraphSettings
 from app.graph.dbmeta import ColumnMeta, SchemaArtifact, TableMeta
 
+try:
+    from psycopg2 import sql as pysql
+except ImportError:
+    pysql = None  # type: ignore[assignment]
+
 logger = logging.getLogger(__name__)
 
 
@@ -409,6 +414,64 @@ def _build_db_fingerprint(
     col_fp = _fetch_registry_updated_at_fingerprint(cur, schema=schema, table_name=col_desc_table)
     mig_fp = _fetch_migration_fingerprint(cur, schema=schema)
     return f"desc={desc_fp}|col={col_fp}|flyway={mig_fp}"
+
+
+def _introspect_sample_rows(
+    cur: Any, schema: str, table: str, limit: int = 5,
+) -> list[dict[str, Any]]:
+    safe_name = pysql.Identifier(schema, table) if pysql else table
+    sql = pysql.SQL("SELECT * FROM {} LIMIT %s").format(safe_name) if pysql else f"SELECT * FROM {table} LIMIT %s"
+    cur.execute(sql, (limit,))
+    col_names = [desc[0] for desc in cur.description] if cur.description else []
+    rows: list[dict[str, Any]] = []
+    for row in cur.fetchall():
+        d: dict[str, Any] = {}
+        for i, c in enumerate(col_names):
+            val = row[i]
+            if isinstance(val, (bytes, bytearray)):
+                val = str(val)[:200]
+            elif not isinstance(val, (str, int, float, bool, type(None))):
+                val = str(val)[:200]
+            d[c] = val
+        rows.append(d)
+    return rows
+
+
+_CATEGORICAL_TYPE_KEYWORDS = ("char", "text", "enum", "varchar")
+
+
+def _is_categorical_column(col: ColumnMeta) -> bool:
+    if col.name.lower() in ("id", "created_at", "updated_at", "deleted_at"):
+        return False
+    if col.type is None:
+        return False
+    t = col.type.lower()
+    return any(kw in t for kw in _CATEGORICAL_TYPE_KEYWORDS) and "[]" not in t
+
+
+def _introspect_distinct_values(
+    cur: Any, schema: str, table: str, columns: list[ColumnMeta], limit: int = 100,
+) -> dict[str, list[str]]:
+    result: dict[str, list[str]] = {}
+    for col in columns:
+        if not _is_categorical_column(col):
+            continue
+        if not pysql:
+            continue
+        safe_table = pysql.Identifier(schema, table)
+        safe_col = pysql.Identifier(col.name)
+        try:
+            cur.execute(
+                pysql.SQL("SELECT DISTINCT {} FROM {} WHERE {} IS NOT NULL ORDER BY 1 LIMIT %s")
+                .format(safe_col, safe_table, safe_col),
+                (limit,),
+            )
+            vals = [str(r[0]) for r in cur.fetchall() if r[0] is not None]
+            if vals:
+                result[col.name] = vals
+        except Exception:
+            logger.warning("introspect distinct failed for %s.%s", table, col.name)
+    return result
 
 
 def _build_snapshot(cur: Any, *, schema: str, desc_table: str, col_desc_table: str) -> _SchemaSnapshot:
