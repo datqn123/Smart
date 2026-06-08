@@ -120,7 +120,7 @@ async def test_intent_llm_error_fallback_heuristic() -> None:
         last_usage = None
 
         async def astructured_predict(self, messages, schema, **kwargs):  # noqa: ANN001
-            if schema.__name__ in ("IntentObjectOutput", "IntentAnalysisResult"):
+            if schema.__name__ == "IntentAnalysisResult":
                 raise RuntimeError("intent llm failed")
             return schema(action="final_answer", final_answer="fallback ok")
 
@@ -155,7 +155,7 @@ async def test_intent_llm_judge_mode_run_executes() -> None:
 
     class _TestClient:
         async def astructured_predict(self, messages, schema, **kwargs):  # noqa: ANN001
-            if schema.__name__ in ("IntentObjectOutput", "IntentAnalysisResult"):
+            if schema.__name__ == "IntentAnalysisResult":
                 return schema.model_validate({
                     "goal": "fake goal",
                     "intent_type": "data_query",

@@ -52,12 +52,6 @@ class IntentAnalysisResult(BaseModel):
         return v
 
 
-# Backward-compat aliases — orchestrator và tests cũ dùng tên cũ
-IntentObject = IntentAnalysisResult
-IntentObjectOutput = IntentAnalysisResult
-IntentDecision = IntentAnalysisResult
-
-
 class IntentContext(BaseModel):
     schema_text: str = ""
     history_text: str = ""
@@ -174,10 +168,6 @@ class IntentSubagent:
             )
         except Exception:
             return self._heuristic(question)
-
-    def decide(self, intent: IntentAnalysisResult) -> IntentAnalysisResult:
-        # Stub — orchestrator will be updated in Task 5 to read intent.mode directly
-        return intent
 
     @staticmethod
     def _heuristic(question: str) -> IntentAnalysisResult:

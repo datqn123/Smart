@@ -12,8 +12,15 @@ from app.harness.plan_template_store import (
     PLANNER_GENERATED,
     InMemoryPlanTemplateStore,
     PlanTemplateRecord,
+    build_intent_key,
     normalize_intent_key,
     plan_graph_hash,
+)
+
+# Semantic intent key the orchestrator derives for the seeded IntentObject
+# (intent_type="data_query", goal="doanh thu tháng này", required_data=["revenue"]).
+_DEMO_INTENT_KEY = build_intent_key(
+    intent_type="data_query", goal="doanh thu tháng này", required_data=["revenue"]
 )
 from app.harness.policy import HarnessPolicy, POLICY_VERSION
 from app.harness.runtime import AgentHarness
@@ -62,7 +69,7 @@ class _Client:
 
     async def astructured_predict(self, messages, schema, **kwargs):  # noqa: ANN001
         self.schemas.append(schema.__name__)
-        if schema.__name__ == "IntentObjectOutput":
+        if schema.__name__ == "IntentAnalysisResult":
             return schema(goal="doanh thu tháng này", intent_type="data_query", required_data=["revenue"], confidence=0.95)
         if schema.__name__ == "PlanGraphOutput":
             raise AssertionError("template hit must not call planner PlanGraphOutput")
@@ -108,16 +115,18 @@ async def test_v3_template_fast_path_executes_without_planner_plan_call() -> Non
     plan = PlanGraph(
         nodes=[PlanNode(id="q1", tool="sql_query", input_spec={"query": "doanh thu"}, output_expect="rows")]
     )
+    from app.harness.orchestrator import _role_scope
+
     store = InMemoryPlanTemplateStore()
     assert store.promote(
         PlanTemplateRecord(
-            normalized_intent_key=normalize_intent_key("doanh thu tháng này"),
+            normalized_intent_key=_DEMO_INTENT_KEY,
             plan_graph_hash=plan_graph_hash(plan),
             plan_graph=plan,
             manifest_version=registry.manifest_version,
             policy_version=POLICY_VERSION,
             asset_versions={"K12": "1.0", "K15": "1.0"},
-            role_scope="owner",
+            role_scope=_role_scope(_ctx()),
             source=PLANNER_GENERATED,
         )
     )
@@ -140,7 +149,7 @@ async def test_v3_template_fast_path_executes_without_planner_plan_call() -> Non
     ]
 
     assert sql_tool.calls == 1
-    assert client.schemas == ["IntentObjectOutput"]
+    assert client.schemas == ["IntentAnalysisResult"]
     assert any(isinstance(e, FinalAnswerEvent) for e in events)
 
 
@@ -166,7 +175,7 @@ async def test_v3_plan_mode_appends_k15_history_after_success() -> None:
 
     async def _predict(messages, schema, **kwargs):  # noqa: ANN001
         client.schemas.append(schema.__name__)
-        if schema.__name__ == "IntentObjectOutput":
+        if schema.__name__ == "IntentAnalysisResult":
             return schema(goal="doanh thu tháng này", intent_type="data_query", required_data=["revenue"], confidence=0.95)
         if schema.__name__ == "PlanGraphOutput":
             return schema(
@@ -201,5 +210,5 @@ async def test_v3_plan_mode_appends_k15_history_after_success() -> None:
         )
     ]
 
-    summary = history.summary("doanh thu tháng này")
+    summary = history.summary(_DEMO_INTENT_KEY)
     assert summary.success == 1

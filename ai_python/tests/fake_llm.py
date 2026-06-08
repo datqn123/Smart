@@ -71,9 +71,9 @@ class FakeLlmClient:
         if schema.__name__ == "IntentOutput":
             intent_val = self._intent if self._intent is not None else "general_chat"
             return schema.model_validate({"intent": intent_val})  # type: ignore[return-value]
-        if schema.__name__ in ("IntentObjectOutput", "IntentAnalysisResult"):
+        if schema.__name__ == "IntentAnalysisResult":
             intent_val = self._intent if self._intent is not None else "data_query"
-            # Derive mode from intent state so decide() stub pass-through works correctly
+            # Derive mode from intent state
             if self._intent_missing:
                 mode = "clarify"
                 clarify_questions = ["Bạn muốn xem trong khoảng thời gian nào?"]
