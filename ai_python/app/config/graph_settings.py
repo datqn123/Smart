@@ -430,6 +430,16 @@ class GraphSettings(BaseSettings):
         description="Clean successes of a planner-generated plan before it is promoted to a fast-path template (FR-11.3).",
     )
 
+    # --- Conversation memory (harness-only) ---
+    conversation_memory_enabled: bool = Field(
+        default=True,
+        description="Enable turn-to-turn conversation memory in harness orchestrator.",
+    )
+    conversation_memory_store_path: str | None = Field(
+        default=None,
+        description="SQLite path for ConversationMemoryStore; None = in-memory.",
+    )
+
     @field_validator("ai_display_timezone", mode="before")
     @classmethod
     def strip_ai_display_timezone(cls, v: object) -> object:
@@ -511,6 +521,7 @@ class GraphSettings(BaseSettings):
         "planner_enabled",
         "planner_md_context_enabled",
         "context_compact_enabled",
+        "conversation_memory_enabled",
         "schema_cache_enabled",
         "sql_review_skip_low_risk",
         "harness_enabled",
