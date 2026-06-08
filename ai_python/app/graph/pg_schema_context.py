@@ -495,6 +495,22 @@ def _build_snapshot(cur: Any, *, schema: str, desc_table: str, col_desc_table: s
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("ai_column_description registry unavailable: %s", exc)
+    sample_rows: dict[str, list[dict[str, Any]]] = {}
+    distinct_values: dict[str, dict[str, list[str]]] = {}
+    for tname in all_tables:
+        t_cols = cols.get(tname)
+        if not t_cols:
+            continue
+        try:
+            sample_rows[tname] = _introspect_sample_rows(cur, schema, tname, limit=5)
+        except Exception:
+            pass
+        try:
+            dv = _introspect_distinct_values(cur, schema, tname, t_cols, limit=100)
+            if dv:
+                distinct_values[tname] = dv
+        except Exception:
+            pass
     return _SchemaSnapshot(
         rows=rows,
         desc_map=desc_map,
@@ -504,6 +520,8 @@ def _build_snapshot(cur: Any, *, schema: str, desc_table: str, col_desc_table: s
         pks=pks,
         fks=fks,
         col_desc_map=col_desc_map,
+        sample_rows=sample_rows,
+        distinct_values=distinct_values,
     )
 
 
@@ -537,6 +555,8 @@ def _artifact_from_snapshot(
                 pk=snapshot.pks.get(tname, []),
                 fks=snapshot.fks.get(tname, []),
                 description=snapshot.desc_map.get(tname),
+                sample_rows=snapshot.sample_rows.get(tname, []),
+                distinct_values=snapshot.distinct_values.get(tname, {}),
             )
         )
     if not tmeta:
@@ -820,6 +840,8 @@ def build_schema_artifact_for_table_names(
                 pk=snapshot.pks.get(tname, []),
                 fks=snapshot.fks.get(tname, []),
                 description=snapshot.desc_map.get(tname),
+                sample_rows=snapshot.sample_rows.get(tname, []),
+                distinct_values=snapshot.distinct_values.get(tname, {}),
             )
         )
     if not tmeta:
