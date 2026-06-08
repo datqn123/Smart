@@ -111,3 +111,19 @@ async def test_intent_subagent_llm_output() -> None:
     assert isinstance(out, IntentObjectOutput)
     assert out.intent_type == "data_query"
     assert out.confidence == 0.95
+
+
+def test_intent_context_builder_assembles_blocks() -> None:
+    from app.harness.intent import IntentContextBuilder
+
+    builder = IntentContextBuilder()
+    ctx = builder.build(
+        schema_text="Table: orders(id, total, created_at)",
+        history_text="Q: doanh thu tháng 3 → SELECT SUM(total) FROM orders WHERE month=3",
+        memory_text="User asked about revenue",
+    )
+
+    assert "orders" in ctx.schema_text
+    assert "SELECT" in ctx.history_text
+    assert "revenue" in ctx.memory_text
+    assert ctx.to_prompt_blocks()  # returns non-empty string

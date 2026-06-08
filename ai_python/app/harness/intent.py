@@ -58,6 +58,37 @@ IntentObjectOutput = IntentAnalysisResult
 IntentDecision = IntentAnalysisResult
 
 
+class IntentContext(BaseModel):
+    schema_text: str = ""
+    history_text: str = ""
+    memory_text: str = ""
+
+    def to_prompt_blocks(self) -> str:
+        parts: list[str] = []
+        if self.schema_text:
+            parts.append(f"[SCHEMA]\n{self.schema_text}")
+        if self.history_text:
+            parts.append(f"[QUERY HISTORY]\n{self.history_text}")
+        if self.memory_text:
+            parts.append(f"[CONVERSATION]\n{self.memory_text}")
+        return "\n\n".join(parts)
+
+
+class IntentContextBuilder:
+    def build(
+        self,
+        *,
+        schema_text: str = "",
+        history_text: str = "",
+        memory_text: str = "",
+    ) -> IntentContext:
+        return IntentContext(
+            schema_text=schema_text,
+            history_text=history_text,
+            memory_text=memory_text,
+        )
+
+
 class EntityResolver:
     def __init__(
         self,
