@@ -8,7 +8,7 @@ import json
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, ClassVar
 
 logger = logging.getLogger(__name__)
 
@@ -183,6 +183,14 @@ class SqlQueryTool:
         self._test_review = _test_review
         self._test_execute = _test_execute
 
+    _entity_cache: ClassVar[dict[str, dict[str, Any]]] = {}
+
+    @classmethod
+    def _cache_put_entity_context(cls, thread_id: str, entity_context: dict[str, Any]) -> None:
+        if thread_id not in cls._entity_cache and len(cls._entity_cache) >= _ENTITY_CACHE_MAX_THREADS:
+            cls._entity_cache.pop(next(iter(cls._entity_cache)))
+        cls._entity_cache[thread_id] = entity_context
+
     def _make_callables(self, query: str, ctx: TurnContext):
         """Return (generate, review, execute, analyze) async callables for the runner."""
         if self._test_generate is not None:
@@ -199,21 +207,25 @@ class SqlQueryTool:
             nonlocal shared
             if hint:
                 shared = {**shared, "validation_feedback": append_feedback(shared, "sql_fix", str(hint))}
-            if self._deps.settings.entity_resolution_enabled and "entity_context" not in shared:
-                try:
-                    from app.graph.entity_resolution import resolve_entities_for_domain
-                    from app.graph.sql_query_domain import detect_sql_query_domain
+            if self._deps.settings.entity_resolution_enabled:
+                thread_id = ctx.thread_id
+                entity_context = SqlQueryTool._entity_cache.get(thread_id, {})
+                if not entity_context and "entity_context" not in shared:
+                    try:
+                        from app.graph.entity_resolution import resolve_entities_for_domain
+                        from app.graph.sql_query_domain import detect_sql_query_domain
 
-                    domain = detect_sql_query_domain(query)
-                    entity_context = None
-                    if domain != "generic":
-                        entity_context = await resolve_entities_for_domain(
-                            self._deps, ctx.tenant_id, query, domain,
-                            bearer_token=ctx.bearer_token,
-                        )
-                    shared = {**shared, "entity_context": entity_context or {}}
-                except Exception as exc:
-                    logger.warning("entity resolution (thin adapter) failed: %s", exc)
+                        domain = detect_sql_query_domain(query)
+                        if domain != "generic":
+                            entity_context = await resolve_entities_for_domain(
+                                self._deps, ctx.tenant_id, query, domain,
+                                bearer_token=ctx.bearer_token,
+                            )
+                            if entity_context:
+                                SqlQueryTool._cache_put_entity_context(thread_id, entity_context)
+                    except Exception as exc:
+                        logger.warning("entity resolution (thin adapter) failed: %s", exc)
+                shared["entity_context"] = entity_context or {}
             result = await asyncio.to_thread(gen_node, shared)
             shared = {**shared, **result}
             sql = str(shared.get("generated_sql") or "")
@@ -316,3 +328,6 @@ class SqlQueryTool:
             observation_text=observation,
             sse_payload=sse,
         )
+
+
+_ENTITY_CACHE_MAX_THREADS = 1000
