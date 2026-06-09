@@ -671,6 +671,9 @@ def make_gen_sql_node(deps: GraphDeps):
             ledger_first=ledger_first,
             month_calendar=month_cal is not None,
         )
+        entity_section = _build_entity_context_section(state)
+        if entity_section:
+            _gen_sql_system += "\n\n" + entity_section
         client = reg.get("sql_gen")
         sql = client.invoke_text(prompt, system=_gen_sql_system)
         sql_stripped = normalize_llm_sql_output(sql)
