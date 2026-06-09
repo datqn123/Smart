@@ -1131,6 +1131,7 @@ def make_validate_result_node(deps: GraphDeps):
                 "result_ok": True,
                 "result_empty": True,
                 "business_scope": merged_scope,
+                "empty_warning": state.get("empty_warning") or "",
             }
             if isinstance(ctx, dict):
                 out["last_data_answer"] = ctx
