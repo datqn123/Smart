@@ -440,8 +440,10 @@ def _build_db_fingerprint(
 ) -> str:
     desc_fp = _fetch_registry_updated_at_fingerprint(cur, schema=schema, table_name=desc_table)
     col_fp = _fetch_registry_updated_at_fingerprint(cur, schema=schema, table_name=col_desc_table)
+    rel_desc_table = col_desc_table.replace("ai_column_description", "ai_relationship_description") if col_desc_table else ""
+    rel_fp = _fetch_registry_updated_at_fingerprint(cur, schema=schema, table_name=rel_desc_table) if rel_desc_table else ""
     mig_fp = _fetch_migration_fingerprint(cur, schema=schema)
-    return f"desc={desc_fp}|col={col_fp}|flyway={mig_fp}"
+    return f"desc={desc_fp}|col={col_fp}|rel={rel_fp}|flyway={mig_fp}"
 
 
 def _introspect_sample_rows(
@@ -896,6 +898,13 @@ def build_schema_artifact_for_table_names(
                 merged_cols.append(cm.model_copy(update={"description": reg_txt}))
             else:
                 merged_cols.append(cm)
+        rel_hints: list[str] = []
+        for fk in snapshot.fks.get(tname, []):
+            key = (tname.lower(), fk.get("column", "").lower(),
+                   (fk.get("ref_table") or "").lower(), (fk.get("ref_column") or "").lower())
+            desc = snapshot.rel_desc_map.get(key)
+            if desc:
+                rel_hints.append(f"{fk['column']} -> {fk['ref_table']}.{fk['ref_column']}: {desc}")
         tmeta.append(
             TableMeta(
                 name=tname,
@@ -905,6 +914,7 @@ def build_schema_artifact_for_table_names(
                 description=snapshot.desc_map.get(tname),
                 sample_rows=snapshot.sample_rows.get(tname, []),
                 distinct_values=snapshot.distinct_values.get(tname, {}),
+                relationship_hints=rel_hints,
             )
         )
     if not tmeta:
