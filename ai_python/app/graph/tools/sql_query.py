@@ -207,7 +207,8 @@ class SqlQueryTool:
                     domain = detect_sql_query_domain(query)
                     if domain != "generic":
                         entity_context = await resolve_entities_for_domain(
-                            self._deps, ctx.tenant_id, query, domain
+                            self._deps, ctx.tenant_id, query, domain,
+                            bearer_token=ctx.bearer_token,
                         )
                         if entity_context:
                             shared = {**shared, "entity_context": entity_context}

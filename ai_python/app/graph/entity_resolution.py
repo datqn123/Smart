@@ -141,6 +141,7 @@ async def load_entity_names(
     keywords: list[str],
     batch_size: int = 500,
     max_batches: int = 3,
+    bearer_token: str | None = None,
 ) -> dict[str, Any]:
     if not keywords:
         return {
@@ -154,7 +155,7 @@ async def load_entity_names(
     for batch_idx in range(max_batches):
         offset = batch_idx * batch_size
         batch = await _load_names_batch(
-            executor, tenant_id, table, column, offset, batch_size,
+            executor, tenant_id, table, column, offset, batch_size, bearer_token=bearer_token,
         )
         if not batch:
             matched = _match_keywords(loaded_names, keywords)
@@ -188,6 +189,7 @@ async def resolve_entities_for_domain(
     tenant_id: str | None,
     question: str,
     domain: SqlQueryDomain,
+    bearer_token: str | None = None,
 ) -> dict[str, Any]:
     if not tenant_id:
         return {}
@@ -211,6 +213,7 @@ async def resolve_entities_for_domain(
             keywords,
             batch_size=batch_size,
             max_batches=max_batches,
+            bearer_token=bearer_token,
         )
         result[table] = resolved
     return result

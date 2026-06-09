@@ -1252,8 +1252,12 @@ def make_entity_resolution_node(deps: GraphDeps):
             domain = detect_sql_query_domain(question)
             if domain == "generic":
                 return {}
+            bearer_token = state.get("spring_bearer_token")
             entity_context = asyncio.get_event_loop().run_until_complete(
-                resolve_entities_for_domain(deps, tenant_id, question, domain)
+                resolve_entities_for_domain(
+                    deps, tenant_id, question, domain,
+                    bearer_token=str(bearer_token) if bearer_token else None,
+                )
             )
             return {"entity_context": entity_context}
         except Exception as exc:
