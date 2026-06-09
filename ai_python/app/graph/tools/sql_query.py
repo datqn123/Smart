@@ -48,12 +48,15 @@ class SelfCorrectingSqlRunner:
         generate: Callable[[str | None], Awaitable[str]],
         review: Callable[[str], Awaitable[dict[str, Any]]],
         execute: Callable[[str], Awaitable[list[dict[str, Any]]]],
+        analyze: Callable[[str, str], Awaitable[dict[str, Any]]] | None = None,
     ) -> None:
         self._sql_regen_max = max(0, int(sql_regen_max))
         self._sql_empty_retry_max = max(0, int(sql_empty_retry_max))
         self._generate = generate
         self._review = review
         self._execute = execute
+        self._analyze = analyze
+        self._last_analyze_result: dict[str, Any] = {}
 
     async def run(self) -> SelfCorrectingSqlResult:
         seen: set[str] = set()
@@ -116,7 +119,14 @@ class SelfCorrectingSqlRunner:
             rows = await self._execute(sql)
             last_rows = list(rows or [])
             if not last_rows:
-                # SQL passed review → empty result is legitimate no-data, not an error
+                # SQL passed review — analyze empty result for suspicious patterns
+                analyze_warning = ""
+                if self._analyze is not None:
+                    try:
+                        analyze_result = await self._analyze(sql, hint or "")
+                        analyze_warning = (analyze_result or {}).get("warning", "")
+                    except Exception as exc:
+                        logger.warning("analyze_empty_result failed: %s", exc)
                 return SelfCorrectingSqlResult(
                     ok=True,
                     rows=last_rows,
@@ -124,7 +134,7 @@ class SelfCorrectingSqlRunner:
                     regen_count=regen,
                     empty_retry_count=empty_retry,
                     degraded=False,
-                    warning="",
+                    warning=analyze_warning,
                 )
             return SelfCorrectingSqlResult(
                 ok=True,
@@ -230,7 +240,20 @@ class SqlQueryTool:
             rows = result.get("rows", []) if isinstance(result, dict) else []
             return rows if isinstance(rows, list) else []
 
-        return generate, review, execute
+        async def analyze(sql: str, hint: str) -> dict[str, Any]:
+            """Run empty-result analysis when rows == 0."""
+            from app.graph.analyze_empty_result import _analyze_empty_heuristic
+            from app.graph.sql_query_domain import detect_sql_query_domain
+
+            domain = detect_sql_query_domain(query)
+            result = _analyze_empty_heuristic(sql, query, domain)
+            return {
+                "verdict": result.get("verdict", "legitimate"),
+                "warning": result.get("warning", ""),
+                "reason": result.get("reason", ""),
+            }
+
+        return generate, review, execute, analyze
 
     async def invoke(self, args: dict[str, Any], ctx: TurnContext) -> ToolResult:
         query = str(args.get("query") or args.get("sql") or "").strip()
@@ -238,13 +261,16 @@ class SqlQueryTool:
         regen_max = int(getattr(settings, "sql_regen_max", 3))
         empty_retry_max = int(getattr(settings, "sql_empty_retry_max", 2))
 
-        generate, review, execute = self._make_callables(query, ctx)
+        callables = self._make_callables(query, ctx)
+        generate, review, execute = callables[:3]
+        analyze = callables[3] if len(callables) > 3 else None
         runner = SelfCorrectingSqlRunner(
             sql_regen_max=regen_max,
             sql_empty_retry_max=empty_retry_max,
             generate=generate,
             review=review,
             execute=execute,
+            analyze=analyze,
         )
         runner_result = await runner.run()
 

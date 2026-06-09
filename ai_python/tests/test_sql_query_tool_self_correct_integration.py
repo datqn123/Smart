@@ -243,4 +243,28 @@ async def test_invoke_intent_check_exhausts_retry_budget():
     assert call_count[0] == 2  # initial + 1 retry, then exhausted
 
 
+# ---------------------------------------------------------------------------
+# Empty result with analyze callable (Task 8)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_invoke_empty_legitimate_no_warning():
+    """Empty result with no suspicious patterns returns no warning."""
+    async def _gen(hint):
+        return "SELECT id FROM orders WHERE id = 999"
+
+    async def _review(sql):
+        return {"ok": True, "issues": []}
+
+    async def _execute(sql):
+        return []
+
+    deps = _make_deps()
+    tool = SqlQueryTool(deps, _test_generate=_gen, _test_review=_review, _test_execute=_execute)
+    result = await tool.invoke({"query": "find order 999"}, _ctx())
+    assert result.ok is True
+    assert result.output["query_result"]["rows"] == []
+
+
 
