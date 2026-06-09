@@ -184,4 +184,63 @@ async def test_invoke_blocks_non_select_sql():
     assert "policy" in result.observation_text.lower() or "SELECT" in result.observation_text
 
 
+# ---------------------------------------------------------------------------
+# Intent-check regen in generate() → runner retries
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_invoke_intent_check_triggers_retry():
+    """When generate() returns empty string (simulating intent-check regen),
+    runner must retry instead of terminate."""
+    call_count = [0]
+
+    async def _gen(hint):
+        call_count[0] += 1
+        # First call: return empty to simulate intent-check regen
+        if call_count[0] == 1:
+            return ""
+        # Second call: produce valid SQL (after retry)
+        return "SELECT quantity FROM inventory WHERE product_id = 1"
+
+    async def _review(sql):
+        return {"ok": True, "issues": []}
+
+    async def _execute(sql):
+        return [{"product_id": 1, "quantity": 50}]
+
+    deps = _make_deps()
+    deps.settings.sql_empty_retry_max = 2  # allow retries
+    tool = SqlQueryTool(deps, _test_generate=_gen, _test_review=_review, _test_execute=_execute)
+    result = await tool.invoke({"query": "lấy tồn kho sản phẩm 1"}, _ctx())
+    assert result.ok is True
+    assert call_count[0] == 2  # first gen failed intent, second succeeded
+    assert result.output["query_result"]["rows"] == [{"product_id": 1, "quantity": 50}]
+
+
+@pytest.mark.asyncio
+async def test_invoke_intent_check_exhausts_retry_budget():
+    """When every generate() call returns empty string (simulating intent-check regen),
+    runner exhausts empty_retry budget and terminates with ok=False."""
+    call_count = [0]
+
+    async def _gen(hint):
+        call_count[0] += 1
+        # Always return empty to simulate intent-check regen
+        return ""
+
+    async def _review(sql):
+        return {"ok": True, "issues": []}
+
+    async def _execute(sql):
+        return [{"id": 1}]
+
+    deps = _make_deps()
+    deps.settings.sql_empty_retry_max = 1  # only 1 retry
+    tool = SqlQueryTool(deps, _test_generate=_gen, _test_review=_review, _test_execute=_execute)
+    result = await tool.invoke({"query": "get inventory"}, _ctx())
+    assert result.ok is False
+    assert "retry budget exhausted" in result.observation_text.lower()
+    assert call_count[0] == 2  # initial + 1 retry, then exhausted
+
+
 

@@ -5,9 +5,12 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from app.graph.deps import GraphDeps
 from app.graph.tools._state import build_tool_state
@@ -62,6 +65,17 @@ class SelfCorrectingSqlRunner:
         while True:
             sql = (await self._generate(hint)).strip()
             last_sql = sql
+            if not sql:
+                if empty_retry >= self._sql_empty_retry_max:
+                    return SelfCorrectingSqlResult(
+                        ok=False,
+                        sql=sql,
+                        regen_count=regen,
+                        empty_retry_count=empty_retry,
+                        warning="Intent verification requested regeneration but retry budget exhausted.",
+                    )
+                empty_retry += 1
+                continue
             if not is_llm_select_sql_shape(sql):
                 return SelfCorrectingSqlResult(
                     ok=False,
@@ -183,6 +197,7 @@ class SqlQueryTool:
                 verify = _fallback_verify(sql, domain)
                 if verify.get("action") == "regen":
                     reason = verify.get("reason", "SQL does not match intent")
+                    logger.warning("intent check triggered regen: %s", reason)
                     shared["validation_feedback"] = append_feedback(shared, "sql_fix", reason)
                     return ""
             return sql
