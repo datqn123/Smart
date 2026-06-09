@@ -30,6 +30,9 @@ class AgentState(TypedDict, total=False):
     verify_intent_ok: bool | None
     verify_intent_action: str | None
     verify_intent_reason: str | None
+    empty_verdict: str | None       # "legitimate" | "suspicious" | "wrong"
+    empty_reason: str | None        # explanation of the verdict
+    empty_warning: str | None       # user-facing warning (e.g. "Có thể năm trong câu SQL chưa đúng...")
     result_ok: bool | None
     result_empty: bool | None
     error_payload: dict[str, Any] | None
@@ -114,6 +117,9 @@ _TRANSIENT_KEYS = frozenset(
         "verify_intent_ok",
         "verify_intent_action",
         "verify_intent_reason",
+        "empty_verdict",
+        "empty_reason",
+        "empty_warning",
         "result_ok",
         "result_empty",
         "runtime_schema_artifact",
