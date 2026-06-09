@@ -278,6 +278,15 @@ def _build_sql_empty_message(
     state: AgentState,
     user_q: str,
 ) -> str:
+    empty_warning = state.get("empty_warning") or ""
+
+    if empty_warning:
+        return (
+            "Không có dữ liệu phù hợp với điều kiện bạn yêu cầu.\n\n"
+            f"⚠️ {empty_warning}\n\n"
+            "Bạn muốn thử lại với thông tin khác không?"
+        )
+
     reg = deps.llm_registry
     if reg is None:
         return SQL_EMPTY_VI
