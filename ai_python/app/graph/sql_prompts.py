@@ -70,6 +70,8 @@ def _lines_enriched(artifact: SchemaArtifact, table_names: list[str] | None) -> 
             )
             if fk_txt:
                 head += f"\nFKs: {fk_txt}"
+        if t.relationship_hints:
+            head += "\nRelationships:\n" + "\n".join(f"  {h}" for h in t.relationship_hints)
         if t.distinct_values:
             dv_lines = []
             for col_name, vals in t.distinct_values.items():
