@@ -32,6 +32,7 @@ class _SchemaSnapshot:
     pks: dict[str, list[str]]
     fks: dict[str, list[dict[str, Any]]]
     col_desc_map: dict[tuple[str, str], str]
+    rel_desc_map: dict[tuple[str, str, str, str], str]
     sample_rows: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     distinct_values: dict[str, dict[str, list[str]]] = field(default_factory=dict)
 
@@ -156,6 +157,32 @@ def _fetch_column_descriptions(
         if t and c and d:
             out[(t, c)] = d
     return out
+
+
+def _fetch_relationship_descriptions(
+    cur: Any, *, schema: str, registry_table: str
+) -> list[dict[str, str]]:
+    """Fetch business descriptions for FK relationships from ai_relationship_description."""
+    if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", schema) or not re.match(
+        r"^[A-Za-z_][A-Za-z0-9_]*$", registry_table
+    ):
+        raise ValueError("invalid schema or registry_table identifier for ai_relationship_description")
+    q = f"""
+        SELECT from_table, from_column, to_table, to_column, COALESCE(description, '')
+        FROM {schema}.{registry_table}
+        ORDER BY from_table, from_column
+    """
+    cur.execute(q)
+    return [
+        {
+            "from_table": str(r[0]),
+            "from_column": str(r[1]),
+            "to_table": str(r[2]) if r[2] else "",
+            "to_column": str(r[3]) if r[3] else "",
+            "description": str(r[4]),
+        }
+        for r in cur.fetchall()
+    ]
 
 
 def _rank_tables(user_q: str, rows: list[tuple[str, str]], *, max_tables: int) -> list[str]:
@@ -499,6 +526,19 @@ def _build_snapshot(
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("ai_column_description registry unavailable: %s", exc)
+    rel_desc_map: dict[tuple[str, str, str, str], str] = {}
+    try:
+        raw_rels = _fetch_relationship_descriptions(
+            cur,
+            schema=schema,
+            registry_table=col_desc_table.replace("ai_column_description", "ai_relationship_description"),
+        )
+        for r in raw_rels:
+            key = (r["from_table"].lower(), r["from_column"].lower(),
+                   (r["to_table"] or "").lower(), (r["to_column"] or "").lower())
+            rel_desc_map[key] = r["description"]
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("ai_relationship_description unavailable: %s", exc)
     sample_rows: dict[str, list[dict[str, Any]]] = {}
     distinct_values: dict[str, dict[str, list[str]]] = {}
     if introspection_enabled:
@@ -525,6 +565,7 @@ def _build_snapshot(
         pks=pks,
         fks=fks,
         col_desc_map=col_desc_map,
+        rel_desc_map=rel_desc_map,
         sample_rows=sample_rows,
         distinct_values=distinct_values,
     )
@@ -553,6 +594,13 @@ def _artifact_from_snapshot(
                 merged_cols.append(cm.model_copy(update={"description": reg_txt}))
             else:
                 merged_cols.append(cm)
+        rel_hints: list[str] = []
+        for fk in snapshot.fks.get(tname, []):
+            key = (tname.lower(), fk.get("column", "").lower(),
+                   (fk.get("ref_table") or "").lower(), (fk.get("ref_column") or "").lower())
+            desc = snapshot.rel_desc_map.get(key)
+            if desc:
+                rel_hints.append(f"{fk['column']} → {fk['ref_table']}.{fk['ref_column']}: {desc}")
         tmeta.append(
             TableMeta(
                 name=tname,
@@ -562,6 +610,7 @@ def _artifact_from_snapshot(
                 description=snapshot.desc_map.get(tname),
                 sample_rows=snapshot.sample_rows.get(tname, []),
                 distinct_values=snapshot.distinct_values.get(tname, {}),
+                relationship_hints=rel_hints,
             )
         )
     if not tmeta:

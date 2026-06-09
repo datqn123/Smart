@@ -39,6 +39,10 @@ class TableMeta(BaseModel):
         default_factory=dict,
         description="Column name -> distinct non-null values for enum-like text columns.",
     )
+    relationship_hints: list[str] = Field(
+        default_factory=list,
+        description="Business descriptions of FK relationships, e.g. 'category_id → categories.id: Each product belongs to a category'.",
+    )
 
 
 class SchemaArtifact(BaseModel):

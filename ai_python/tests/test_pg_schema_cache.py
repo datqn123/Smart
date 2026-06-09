@@ -16,6 +16,7 @@ def _snapshot() -> _SchemaSnapshot:
         pks={"customers": ["id"]},
         fks={"customers": []},
         col_desc_map={},
+        rel_desc_map={},
         sample_rows={},
         distinct_values={},
     )
