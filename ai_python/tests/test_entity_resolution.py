@@ -3,6 +3,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock
 
 import pytest
+import pytest_asyncio
 
 from app.graph.entity_resolution import (
     _extract_keywords,
@@ -12,6 +13,7 @@ from app.graph.entity_resolution import (
     resolve_entities_for_domain,
 )
 from app.graph.sql_query_domain import SqlQueryDomain
+from app.graph.tools.sql_query import SqlQueryTool
 
 
 class TestExtractKeywords:
@@ -299,3 +301,81 @@ class TestResolveEntitiesForDomain:
         )
         assert result == {}
         deps.sql_executor.aexecute.assert_not_awaited()
+
+
+class TestEntityContextCache:
+    """Tests for thread-level entity context persistence across turns."""
+
+    def teardown_method(self) -> None:
+        SqlQueryTool._entity_cache.clear()
+
+    @pytest.mark.asyncio
+    async def test_cache_stores_resolved_context(self) -> None:
+        thread_id = "test-thread-1"
+        executor_mock = AsyncMock()
+        executor_mock.aexecute.return_value = {
+            "rows": [{"name": "Gạo ST25"}, {"name": "Gạo Nàng Hương"}],
+        }
+        deps = AsyncMock()
+        deps.sql_executor = executor_mock
+        deps.settings.entity_resolution_enabled = True
+        deps.settings.entity_resolution_batch_size = 500
+        deps.settings.entity_resolution_max_batches = 1
+
+        ctx = AsyncMock()
+        ctx.thread_id = thread_id
+        ctx.tenant_id = "t1"
+        ctx.bearer_token = None
+
+        from app.graph.entity_resolution import resolve_entities_for_domain
+
+        result = await resolve_entities_for_domain(
+            deps, "t1", "gạo tồn kho", "inventory",
+        )
+        assert "products" in result
+        SqlQueryTool._entity_cache[thread_id] = result
+
+        cached = SqlQueryTool._entity_cache.get(thread_id)
+        assert cached is not None
+        assert "products" in cached
+
+    @pytest.mark.asyncio
+    async def test_cached_context_survives_generic_domain(self) -> None:
+        thread_id = "test-thread-2"
+        SqlQueryTool._entity_cache[thread_id] = {
+            "products": {
+                "exact_matches": [],
+                "fuzzy_matches": ["Gạo ST25", "Gạo Nàng Hương"],
+                "loaded_names": ["Gạo ST25", "Gạo Nàng Hương"],
+                "truncated": False,
+            },
+        }
+
+        cached = SqlQueryTool._entity_cache.get(thread_id)
+        assert cached is not None
+        assert "Gạo ST25" in cached["products"]["fuzzy_matches"]
+
+    @pytest.mark.asyncio
+    async def test_eviction_oldest_when_over_limit(self) -> None:
+        SqlQueryTool._entity_cache.clear()
+        from app.graph.tools.sql_query import _ENTITY_CACHE_MAX_THREADS
+
+        max_threads = _ENTITY_CACHE_MAX_THREADS
+        for i in range(max_threads):
+            SqlQueryTool._entity_cache[f"thread-{i}"] = {"data": f"value-{i}"}
+        assert len(SqlQueryTool._entity_cache) == max_threads
+
+        SqlQueryTool._cache_put_entity_context("overflow-thread", {"data": "overflow"})
+        assert len(SqlQueryTool._entity_cache) == max_threads
+        assert "thread-0" not in SqlQueryTool._entity_cache
+        assert "overflow-thread" in SqlQueryTool._entity_cache
+
+        SqlQueryTool._entity_cache.clear()
+
+    @pytest.mark.asyncio
+    async def test_cache_returns_empty_for_unknown_thread(self) -> None:
+        SqlQueryTool._entity_cache.clear()
+        SqlQueryTool._entity_cache["existing-thread"] = {"products": {"found": True}}
+
+        cached = SqlQueryTool._entity_cache.get("unknown-thread", {})
+        assert cached == {}
