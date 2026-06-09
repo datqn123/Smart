@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 _STOPWORDS = frozenset({
     "của", "và", "các", "những", "cho", "trong", "tại", "từ", "đến", "với",
     "có", "không", "đã", "đang", "sẽ", "này", "kia", "đó", "một", "hai", "ba",
-    "bốn", "năm", "tháng", "ngày", "năm", "quý", "tuần", "liệt", "kê", "danh",
+    "bốn", "năm", "tháng", "ngày", "quý", "tuần", "liệt", "kê", "danh",
     "sách", "xem", "tìm", "kiếm", "bao", "nhiêu", "nào", "số", "lượng", "giá",
     "trị", "tổng", "cộng", "tất", "cả", "đơn", "hàng", "mới", "cũ", "còn",
 })
@@ -40,12 +40,8 @@ _ENTITY_MAP: dict[str, list[dict[str, str]]] = {
     ],
 }
 
-_ALLOWED_TABLES: frozenset[str] = frozenset(
-    e["table"] for entries in _ENTITY_MAP.values() for e in entries
-)
-
-_ALLOWED_COLUMNS: frozenset[str] = frozenset(
-    e["column"] for entries in _ENTITY_MAP.values() for e in entries
+_ALLOWED_PAIRS: frozenset[tuple[str, str]] = frozenset(
+    (e["table"], e["column"]) for entries in _ENTITY_MAP.values() for e in entries
 )
 
 
@@ -82,7 +78,7 @@ async def _load_names_batch(
 ) -> list[str]:
     if not tenant_id:
         return []
-    if table not in _ALLOWED_TABLES or column not in _ALLOWED_COLUMNS:
+    if (table, column) not in _ALLOWED_PAIRS:
         logger.warning("entity resolution blocked: table=%s col=%s not in allowlist", table, column)
         return []
     sql = f'SELECT DISTINCT "{column}" FROM "{table}" ORDER BY "{column}" LIMIT {int(limit)} OFFSET {int(offset)}'

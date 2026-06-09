@@ -210,8 +210,7 @@ class SqlQueryTool:
                             self._deps, ctx.tenant_id, query, domain,
                             bearer_token=ctx.bearer_token,
                         )
-                        if entity_context:
-                            shared = {**shared, "entity_context": entity_context}
+                    shared = {**shared, "entity_context": entity_context or {}}
                 except Exception as exc:
                     logger.warning("entity resolution (thin adapter) failed: %s", exc)
             result = await asyncio.to_thread(gen_node, shared)

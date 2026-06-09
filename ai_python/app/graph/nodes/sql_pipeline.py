@@ -1256,7 +1256,7 @@ def make_entity_resolution_node(deps: GraphDeps):
             entity_context = asyncio.get_event_loop().run_until_complete(
                 resolve_entities_for_domain(
                     deps, tenant_id, question, domain,
-                    bearer_token=str(bearer_token) if bearer_token else None,
+                    bearer_token=bearer_token,
                 )
             )
             return {"entity_context": entity_context}

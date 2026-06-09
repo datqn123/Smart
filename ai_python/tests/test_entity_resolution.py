@@ -75,6 +75,34 @@ class TestLoadNamesBatch:
         assert result == []
         executor.aexecute.assert_not_awaited()
 
+    @pytest.mark.asyncio
+    async def test_forwards_bearer_token(self) -> None:
+        executor = AsyncMock()
+        executor.aexecute.return_value = {
+            "rows": [{"name": "Product A"}],
+        }
+        result = await _load_names_batch(executor, "t1", "products", "name", 0, 500, bearer_token="tok_abc")
+        assert result == ["Product A"]
+        executor.aexecute.assert_awaited_once_with(
+            executor.aexecute.call_args[0][0],
+            tenant_id="t1",
+            bearer_token="tok_abc",
+        )
+
+    @pytest.mark.asyncio
+    async def test_rejects_valid_table_wrong_column_pair(self) -> None:
+        executor = AsyncMock()
+        result = await _load_names_batch(executor, "t1", "financeledger", "name", 0, 500)
+        assert result == []
+        executor.aexecute.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_rejects_valid_table_wrong_column_pair(self) -> None:
+        executor = AsyncMock()
+        result = await _load_names_batch(executor, "t1", "categories", "email", 0, 500)
+        assert result == []
+        executor.aexecute.assert_not_awaited()
+
 
 class TestMatchKeywords:
     def test_exact_match(self) -> None:
@@ -96,6 +124,18 @@ class TestMatchKeywords:
 
     def test_no_match(self) -> None:
         result = _match_keywords(["Product A"], ["xyz"])
+        assert result["exact_matches"] == []
+        assert result["fuzzy_matches"] == []
+        assert result["found_exact"] is False
+
+    def test_empty_names_list(self) -> None:
+        result = _match_keywords([], ["test"])
+        assert result["exact_matches"] == []
+        assert result["fuzzy_matches"] == []
+        assert result["found_exact"] is False
+
+    def test_keyword_longer_than_name(self) -> None:
+        result = _match_keywords(["abc"], ["abcdefghijk"])
         assert result["exact_matches"] == []
         assert result["fuzzy_matches"] == []
         assert result["found_exact"] is False
@@ -154,6 +194,32 @@ class TestLoadEntityNames:
         assert result["loaded_names"] == []
         executor.aexecute.assert_not_awaited()
 
+    @pytest.mark.asyncio
+    async def test_forwards_bearer_token(self) -> None:
+        executor = AsyncMock()
+        executor.aexecute.return_value = {
+            "rows": [{"name": "Product A"}],
+        }
+        result = await load_entity_names(
+            executor, "t1", "products", "name",
+            keywords=["Product A"],
+            batch_size=5, max_batches=1,
+            bearer_token="tok_xyz",
+        )
+        assert "Product A" in result["exact_matches"]
+        executor.aexecute.assert_awaited_once()
+        assert executor.aexecute.call_args[1].get("bearer_token") == "tok_xyz"
+
+    @pytest.mark.asyncio
+    async def test_empty_names_list(self) -> None:
+        executor = AsyncMock()
+        result = await load_entity_names(
+            executor, "t1", "products", "name",
+            keywords=["test"], batch_size=5, max_batches=0,
+        )
+        assert result["exact_matches"] == []
+        assert result["truncated"] is True
+
 
 class TestResolveEntitiesForDomain:
     @pytest.mark.asyncio
@@ -201,3 +267,35 @@ class TestResolveEntitiesForDomain:
             deps, "", "some question", "inventory",
         )
         assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_forwards_bearer_token(self) -> None:
+        executor_mock = AsyncMock()
+        executor_mock.aexecute.return_value = {
+            "rows": [{"name": "Product A"}],
+        }
+        deps = AsyncMock()
+        deps.sql_executor = executor_mock
+        deps.settings.entity_resolution_enabled = True
+        deps.settings.entity_resolution_batch_size = 500
+        deps.settings.entity_resolution_max_batches = 1
+        result = await resolve_entities_for_domain(
+            deps, "t1",
+            "Product A tồn kho",
+            "inventory",
+            bearer_token="tok_deps",
+        )
+        assert "products" in result
+        executor_mock.aexecute.assert_awaited_once()
+        assert executor_mock.aexecute.call_args[1].get("bearer_token") == "tok_deps"
+
+    @pytest.mark.asyncio
+    async def test_unknown_domain_returns_empty(self) -> None:
+        deps = AsyncMock()
+        deps.settings.entity_resolution_enabled = True
+        deps.sql_executor = AsyncMock()
+        result = await resolve_entities_for_domain(
+            deps, "t1", "some question", "nonexistent_domain",
+        )
+        assert result == {}
+        deps.sql_executor.aexecute.assert_not_awaited()
