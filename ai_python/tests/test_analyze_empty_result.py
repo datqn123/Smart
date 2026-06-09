@@ -5,10 +5,11 @@ from __future__ import annotations
 import pytest
 
 from app.graph.analyze_empty_result import (
-    _detect_year_mismatch,
-    _detect_exact_name_match,
-    _detect_future_dates,
     _analyze_empty_heuristic,
+    _detect_exact_name_match,
+    _detect_fact_table,
+    _detect_future_dates,
+    _detect_year_mismatch,
 )
 
 
@@ -18,7 +19,7 @@ class TestYearMismatch:
         user_q = "doanh thu năm 2025"
         result = _detect_year_mismatch(sql, user_q)
         assert result is not None
-        assert "2024" in result or "2025" in result
+        assert "2024" in result and "2025" in result
 
     def test_no_mismatch_when_years_align(self):
         sql = "SELECT * FROM financeledger WHERE transaction_date BETWEEN '2025-01-01' AND '2025-03-31'"
@@ -89,6 +90,17 @@ class TestDetectFutureDates:
         assert result is None
 
 
+class TestDetectFactTable:
+    def test_detects_from_table(self):
+        assert _detect_fact_table("SELECT * FROM inventory WHERE id = 1") == "inventory"
+
+    def test_detects_join_table(self):
+        assert _detect_fact_table("SELECT p.name FROM products p JOIN categories c ON ...") == "products"
+
+    def test_no_table_returns_none(self):
+        assert _detect_fact_table("SELECT 1") is None
+
+
 class TestAnalyzeEmptyHeuristic:
     def test_legitimate_no_data(self):
         sql = "SELECT * FROM inventory WHERE product_id = 99999"
@@ -119,3 +131,17 @@ class TestAnalyzeEmptyHeuristic:
         user_q = "danh sách sản phẩm"
         result = _analyze_empty_heuristic(sql, user_q, "generic")
         assert result["verdict"] == "legitimate"
+
+    def test_suspicious_wrong_fact_table_for_domain(self):
+        sql = "SELECT * FROM stockreceipts WHERE status = 'Approved'"
+        user_q = "tồn kho hiện tại"
+        result = _analyze_empty_heuristic(sql, user_q, "inventory")
+        assert result["verdict"] == "suspicious"
+        assert "inventory" in result["reason"] or "stockreceipts" in result["reason"]
+
+    def test_suspicious_multiple_warnings(self):
+        sql = "SELECT * FROM financeledger WHERE transaction_date BETWEEN '2024-01-01' AND '2024-12-31' AND name = 'Test'"
+        user_q = "doanh thu năm 2025 của sản phẩm Test"
+        result = _analyze_empty_heuristic(sql, user_q, "ledger")
+        assert result["verdict"] == "suspicious"
+        assert "; " in result["reason"]

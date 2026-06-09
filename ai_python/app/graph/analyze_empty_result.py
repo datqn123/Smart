@@ -1,4 +1,4 @@
-"""Empty result analysis node for SQL subgraph — distinguishes legitimate no-data from wrong SQL."""
+"""Heuristic analysis for empty SQL results — distinguishes legitimate no-data from wrong SQL."""
 
 from __future__ import annotations
 
@@ -12,11 +12,6 @@ logger = logging.getLogger(__name__)
 _NAME_COLUMNS = frozenset({
     "name", "category_name", "supplier_name", "customer_name",
     "display_name", "full_name", "product_name", "warehouse_name",
-})
-
-_CODE_COLUMNS = frozenset({
-    "sku_code", "supplier_code", "customer_code", "receipt_code",
-    "product_code", "barcode", "category_code",
 })
 
 
@@ -47,7 +42,7 @@ def _detect_exact_name_match(sql: str) -> str | None:
     Returns a warning string or None.
     """
     pattern = (
-        r"\bWHERE\s+.*\b("
+        r"\bWHERE\s+.*?\b("
         + "|".join(re.escape(col) for col in _NAME_COLUMNS)
         + r")\s*=\s*'([^']+)'"
     )
@@ -79,6 +74,20 @@ def _detect_future_dates(sql: str) -> str | None:
     return None
 
 
+_DOMAIN_FACT_TABLES: dict[str, str] = {
+    "inventory": "inventory",
+    "receipt": "stockreceipts",
+    "dispatch": "stockdispatches",
+    "ledger": "financeledger",
+    "catalog_price": "products",
+}
+
+
+def _detect_fact_table(sql: str) -> str | None:
+    m = re.search(r'\b(?:FROM|JOIN)\s+(\w+)', sql, re.IGNORECASE)
+    return m.group(1).lower() if m else None
+
+
 def _analyze_empty_heuristic(sql: str, user_q: str, domain: str) -> dict[str, Any]:
     """Run heuristic checks on an empty SQL result.
 
@@ -93,6 +102,16 @@ def _analyze_empty_heuristic(sql: str, user_q: str, domain: str) -> dict[str, An
     name_warn = _detect_exact_name_match(sql)
     if name_warn:
         warnings.append(name_warn)
+
+    # Domain fact-table check
+    expected_fact = _DOMAIN_FACT_TABLES.get(domain)
+    if expected_fact:
+        actual_fact = _detect_fact_table(sql)
+        if actual_fact and actual_fact != expected_fact:
+            warnings.append(
+                f"Miền '{domain}' yêu cầu bảng fact '{expected_fact}' "
+                f"nhưng SQL dùng '{actual_fact}'. Có thể sai bảng chính."
+            )
 
     future_warn = _detect_future_dates(sql)
     if future_warn:
