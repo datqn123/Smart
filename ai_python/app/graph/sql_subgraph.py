@@ -24,6 +24,7 @@ from app.graph.nodes.sql_pipeline import (
 from app.graph.progress import wrap_node_with_stream_progress as wrap
 from app.graph.state import AgentState
 from app.graph.verify_sql_intent import make_verify_sql_intent_node
+from app.graph.analyze_empty_result import make_analyze_empty_result_node
 
 
 def _route_after_gen_sql(state: AgentState) -> str:
@@ -46,6 +47,27 @@ def _route_after_verify_sql_intent(state: AgentState) -> str:
     return "sql_review"
 
 
+def _route_after_execute_sql(state: AgentState) -> str:
+    qr = state.get("query_result")
+    if qr is None:
+        return "validate_result"
+    rows = qr.get("rows") if isinstance(qr, dict) else None
+    if isinstance(rows, list) and len(rows) == 0:
+        return "analyze_empty_result"
+    return "validate_result"
+
+
+def _route_after_analyze_empty(state: AgentState) -> str:
+    verdict = state.get("empty_verdict", "legitimate")
+    if verdict == "wrong":
+        attempt = int(state.get("sql_attempt_count") or 0)
+        max_attempts = int(state.get("sql_repair_max_attempts") or 3)
+        if attempt >= max_attempts:
+            return "fail_max_attempts"
+        return "gen_sql"
+    return "validate_result"
+
+
 def build_sql_subgraph(deps: GraphDeps):
     g = StateGraph(AgentState)
     g.add_node("schema_explore", wrap("schema_explore", make_schema_explore_node(deps)))
@@ -54,6 +76,7 @@ def build_sql_subgraph(deps: GraphDeps):
     g.add_node("sql_review", wrap("sql_review", make_sql_review_node(deps)))
     g.add_node("validate_sql", wrap("validate_sql", make_validate_sql_node(deps)))
     g.add_node("execute_sql", wrap("execute_sql", make_execute_sql_node(deps)))
+    g.add_node("analyze_empty_result", wrap("analyze_empty_result", make_analyze_empty_result_node(deps)))
     g.add_node("validate_result", wrap("validate_result", make_validate_result_node(deps)))
     g.add_node("chart_readiness", wrap("chart_readiness", make_chart_readiness_node(deps)))
     g.add_node("fail_max_attempts", wrap("fail_max_attempts", make_fail_max_attempts_node(deps)))
@@ -103,7 +126,23 @@ def build_sql_subgraph(deps: GraphDeps):
             "fail_max_attempts": "fail_max_attempts",
         },
     )
-    g.add_edge("execute_sql", "validate_result")
+    g.add_conditional_edges(
+        "execute_sql",
+        _route_after_execute_sql,
+        {
+            "validate_result": "validate_result",
+            "analyze_empty_result": "analyze_empty_result",
+        },
+    )
+    g.add_conditional_edges(
+        "analyze_empty_result",
+        _route_after_analyze_empty,
+        {
+            "validate_result": "validate_result",
+            "gen_sql": "gen_sql",
+            "fail_max_attempts": "fail_max_attempts",
+        },
+    )
     g.add_conditional_edges(
         "validate_result",
         route_after_validate_result,
