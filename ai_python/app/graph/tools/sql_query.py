@@ -205,6 +205,7 @@ class SqlQueryTool:
                     from app.graph.sql_query_domain import detect_sql_query_domain
 
                     domain = detect_sql_query_domain(query)
+                    entity_context = None
                     if domain != "generic":
                         entity_context = await resolve_entities_for_domain(
                             self._deps, ctx.tenant_id, query, domain,
