@@ -145,3 +145,70 @@ class TestAnalyzeEmptyHeuristic:
         result = _analyze_empty_heuristic(sql, user_q, "ledger")
         assert result["verdict"] == "suspicious"
         assert "; " in result["reason"]
+
+
+class TestMakeAnalyzeEmptyNode:
+    def test_legitimate_empty_passes_through(self):
+        from unittest.mock import MagicMock
+        from app.graph.analyze_empty_result import make_analyze_empty_result_node
+
+        deps = MagicMock()
+        deps.llm_registry = None
+        node = make_analyze_empty_result_node(deps)
+
+        state = {
+            "generated_sql": "SELECT * FROM inventory WHERE product_id = 99999",
+            "query_result": {"rows": []},
+            "intent": "inventory inquiry",
+        }
+        result = node(state)
+        assert result["empty_verdict"] == "legitimate"
+
+    def test_suspicious_sets_warning(self):
+        from unittest.mock import MagicMock
+        from app.graph.analyze_empty_result import make_analyze_empty_result_node
+
+        deps = MagicMock()
+        deps.llm_registry = None
+        node = make_analyze_empty_result_node(deps)
+
+        state = {
+            "generated_sql": "SELECT * FROM financeledger WHERE transaction_date BETWEEN '2024-01-01' AND '2024-12-31'",
+            "query_result": {"rows": []},
+            "intent": "doanh thu năm 2025",
+        }
+        result = node(state)
+        assert result["empty_verdict"] == "suspicious"
+        assert result.get("empty_warning")
+
+    def test_no_query_result_returns_legitimate(self):
+        from unittest.mock import MagicMock
+        from app.graph.analyze_empty_result import make_analyze_empty_result_node
+
+        deps = MagicMock()
+        deps.llm_registry = None
+        node = make_analyze_empty_result_node(deps)
+
+        state = {
+            "generated_sql": "SELECT 1",
+            "query_result": None,
+            "intent": "test",
+        }
+        result = node(state)
+        assert result["empty_verdict"] == "legitimate"
+
+    def test_no_sql_returns_legitimate(self):
+        from unittest.mock import MagicMock
+        from app.graph.analyze_empty_result import make_analyze_empty_result_node
+
+        deps = MagicMock()
+        deps.llm_registry = None
+        node = make_analyze_empty_result_node(deps)
+
+        state = {
+            "generated_sql": "",
+            "query_result": {"rows": []},
+            "intent": "test",
+        }
+        result = node(state)
+        assert result["empty_verdict"] == "legitimate"
