@@ -152,3 +152,31 @@ async def test_sql_write_blocked_by_readonly() -> None:
 
     assert result.ok is False
     assert "read-only" in result.warning.lower()
+
+
+@pytest.mark.asyncio
+async def test_legit_empty_result_not_degraded():
+    """SQL passed review but returns 0 rows legitimately — should return ok=True, degraded=False."""
+
+    from app.graph.tools.sql_query import SelfCorrectingSqlRunner
+
+    async def _gen(hint):
+        return "SELECT name FROM products WHERE category_name ILIKE '%NonExistent%'"
+
+    async def _review(sql):
+        return {"ok": True, "issues": []}
+
+    async def _execute(sql):
+        return []
+
+    runner = SelfCorrectingSqlRunner(
+        sql_regen_max=1,
+        sql_empty_retry_max=1,
+        generate=_gen,
+        review=_review,
+        execute=_execute,
+    )
+    result = await runner.run()
+    assert result.ok is True
+    assert result.degraded is False
+    assert result.warning == ""

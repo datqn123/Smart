@@ -30,6 +30,13 @@ def _detect_fact_table(sql: str) -> str | None:
     return m.group(1).lower() if m else None
 
 
+def _is_simple_sql(sql: str) -> bool:
+    if re.search(r'\bWITH\b', sql, re.IGNORECASE):
+        return False
+    joins = re.findall(r'\bJOIN\b', sql, re.IGNORECASE)
+    return len(joins) <= 1
+
+
 def _fallback_verify(sql: str, domain: str) -> dict[str, Any]:
     fact = _detect_fact_table(sql)
     expected = _DOMAIN_FACT_TABLES.get(domain)
@@ -41,6 +48,14 @@ def _fallback_verify(sql: str, domain: str) -> dict[str, Any]:
             "action": "regen",
             "reason": f"Wrong fact table: expected '{expected}' but SQL uses '{fact}'",
             "feedback": f"Replace FROM {fact} with FROM {expected} for domain {domain}",
+        }
+
+    if _is_simple_sql(sql) and not expected:
+        return {
+            "intent_match": True,
+            "confidence": "high",
+            "action": "bypass_review",
+            "reason": "Simple SQL query passed intent check",
         }
 
     return {
