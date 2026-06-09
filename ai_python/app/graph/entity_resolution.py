@@ -40,6 +40,14 @@ _ENTITY_MAP: dict[str, list[dict[str, str]]] = {
     ],
 }
 
+_ALLOWED_TABLES: frozenset[str] = frozenset({
+    "products", "suppliers", "categories", "financeledger",
+})
+
+_ALLOWED_COLUMNS: frozenset[str] = frozenset({
+    "name", "transaction_type",
+})
+
 
 def _extract_keywords(question: str, domain: str) -> list[str]:
     if domain == "generic":
@@ -65,19 +73,24 @@ def _extract_keywords(question: str, domain: str) -> list[str]:
 
 async def _load_names_batch(
     executor: SqlExecutor,
-    tenant_id: str,
+    tenant_id: str | None,
     table: str,
     column: str,
     offset: int,
     limit: int,
 ) -> list[str]:
-    sql = f'SELECT DISTINCT "{column}" FROM "{table}" ORDER BY "{column}" LIMIT {limit} OFFSET {offset}'
+    if not tenant_id:
+        return []
+    if table not in _ALLOWED_TABLES or column not in _ALLOWED_COLUMNS:
+        logger.warning("entity resolution blocked: table=%s col=%s not in allowlist", table, column)
+        return []
+    sql = f'SELECT DISTINCT "{column}" FROM "{table}" ORDER BY "{column}" LIMIT {int(limit)} OFFSET {int(offset)}'
     try:
         result = await executor.aexecute(sql, tenant_id=tenant_id)
         rows = result.get("rows", [])
         return [str(r[column]) for r in rows if column in r]
-    except Exception:
-        logger.warning("Failed to load names batch from %s.%s", table, column)
+    except Exception as exc:
+        logger.warning("Failed to load names batch from %s.%s: %s", table, column, exc)
         return []
 
 
@@ -121,7 +134,7 @@ def _match_keywords(names: list[str], keywords: list[str]) -> dict[str, Any]:
 
 async def load_entity_names(
     executor: SqlExecutor,
-    tenant_id: str,
+    tenant_id: str | None,
     table: str,
     column: str,
     keywords: list[str],
@@ -171,10 +184,12 @@ async def load_entity_names(
 
 async def resolve_entities_for_domain(
     deps: GraphDeps,
-    tenant_id: str,
+    tenant_id: str | None,
     question: str,
     domain: SqlQueryDomain,
 ) -> dict[str, Any]:
+    if not tenant_id:
+        return {}
     if not deps.settings.entity_resolution_enabled:
         return {}
     if domain == "generic":
