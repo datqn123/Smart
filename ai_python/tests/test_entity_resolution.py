@@ -54,6 +54,27 @@ class TestLoadNamesBatch:
         result = await _load_names_batch(executor, "t1", "products", "name", 0, 500)
         assert result == []
 
+    @pytest.mark.asyncio
+    async def test_rejects_invalid_table(self) -> None:
+        executor = AsyncMock()
+        result = await _load_names_batch(executor, "t1", "users", "name", 0, 500)
+        assert result == []
+        executor.aexecute.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_rejects_invalid_column(self) -> None:
+        executor = AsyncMock()
+        result = await _load_names_batch(executor, "t1", "products", "password", 0, 500)
+        assert result == []
+        executor.aexecute.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_for_none_tenant_id(self) -> None:
+        executor = AsyncMock()
+        result = await _load_names_batch(executor, None, "products", "name", 0, 500)
+        assert result == []
+        executor.aexecute.assert_not_awaited()
+
 
 class TestMatchKeywords:
     def test_exact_match(self) -> None:
@@ -122,6 +143,17 @@ class TestLoadEntityNames:
         assert result["truncated"] is True
         executor.aexecute.assert_not_awaited()
 
+    @pytest.mark.asyncio
+    async def test_returns_empty_for_none_tenant_id(self) -> None:
+        executor = AsyncMock()
+        result = await load_entity_names(
+            executor, None, "products", "name",
+            keywords=["test"], batch_size=5, max_batches=3,
+        )
+        assert result["exact_matches"] == []
+        assert result["loaded_names"] == []
+        executor.aexecute.assert_not_awaited()
+
 
 class TestResolveEntitiesForDomain:
     @pytest.mark.asyncio
@@ -149,5 +181,23 @@ class TestResolveEntitiesForDomain:
         deps.settings.entity_resolution_enabled = False
         result = await resolve_entities_for_domain(
             deps, "t1", "some question", "inventory",
+        )
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_for_none_tenant_id(self) -> None:
+        deps = AsyncMock()
+        deps.settings.entity_resolution_enabled = True
+        result = await resolve_entities_for_domain(
+            deps, None, "some question", "inventory",
+        )
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_for_empty_tenant_id(self) -> None:
+        deps = AsyncMock()
+        deps.settings.entity_resolution_enabled = True
+        result = await resolve_entities_for_domain(
+            deps, "", "some question", "inventory",
         )
         assert result == {}

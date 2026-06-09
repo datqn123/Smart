@@ -40,13 +40,13 @@ _ENTITY_MAP: dict[str, list[dict[str, str]]] = {
     ],
 }
 
-_ALLOWED_TABLES: frozenset[str] = frozenset({
-    "products", "suppliers", "categories", "financeledger",
-})
+_ALLOWED_TABLES: frozenset[str] = frozenset(
+    e["table"] for entries in _ENTITY_MAP.values() for e in entries
+)
 
-_ALLOWED_COLUMNS: frozenset[str] = frozenset({
-    "name", "transaction_type",
-})
+_ALLOWED_COLUMNS: frozenset[str] = frozenset(
+    e["column"] for entries in _ENTITY_MAP.values() for e in entries
+)
 
 
 def _extract_keywords(question: str, domain: str) -> list[str]:
@@ -78,6 +78,7 @@ async def _load_names_batch(
     column: str,
     offset: int,
     limit: int,
+    bearer_token: str | None = None,
 ) -> list[str]:
     if not tenant_id:
         return []
@@ -86,7 +87,7 @@ async def _load_names_batch(
         return []
     sql = f'SELECT DISTINCT "{column}" FROM "{table}" ORDER BY "{column}" LIMIT {int(limit)} OFFSET {int(offset)}'
     try:
-        result = await executor.aexecute(sql, tenant_id=tenant_id)
+        result = await executor.aexecute(sql, tenant_id=tenant_id, bearer_token=bearer_token)
         rows = result.get("rows", [])
         return [str(r[column]) for r in rows if column in r]
     except Exception as exc:
