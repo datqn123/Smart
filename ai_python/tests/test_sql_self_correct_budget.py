@@ -180,3 +180,100 @@ async def test_legit_empty_result_not_degraded():
     assert result.ok is True
     assert result.degraded is False
     assert result.warning == ""
+
+
+@pytest.mark.asyncio
+async def test_analyze_warning_propagates_to_result():
+    """When analyze callable returns a warning, SelfCorrectingSqlResult.warning contains it."""
+
+    from app.graph.tools.sql_query import SelfCorrectingSqlResult, SelfCorrectingSqlRunner
+
+    async def _gen(hint):
+        return "SELECT 1"
+
+    async def _review(sql):
+        return {"ok": True, "issues": []}
+
+    async def _execute(sql):
+        return []
+
+    async def _analyze(sql, query):
+        return {
+            "verdict": "suspicious",
+            "warning": "Table 'nonexistent' not found in schema",
+            "reason": "missing table",
+        }
+
+    runner = SelfCorrectingSqlRunner(
+        sql_regen_max=2,
+        sql_empty_retry_max=1,
+        generate=_gen,
+        review=_review,
+        execute=_execute,
+        analyze=_analyze,
+        query="test query",
+    )
+    result: SelfCorrectingSqlResult = await runner.run()
+    assert result.ok is True
+    assert result.warning == "Table 'nonexistent' not found in schema"
+
+
+@pytest.mark.asyncio
+async def test_analyze_exception_caught_gracefully():
+    """When analyze callable raises, runner catches exception and returns empty warning."""
+
+    from app.graph.tools.sql_query import SelfCorrectingSqlResult, SelfCorrectingSqlRunner
+
+    async def _gen(hint):
+        return "SELECT 1"
+
+    async def _review(sql):
+        return {"ok": True, "issues": []}
+
+    async def _execute(sql):
+        return []
+
+    async def _analyze(sql, query):
+        raise RuntimeError("analyze exploded")
+
+    runner = SelfCorrectingSqlRunner(
+        sql_regen_max=2,
+        sql_empty_retry_max=1,
+        generate=_gen,
+        review=_review,
+        execute=_execute,
+        analyze=_analyze,
+        query="test query",
+    )
+    result: SelfCorrectingSqlResult = await runner.run()
+    assert result.ok is True
+    assert result.warning == ""
+
+
+@pytest.mark.asyncio
+async def test_analyze_none_returns_empty_warning():
+    """When analyze is None, empty result returns warning == ''."""
+
+    from app.graph.tools.sql_query import SelfCorrectingSqlResult, SelfCorrectingSqlRunner
+
+    async def _gen(hint):
+        return "SELECT 1"
+
+    async def _review(sql):
+        return {"ok": True, "issues": []}
+
+    async def _execute(sql):
+        return []
+
+    runner = SelfCorrectingSqlRunner(
+        sql_regen_max=2,
+        sql_empty_retry_max=1,
+        generate=_gen,
+        review=_review,
+        execute=_execute,
+        analyze=None,
+        query="test query",
+    )
+    result: SelfCorrectingSqlResult = await runner.run()
+    assert result.ok is True
+    assert result.warning == ""
