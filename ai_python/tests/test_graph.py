@@ -239,6 +239,7 @@ def test_route_sql_schema_explorer(monkeypatch: pytest.MonkeyPatch, patch_pg_sch
 def test_route_chart_pipeline(monkeypatch: pytest.MonkeyPatch, patch_pg_schema_v1: None) -> None:
     monkeypatch.delenv("SQL_ALLOWED_TABLES", raising=False)
     fake = FakeLlmClient(reply="SELECT id FROM customers LIMIT 10")
+    sql_gen_fake = FakeLlmClient(reply="SELECT id FROM customers LIMIT 10")
     reg = LlmRegistry()
     reg.register("default", fake)
     reg.register("intent", FakeLlmClient(intent="system_data_chart"))
@@ -246,7 +247,7 @@ def test_route_chart_pipeline(monkeypatch: pytest.MonkeyPatch, patch_pg_schema_v
     reg.register("chart_critic", fake)
     reg.register("chart", fake)
     reg.register("review", fake)
-    reg.register("sql_gen", fake)
+    reg.register("sql_gen", sql_gen_fake)
     reg.register("sql_review", FakeLlmClient())
     reg.register("chat", FakeLlmClient())
     reg.register("summarize", FakeLlmClient(reply="should not run for chart"))
@@ -263,7 +264,7 @@ def test_route_chart_pipeline(monkeypatch: pytest.MonkeyPatch, patch_pg_schema_v
     assert out.get("chart_spec_final")
     assert out["chart_spec_final"].get("data")
     assert out.get("final_answer")
-    assert "Chart/data planning brief" in (fake.last_invoke_text or "")
+    assert "Chart/data planning brief" in (sql_gen_fake.last_invoke_text or "")
 def test_benign_sql_review_issue_limit_with_aggregate() -> None:
     msg = (
         "The LIMIT clause is redundant and logically incorrect when used with an aggregate "

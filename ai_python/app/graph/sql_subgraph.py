@@ -17,19 +17,40 @@ from app.graph.nodes.sql_pipeline import (
     make_sql_review_node,
     make_validate_result_node,
     make_validate_sql_node,
-    route_after_gen_sql,
     route_after_sql_review,
     route_after_validate_result,
     route_after_validate_sql,
 )
 from app.graph.progress import wrap_node_with_stream_progress as wrap
 from app.graph.state import AgentState
+from app.graph.verify_sql_intent import make_verify_sql_intent_node
+
+
+def _route_after_gen_sql(state: AgentState) -> str:
+    err = state.get("error_payload")
+    if err and err.get("error") in ("schema_load_failed", "schema_catalog_failed"):
+        return "fail_max_attempts"
+    return "verify_sql_intent"
+
+
+def _route_after_verify_sql_intent(state: AgentState) -> str:
+    action = state.get("verify_intent_action", "proceed")
+    if action == "regen":
+        attempt = int(state.get("sql_attempt_count") or 0)
+        max_attempts = int(state.get("sql_repair_max_attempts") or 3)
+        if attempt >= max_attempts:
+            return "fail_max_attempts"
+        return "gen_sql"
+    if action == "bypass_review":
+        return "execute_sql"
+    return "sql_review"
 
 
 def build_sql_subgraph(deps: GraphDeps):
     g = StateGraph(AgentState)
     g.add_node("schema_explore", wrap("schema_explore", make_schema_explore_node(deps)))
     g.add_node("gen_sql", wrap("gen_sql", make_gen_sql_node(deps)))
+    g.add_node("verify_sql_intent", wrap("verify_sql_intent", make_verify_sql_intent_node(deps)))
     g.add_node("sql_review", wrap("sql_review", make_sql_review_node(deps)))
     g.add_node("validate_sql", wrap("validate_sql", make_validate_sql_node(deps)))
     g.add_node("execute_sql", wrap("execute_sql", make_execute_sql_node(deps)))
@@ -48,9 +69,19 @@ def build_sql_subgraph(deps: GraphDeps):
     g.add_edge("schema_explore", "gen_sql")
     g.add_conditional_edges(
         "gen_sql",
-        route_after_gen_sql,
+        _route_after_gen_sql,
+        {
+            "verify_sql_intent": "verify_sql_intent",
+            "fail_max_attempts": "fail_max_attempts",
+        },
+    )
+    g.add_conditional_edges(
+        "verify_sql_intent",
+        _route_after_verify_sql_intent,
         {
             "sql_review": "sql_review",
+            "gen_sql": "gen_sql",
+            "execute_sql": "execute_sql",
             "fail_max_attempts": "fail_max_attempts",
         },
     )

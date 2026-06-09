@@ -27,6 +27,9 @@ class AgentState(TypedDict, total=False):
     thread_id: str | None
     sql_review_ok: bool | None
     sql_valid: bool | None
+    verify_intent_ok: bool | None
+    verify_intent_action: str | None
+    verify_intent_reason: str | None
     result_ok: bool | None
     result_empty: bool | None
     error_payload: dict[str, Any] | None
@@ -108,6 +111,9 @@ _TRANSIENT_KEYS = frozenset(
         "route_source",
         "sql_review_ok",
         "sql_valid",
+        "verify_intent_ok",
+        "verify_intent_action",
+        "verify_intent_reason",
         "result_ok",
         "result_empty",
         "runtime_schema_artifact",
