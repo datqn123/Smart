@@ -374,6 +374,12 @@ class GraphSettings(BaseSettings):
     # --- Agentic AI target completion P3: SQL self-correct + data validator ---
     sql_regen_max: int = Field(default=3, ge=0, le=10)
     sql_empty_retry_max: int = Field(default=2, ge=0, le=10)
+    entity_resolution_enabled: bool = Field(
+        default=True,
+        description="Enable entity resolution step before gen_sql.",
+    )
+    entity_resolution_batch_size: int = Field(default=500, ge=1, le=5000)
+    entity_resolution_max_batches: int = Field(default=3, ge=1, le=20)
     agentic_data_validator_enabled: bool = Field(
         default=False,
         description="Enable data_validator tool in agentic flows.",
@@ -587,6 +593,8 @@ class GraphSettings(BaseSettings):
         "harness_token_budget",
         "sql_regen_max",
         "sql_empty_retry_max",
+        "entity_resolution_batch_size",
+        "entity_resolution_max_batches",
         "plan_replan_max",
         "working_memory_pairs",
         "semantic_expire_days",
