@@ -174,7 +174,18 @@ class SqlQueryTool:
                 shared = {**shared, "validation_feedback": append_feedback(shared, "sql_fix", str(hint))}
             result = await asyncio.to_thread(gen_node, shared)
             shared = {**shared, **result}
-            return str(shared.get("generated_sql") or "")
+            sql = str(shared.get("generated_sql") or "")
+            # Lightweight intent check after generation (verify_sql_intent heuristic)
+            if sql:
+                from app.graph.sql_query_domain import detect_sql_query_domain
+                from app.graph.verify_sql_intent import _fallback_verify
+                domain = detect_sql_query_domain(query)
+                verify = _fallback_verify(sql, domain)
+                if verify.get("action") == "regen":
+                    reason = verify.get("reason", "SQL does not match intent")
+                    shared["validation_feedback"] = append_feedback(shared, "sql_fix", reason)
+                    return ""
+            return sql
 
         async def review(sql: str) -> dict[str, Any]:
             nonlocal shared

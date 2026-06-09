@@ -50,7 +50,7 @@ def _fallback_verify(sql: str, domain: str) -> dict[str, Any]:
             "feedback": f"Replace FROM {fact} with FROM {expected} for domain {domain}",
         }
 
-    if _is_simple_sql(sql) and not expected:
+    if expected and _is_simple_sql(sql):
         return {
             "intent_match": True,
             "confidence": "high",
