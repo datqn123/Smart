@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal, TypedDict
+from typing import Annotated, Any, Literal, NotRequired, TypedDict
 
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
@@ -102,6 +102,8 @@ class AgentState(TypedDict, total=False):
     planner_doc_refs: list[str] | None
     # SSE progress text shown to user during processing
     progress_text: str | None
+    # Entity resolution context (Task 3)
+    entity_context: NotRequired[dict[str, Any]]
 
 
 _TRANSIENT_KEYS = frozenset(

@@ -1219,6 +1219,46 @@ def make_fail_max_attempts_node(deps: GraphDeps):
     return fail_max_attempts
 
 
+def _build_entity_context_section(state: AgentState) -> str:
+    ec = state.get("entity_context")
+    if not ec:
+        return ""
+    lines = ["### Entity Name References (from database)"]
+    for table, data in ec.items():
+        if not isinstance(data, dict):
+            continue
+        names = data.get("exact_matches") or data.get("loaded_names", [])[:10]
+        if names:
+            lines.append(f"- {table}: {', '.join(names)}")
+    return "\n".join(lines) if len(lines) > 1 else ""
+
+
+def make_entity_resolution_node(deps: GraphDeps):
+    """Return a node function that resolves entity names before gen_sql."""
+    def entity_resolution_node(state: AgentState) -> dict[str, Any]:
+        question = latest_human_question(state)
+        if not question:
+            return {}
+        tenant_id = str(state.get("tenant_id") or "")
+        if not tenant_id:
+            return {}
+        try:
+            import asyncio
+            from app.graph.entity_resolution import resolve_entities_for_domain
+
+            domain = detect_sql_query_domain(question)
+            if domain == "generic":
+                return {}
+            entity_context = asyncio.get_event_loop().run_until_complete(
+                resolve_entities_for_domain(deps, tenant_id, question, domain)
+            )
+            return {"entity_context": entity_context}
+        except Exception as exc:
+            logger.warning("entity resolution node failed: %s", exc)
+            return {}
+    return entity_resolution_node
+
+
 def route_after_gen_sql(state: AgentState) -> str:
     err = state.get("error_payload")
     if err and err.get("error") in ("schema_load_failed", "schema_catalog_failed"):
