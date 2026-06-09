@@ -3,7 +3,7 @@
 -- Uses UPSERT (ON CONFLICT DO UPDATE) to replace basic V45 descriptions.
 -- Format: (table_name, column_name, description)
 
-INSERT INTO public.ai_column_description (table_name, column_name, description)
+INSERT INTO ai_column_description (table_name, column_name, description)
 VALUES
     -- Categories
     ('categories', 'name',
@@ -57,4 +57,4 @@ VALUES
      'Đơn đã huỷ (Cancelled) không tính. active rows: deleted_at IS NULL.')
 ON CONFLICT (table_name, column_name) DO UPDATE
     SET description = EXCLUDED.description,
-        updated_at = now();
+        updated_at = CURRENT_TIMESTAMP;
