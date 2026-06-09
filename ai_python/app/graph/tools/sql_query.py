@@ -199,7 +199,7 @@ class SqlQueryTool:
             nonlocal shared
             if hint:
                 shared = {**shared, "validation_feedback": append_feedback(shared, "sql_fix", str(hint))}
-            if deps.settings.entity_resolution_enabled and "entity_context" not in shared:
+            if self._deps.settings.entity_resolution_enabled and "entity_context" not in shared:
                 try:
                     from app.graph.entity_resolution import resolve_entities_for_domain
                     from app.graph.sql_query_domain import detect_sql_query_domain
@@ -207,7 +207,7 @@ class SqlQueryTool:
                     domain = detect_sql_query_domain(query)
                     if domain != "generic":
                         entity_context = await resolve_entities_for_domain(
-                            deps, ctx.tenant_id, query, domain
+                            self._deps, ctx.tenant_id, query, domain
                         )
                         if entity_context:
                             shared = {**shared, "entity_context": entity_context}
