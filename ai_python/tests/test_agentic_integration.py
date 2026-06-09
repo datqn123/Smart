@@ -288,12 +288,17 @@ async def test_sql_tool_masks_sensitive_columns_for_staff():
 
     rows = [{"name": "Áo", "cost_price": 100, "sale_price": 150}]
 
-    class _Compiled:
-        def invoke(self, state, config):  # noqa: ANN001
-            return {"result_ok": True, "query_result": {"rows": rows}, "query_table_sse": {"rows": rows}, "generated_sql": "SELECT *"}
+    async def _gen(hint):
+        return "SELECT name, cost_price, sale_price FROM products"
+
+    async def _review(sql):
+        return {"ok": True, "issues": []}
+
+    async def _execute(sql):
+        return rows
 
     deps = SimpleNamespace(settings=_settings(agentic_capability_guard_enabled=True))
-    tool = SqlQueryTool(deps, compiled=_Compiled())
+    tool = SqlQueryTool(deps, _test_generate=_gen, _test_review=_review, _test_execute=_execute)
 
     staff = await tool.invoke({"query": "x"}, _ctx(role="staff"))
     owner = await tool.invoke({"query": "x"}, _ctx(role="owner"))

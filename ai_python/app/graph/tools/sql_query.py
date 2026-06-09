@@ -10,8 +10,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.graph.deps import GraphDeps
-from app.graph.sql_subgraph import build_sql_subgraph
-from app.graph.tools._state import build_tool_config, build_tool_state
+from app.graph.tools._state import build_tool_state
 from app.graph.validate_sql import is_llm_select_sql_shape
 from app.harness.capability import CapabilityMatrix, sanitize_user_data
 from app.harness.tool_registry import ToolManifest, ToolResult, TurnContext
@@ -132,19 +131,6 @@ class SelfCorrectingSqlRunner:
             )
 
 
-def _mask_sse_rows(
-    sse: Any, role: str | None, capability: CapabilityMatrix
-) -> Any:
-    """Mask sensitive columns inside a data_table SSE payload for non-owner roles."""
-    if not isinstance(sse, dict):
-        return sse
-    masked = dict(sse)
-    for key, value in sse.items():
-        if isinstance(value, list) and value and all(isinstance(item, dict) for item in value):
-            masked[key] = capability.mask_columns(role, value)
-    return masked
-
-
 def _sql_failure_signature(sql: str, issues: list[str]) -> str:
     raw = json.dumps({"sql": sql, "issues": issues}, ensure_ascii=False, sort_keys=True)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
@@ -169,26 +155,16 @@ class SqlQueryTool:
     def __init__(
         self,
         deps: GraphDeps,
-        compiled: Any | None = None,
         *,
         _test_generate: Any | None = None,
         _test_review: Any | None = None,
         _test_execute: Any | None = None,
     ) -> None:
         self._deps = deps
-        # _compiled kept for backward compat; used when sql_executor unavailable (tests/CI).
-        self._compiled = compiled or (build_sql_subgraph(deps).compile() if getattr(deps, "llm_registry", None) is not None or getattr(deps, "sql_executor", None) is not None else None)
         self._capability = CapabilityMatrix()
         self._test_generate = _test_generate
         self._test_review = _test_review
         self._test_execute = _test_execute
-
-    def _use_thin_adapter(self) -> bool:
-        """Use SelfCorrectingSqlRunner thin adapter when sql_executor is available."""
-        return (
-            self._test_generate is not None
-            or getattr(self._deps, "sql_executor", None) is not None
-        )
 
     def _make_callables(self, query: str, ctx: TurnContext):
         """Return (generate, review, execute) async callables for the runner."""
@@ -240,38 +216,7 @@ class SqlQueryTool:
 
         return generate, review, execute
 
-    async def _invoke_legacy(self, args: dict[str, Any], ctx: TurnContext) -> ToolResult:
-        """Fallback path: compiled SQL subgraph (used when sql_executor not available)."""
-        query = str(args.get("query") or args.get("sql") or "").strip()
-        compiled = self._compiled
-        if compiled is None:
-            compiled = build_sql_subgraph(self._deps).compile()
-        out = await asyncio.to_thread(compiled.invoke, build_tool_state(query, ctx, self._deps.settings), build_tool_config(ctx))
-        result = out.get("query_result") if isinstance(out, dict) else None
-        rows = result.get("rows", []) if isinstance(result, dict) else []
-        rows = rows if isinstance(rows, list) else []
-        sse = out.get("query_table_sse") if isinstance(out, dict) else None
-        executed_sql = str(out.get("generated_sql") or "") if isinstance(out, dict) else ""
-        guard_on = bool(getattr(self._deps.settings, "agentic_capability_guard_enabled", False))
-        if guard_on:
-            rows = self._capability.mask_columns(ctx.role, rows)
-            sse = _mask_sse_rows(sse, ctx.role, self._capability)
-        if isinstance(sse, dict):
-            sse = {"_event": "data_table", **sse}
-        observation = _format_rows_observation(rows, sql=executed_sql)
-        if guard_on:
-            observation = sanitize_user_data(observation)
-        return ToolResult(
-            ok=bool(out.get("result_ok")) if isinstance(out, dict) else False,
-            output=dict(out or {}),
-            observation_text=observation,
-            sse_payload=sse if isinstance(sse, dict) else None,
-        )
-
     async def invoke(self, args: dict[str, Any], ctx: TurnContext) -> ToolResult:
-        if not self._use_thin_adapter():
-            return await self._invoke_legacy(args, ctx)
-
         query = str(args.get("query") or args.get("sql") or "").strip()
         settings = self._deps.settings
         regen_max = int(getattr(settings, "sql_regen_max", 3))

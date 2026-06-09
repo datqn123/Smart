@@ -525,9 +525,23 @@ def render_business_scope_sql_block(scope: dict[str, Any] | None) -> str:
         lines.append("- Status scope is all_statuses: include status column and keep wording as 'ghi nhận', not 'đã thu'.")
     t_kind = str(time_scope.get("kind") or "unspecified")
     if t_kind == "current_year":
-        lines.append("- Keep current-year filter consistent with the question.")
+        y = date.today().year
+        t_from = str(time_scope.get("from") or f"{y}-01-01")
+        t_to = str(time_scope.get("to") or f"{y}-12-31")
+        lines.append(
+            f"- Time scope is the CURRENT year = {y} (NOT 2024 or any other year). "
+            f"\"năm nay\"/\"this year\" means {y}. The full-year window is {t_from}..{t_to}. "
+            f"If the user named specific months (e.g. tháng 2 đến tháng 5), keep year={y} "
+            f"and build the date range from those months within {y} (e.g. {y}-02-01 .. {y}-05-31). "
+            f"Never substitute a different year."
+        )
     elif t_kind == "current_month":
-        lines.append("- Keep current-month filter consistent with the question.")
+        today = date.today()
+        lines.append(
+            f"- Time scope is the CURRENT month = {today.year}-{today.month:02d} "
+            f"(NOT 2024). \"tháng này\"/\"this month\" means {today.year}-{today.month:02d}; "
+            f"keep year={today.year}."
+        )
     follow = scope.get("followup") if isinstance(scope.get("followup"), dict) else {}
     if follow.get("inherits_previous_scope"):
         lines.append("- This is a follow-up; keep metric/time/status scope from the previous data answer.")

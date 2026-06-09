@@ -373,9 +373,14 @@ def _build_gen_sql_system(
             "use COALESCE(COUNT(...), 0) for empty months.\n"
         )
     now = datetime.now()
-    parts.append(f"\nCurrent date: {now.strftime('%Y-%m-%d')}. "
-                 f"When the user says \"năm nay\" (this year) or a month without a year, "
-                 f"use {now.year}.\n")
+    parts.append(
+        f"\nCurrent date: {now.strftime('%Y-%m-%d')} (current year = {now.year}). "
+        f"When the user says \"năm nay\"/\"this year\", or names a month/quarter without a year "
+        f"(e.g. \"tháng 2 đến tháng 5\"), the year is {now.year}. "
+        f"Do NOT default to 2024 or any year other than {now.year} unless the user writes an "
+        f"explicit different year. Example: \"doanh thu từ tháng 2 đến tháng 5 năm nay\" → "
+        f"transaction_date BETWEEN '{now.year}-02-01' AND '{now.year}-05-31'.\n"
+    )
     parts.append("\n" + enum_literals_prompt_block())
     return "".join(parts)
 

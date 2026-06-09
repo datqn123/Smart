@@ -185,18 +185,4 @@ async def test_invoke_blocks_non_select_sql():
     assert "policy" in result.observation_text.lower() or "SELECT" in result.observation_text
 
 
-# ---------------------------------------------------------------------------
-# Legacy path (no sql_executor) still works
-# ---------------------------------------------------------------------------
 
-def test_use_thin_adapter_false_without_sql_executor():
-    deps = MagicMock()
-    deps.sql_executor = None
-    deps.llm_registry = None
-    # Should not use thin adapter when sql_executor is None and no test callables
-    tool = SqlQueryTool.__new__(SqlQueryTool)
-    tool._deps = deps
-    tool._test_generate = None
-    tool._test_review = None
-    tool._test_execute = None
-    assert tool._use_thin_adapter() is False

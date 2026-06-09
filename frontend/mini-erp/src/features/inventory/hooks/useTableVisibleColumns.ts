@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   TABLE_COLUMN_SETTINGS_UPDATED_EVENT,
   type TableKey,
@@ -7,6 +7,14 @@ import {
 
 export function useTableColumnOrder(tableKey: TableKey, defaultColumnKeys: string[]) {
   const [visibleKeys, setVisibleKeys] = useState<string[]>(defaultColumnKeys)
+
+  // Call sites pass an inline array literal, so `defaultColumnKeys` has a new
+  // reference on every render. Depend on its content signature (a stable string)
+  // instead of the reference, and read the latest array via a ref. Otherwise the
+  // effect re-runs every render and fires the table-columns request in a loop.
+  const defaultColumnKeysRef = useRef(defaultColumnKeys)
+  defaultColumnKeysRef.current = defaultColumnKeys
+  const defaultColumnKeysSignature = defaultColumnKeys.join("|")
 
   useEffect(() => {
     let mounted = true
@@ -20,7 +28,7 @@ export function useTableColumnOrder(tableKey: TableKey, defaultColumnKeys: strin
         .filter((column) => column.visible)
         .sort((a, b) => a.order - b.order)
         .map((column) => column.key)
-      setVisibleKeys(keys.length > 0 ? keys : defaultColumnKeys)
+      setVisibleKeys(keys.length > 0 ? keys : defaultColumnKeysRef.current)
     }
     void load()
     const onUpdated = () => {
@@ -31,7 +39,8 @@ export function useTableColumnOrder(tableKey: TableKey, defaultColumnKeys: strin
       mounted = false
       window.removeEventListener(TABLE_COLUMN_SETTINGS_UPDATED_EVENT, onUpdated)
     }
-  }, [tableKey, defaultColumnKeys])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tableKey, defaultColumnKeysSignature])
 
   return visibleKeys
 }
