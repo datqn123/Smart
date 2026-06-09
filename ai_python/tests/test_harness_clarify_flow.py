@@ -206,13 +206,11 @@ def test_duplicate_tool_call_short_circuits_loop() -> None:
     assert len(steps) <= 2  # did not run all 6 steps
 
 
-def test_empty_rows_observation_is_actionable_and_includes_sql() -> None:
+def test_empty_rows_observation_is_vietnamese_and_concise() -> None:
     from app.graph.tools.sql_query import _format_rows_observation
 
     obs = _format_rows_observation([], sql="SELECT * FROM products WHERE c.name ILIKE 'gia vị'")
-    assert "0 rows" in obs
-    assert "Do NOT re-run" in obs
-    assert "ILIKE 'gia vị'" in obs
+    assert "Không có dữ liệu" in obs
 
 
 def test_data_query_clarify_resume_runs_loop_not_hitl() -> None:

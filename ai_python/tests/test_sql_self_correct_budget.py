@@ -40,7 +40,7 @@ async def test_sql_regen_within_budget() -> None:
 
 
 @pytest.mark.asyncio
-async def test_sql_empty_result_retry() -> None:
+async def test_sql_empty_result_returns_immediately() -> None:
     from app.graph.tools.sql_query import SelfCorrectingSqlRunner
 
     executions = 0
@@ -54,7 +54,7 @@ async def test_sql_empty_result_retry() -> None:
     async def execute(sql: str):
         nonlocal executions
         executions += 1
-        return [] if executions <= 2 else [{"v": 1}]
+        return []
 
     result = await SelfCorrectingSqlRunner(
         sql_regen_max=3,
@@ -65,8 +65,11 @@ async def test_sql_empty_result_retry() -> None:
     ).run()
 
     assert result.ok is True
-    assert result.empty_retry_count == 2
-    assert result.rows == [{"v": 1}]
+    assert result.empty_retry_count == 0
+    assert result.degraded is False
+    assert result.warning == ""
+    assert result.rows == []
+    assert executions == 1
 
 
 @pytest.mark.asyncio
@@ -100,7 +103,7 @@ async def test_sql_dedup_short_circuits() -> None:
 
 
 @pytest.mark.asyncio
-async def test_sql_degrade_returns_partial() -> None:
+async def test_sql_empty_result_not_retried() -> None:
     from app.graph.tools.sql_query import SelfCorrectingSqlRunner
 
     async def gen(hint: str | None):
@@ -121,8 +124,9 @@ async def test_sql_degrade_returns_partial() -> None:
     ).run()
 
     assert result.ok is True
-    assert result.degraded is True
-    assert "cảnh báo" in result.warning.lower()
+    assert result.degraded is False
+    assert result.warning == ""
+    assert result.empty_retry_count == 0
 
 
 @pytest.mark.asyncio

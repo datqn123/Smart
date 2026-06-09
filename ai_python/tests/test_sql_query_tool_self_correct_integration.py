@@ -116,7 +116,7 @@ async def test_invoke_self_corrects_on_bad_review():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_invoke_empty_retry_then_success():
+async def test_invoke_empty_result_returns_immediately():
     exec_calls = [0]
 
     async def _gen(hint):
@@ -127,15 +127,14 @@ async def test_invoke_empty_retry_then_success():
 
     async def _execute(sql):
         exec_calls[0] += 1
-        if exec_calls[0] == 1:
-            return []  # first call: empty
-        return [{"id": 999}]  # second call: has data
+        return []  # returns empty, should not retry
 
     deps = _make_deps()
     tool = SqlQueryTool(deps, _test_generate=_gen, _test_review=_review, _test_execute=_execute)
     result = await tool.invoke({"query": "find order 999"}, _ctx())
     assert result.ok is True
-    assert exec_calls[0] == 2
+    assert exec_calls[0] == 1
+    assert result.output["query_result"]["rows"] == []
 
 
 # ---------------------------------------------------------------------------

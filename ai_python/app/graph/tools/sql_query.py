@@ -18,14 +18,7 @@ from app.harness.tool_registry import ToolManifest, ToolResult, TurnContext
 
 def _format_rows_observation(rows: list[Any], *, sql: str = "") -> str:
     if not rows:
-        sql_hint = f" Executed SQL: {sql.strip()}" if sql.strip() else ""
-        return (
-            "SQL query returned 0 rows. The query ran fine, so this usually means the "
-            "filter value does not exist or is not spelled exactly as in the database "
-            "(e.g. a category/product name that only partially matches). Do NOT re-run "
-            "the same query — either broaden the filter (case-insensitive partial "
-            "match) or ask the user to confirm the exact value." + sql_hint
-        )
+        return "Không có dữ liệu phù hợp với điều kiện bạn yêu cầu."
     head = rows[:5]
     suffix = f" ... {len(rows)} rows total" if len(rows) > 5 else ""
     return f"SQL rows: {json.dumps(head, ensure_ascii=False, default=str)}{suffix}"
@@ -109,19 +102,16 @@ class SelfCorrectingSqlRunner:
             rows = await self._execute(sql)
             last_rows = list(rows or [])
             if not last_rows:
-                if empty_retry >= self._sql_empty_retry_max:
-                    return SelfCorrectingSqlResult(
-                        ok=True,
-                        rows=last_rows,
-                        sql=last_sql,
-                        regen_count=regen,
-                        empty_retry_count=empty_retry,
-                        degraded=True,
-                        warning="Cảnh báo: không tìm thấy dữ liệu sau khi retry.",
-                    )
-                empty_retry += 1
-                hint = "empty result; broaden filter or ask for clarification"
-                continue
+                # SQL passed review → empty result is legitimate no-data, not an error
+                return SelfCorrectingSqlResult(
+                    ok=True,
+                    rows=last_rows,
+                    sql=last_sql,
+                    regen_count=regen,
+                    empty_retry_count=empty_retry,
+                    degraded=False,
+                    warning="",
+                )
             return SelfCorrectingSqlResult(
                 ok=True,
                 rows=last_rows,
