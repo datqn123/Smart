@@ -11,6 +11,7 @@ from app.graph.nodes.chart_readiness import (
 )
 from app.graph.nodes.schema_explore import make_schema_explore_node, route_sql_subgraph_start
 from app.graph.nodes.sql_pipeline import (
+    make_entity_resolution_node,
     make_execute_sql_node,
     make_fail_max_attempts_node,
     make_gen_sql_node,
@@ -89,7 +90,13 @@ def build_sql_subgraph(deps: GraphDeps):
             "gen_sql": "gen_sql",
         },
     )
-    g.add_edge("schema_explore", "gen_sql")
+    # Entity resolution step (between schema_explore and gen_sql)
+    if deps.settings.entity_resolution_enabled:
+        g.add_node("resolve_entities", wrap("resolve_entities", make_entity_resolution_node(deps)))
+        g.add_edge("schema_explore", "resolve_entities")
+        g.add_edge("resolve_entities", "gen_sql")
+    else:
+        g.add_edge("schema_explore", "gen_sql")
     g.add_conditional_edges(
         "gen_sql",
         _route_after_gen_sql,

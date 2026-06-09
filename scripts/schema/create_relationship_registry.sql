@@ -1,6 +1,6 @@
 -- Registry mô tả quan hệ (from_table → to_table) cho AI.
 -- Consumer: ai_python pg_schema_context._fetch_relationship_descriptions().
--- Phụ thuộc V44/V45 ai_table_description: FK đảm bảo chỉ mô tả quan hệ cho bảng đã đăng ký.
+-- Phụ thuộc V44 ai_table_description: FK đảm bảo chỉ mô tả quan hệ cho bảng đã đăng ký.
 
 CREATE TABLE IF NOT EXISTS ai_relationship_description (
     id           BIGSERIAL PRIMARY KEY,
