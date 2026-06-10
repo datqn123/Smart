@@ -1,10 +1,10 @@
 # SqlQueryTool
 
 > Source: `ai_python/app/graph/tools/sql_query.py`
-> Prompts: gen_sql.md, sql_review.md, verify_sql_intent.md, analyze_empty_result.md, schema_explore.md
+> Prompt: gen_sql.md
 
 ## Tổng quan
-Thực thi truy vấn SQL với cơ chế tự sửa lỗi. Xử lý toàn bộ pipeline: khám phá schema, sinh SQL, kiểm duyệt, thực thi, phân tích kết quả với retry budget.
+Thực thi truy vấn SQL read-only, không có retry loop trong code — LLM tự quản lý retry qua conversation history. Tool load schema từ Postgres, gọi LLM sinh SQL (dùng gen_sql.md skill), kiểm tra safety, execute, mask cột nhạy cảm, trả về rows.
 
 ## Manifest (ToolRegistry)
 | Field | Value |
@@ -17,64 +17,64 @@ Thực thi truy vấn SQL với cơ chế tự sửa lỗi. Xử lý toàn bộ 
 | produces | `("rows",)` |
 | consumes | — |
 | result_ref_policy | `result_ref` |
-| examples | — |
+| when_to_use | Cần dữ liệu thực tế từ ERP: số liệu, danh sách, dòng, aggregate từ database |
+| when_not_to_use | Chỉ muốn xem schema/cấu trúc (dùng schema_explore) hoặc chỉ muốn tạo bản ghi |
+| examples | `doanh thu tháng này`, `liệt kê sản phẩm sắp hết hàng` |
 
 ## Schema đầu vào
 ```json
 {
-  "query": "string"
+  "question": "string"
 }
 ```
 
 ## Đầu ra / Quan sát
 ```json
 {
-  "query_result": {
-    "rows": [
-      {"col1": "val1", "col2": "val2"}
-    ]
-  },
-  "generated_sql": "SELECT ..."
+  "rows": [
+    {"col1": "val1", "col2": "val2"}
+  ],
+  "generated_sql": "SELECT ...",
+  "explanation": "Giải thích ngắn về query"
 }
 ```
-Quan sát: `"SQL rows: [first 5 rows JSON] ... N rows total"`
+Quan sát: `"SQL trả về N dòng"` nếu có dữ liệu, `"Không có dữ liệu (0 dòng)"` nếu rỗng.
+
+**SSE payload** (khi có rows): `{"_event": "data_table", "rows": [...]}`
 
 ## Tích hợp Runtime
 
 ### Harness (v3.0)
 - Gọi bởi: `PlanExecutor` qua `ToolRegistry`
 - Node type trong PlanGraph: `tool`
-- Dùng `SelfCorrectingSqlRunner` với retry budget để tự sửa lỗi
+- Tool không tự retry — LLM đọc kết quả (error/empty/data) và quyết định retry qua conversation, max 3 lần tổng cộng tất cả các phase
 
 ### LangGraph (Legacy)
-- Subgraph: `sql_subgraph`
-- Nodes: `schema_explore`, `gen_sql`, `verify_sql_intent`, `sql_review`, `validate_sql`, `execute_sql`, `analyze_empty_result`, `validate_result`, `chart_readiness`
-- Thực thi SQL qua multi-stage validation và correction loop
+- Không còn subgraph riêng — sql_subgraph đã bị xóa trong đợt đơn giản hóa
+- Tool được gọi trực tiếp từ `chat_normal` node
 
 ## Xử lý lỗi
-- **Self-correction loop**: gen_sql → sql_review → execute_sql với retry budget
-- **Phát hiện lỗi trùng lặp**: Ngăn vòng lặp vô hạn khi lỗi lặp lại
-- **Phân tích kết quả rỗng**: Kích hoạt prompt `analyze_empty_result` khi query không trả về dòng nào
-- **Che cột nhạy cảm theo role**: Lọc cột dữ liệu nhạy cảm dựa trên quyền user
-- **sanitize_user_data**: Thoát và kiểm tra dữ liệu đầu vào để ngăn SQL injection
+- **Retry LLM-driven**: LLM quản lý retry qua skill gen_sql.md (3 loại: SQL error, empty result, data validation fail, max 3 lần tổng)
+- **Che cột nhạy cảm theo role**: `CapabilityMatrix.mask_columns()` lọc `cost_price`, `margin`, `debt_balance`... cho non-owner khi `agentic_capability_guard_enabled = true`
+- **SQL safety check**: `enforce_read_only_sql()` chặn DDL/DML trước khi execute
+- **Schema load failure**: Trả về ToolResult với `ok=False` và error message
 
 ## Ví dụ
 **Đầu vào:**
 ```json
 {
-  "query": "Show me top 10 products by revenue this month"
+  "question": "doanh thu tháng này theo sản phẩm"
 }
 ```
 **Đầu ra:**
 ```json
 {
-  "query_result": {
-    "rows": [
-      {"product_name": "Product A", "revenue": 1500000},
-      {"product_name": "Product B", "revenue": 1200000}
-    ]
-  },
-  "generated_sql": "SELECT product_name, SUM(revenue) as revenue FROM sales WHERE month = CURRENT_MONTH GROUP BY product_name ORDER BY revenue DESC LIMIT 10"
+  "rows": [
+    {"product_name": "Sản phẩm A", "revenue": 1500000},
+    {"product_name": "Sản phẩm B", "revenue": 1200000}
+  ],
+  "generated_sql": "SELECT product_name, SUM(revenue) as revenue FROM sales WHERE month = CURRENT_MONTH GROUP BY product_name ORDER BY revenue DESC LIMIT 10",
+  "explanation": "Truy vấn tổng doanh thu theo sản phẩm trong tháng hiện tại"
 }
 ```
-Quan sát: `"SQL rows: [{\"product_name\": \"Product A\", \"revenue\": 1500000}, ...] ... 10 rows total"`
+Quan sát: `"SQL trả về 2 dòng"`

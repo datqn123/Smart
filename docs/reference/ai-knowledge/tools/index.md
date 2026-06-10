@@ -6,7 +6,7 @@
 
 | Tool | Capability | Side Effect | HITL | Source | Prompt |
 |------|-----------|-------------|------|--------|--------|
-| [sql_query](sql_query.md) | data_read | read_only | Không | `tools/sql_query.py` | gen_sql.md, sql_review.md, verify_sql_intent.md, analyze_empty_result.md, schema_explore.md |
+| [sql_query](sql_query.md) | data_read | read_only | Không | `tools/sql_query.py` | gen_sql.md |
 | [schema_explore](schema_explore.md) | data_read | read_only | Không | `tools/schema_explore.py` | schema_explore.md |
 | [catalog_draft](catalog_draft.md) | draft_create | non_idempotent_write | Có | `tools/catalog_draft.py` | catalog_draft.md + 6 entity playbooks |
 | [inventory_draft](inventory_draft.md) | draft_create | non_idempotent_write | Có | `tools/inventory_draft.py` | inventory_draft.md + 4 doc playbooks |
@@ -24,7 +24,6 @@ Cả 9 tools đều được đăng ký trong `ToolRegistry` và gọi bởi `Pl
 
 ### LangGraph (Legacy)
 Tools dùng trong deterministic graph nodes:
-- **sql_subgraph**: sql_query (các node gen_sql, sql_review, validate_sql, execute_sql), schema_explore
 - **catalog_draft_subgraph**: catalog_draft
 - **inventory_draft_subgraph**: inventory_draft
 
