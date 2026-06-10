@@ -58,20 +58,27 @@ public class AlertSettingsJdbcRepository {
 	}
 
 	public List<AlertSettingItemData> list(Integer ownerId, String alertType, Boolean isEnabled) {
-		String sql = """
+		StringBuilder sb = new StringBuilder("""
 				SELECT
 				  id, alert_type, threshold_value, channel, frequency, is_enabled, recipients, updated_at
 				FROM alertsettings
-				WHERE owner_id = COALESCE(:ownerId, owner_id)
-				  AND alert_type = COALESCE(:alertType, alert_type)
-				  AND is_enabled = COALESCE(:isEnabled, is_enabled)
-				ORDER BY id ASC
-				""";
-		var src = new MapSqlParameterSource()
-				.addValue("ownerId", ownerId)
-				.addValue("alertType", alertType)
-				.addValue("isEnabled", isEnabled);
-		return namedJdbc.query(sql, src, rowMapper);
+				WHERE 1=1
+				""");
+		var src = new MapSqlParameterSource();
+		if (ownerId != null) {
+			sb.append(" AND owner_id = :ownerId");
+			src.addValue("ownerId", ownerId);
+		}
+		if (alertType != null && !alertType.isBlank()) {
+			sb.append(" AND alert_type = :alertType");
+			src.addValue("alertType", alertType);
+		}
+		if (isEnabled != null) {
+			sb.append(" AND is_enabled = :isEnabled");
+			src.addValue("isEnabled", isEnabled);
+		}
+		sb.append(" ORDER BY id ASC");
+		return namedJdbc.query(sb.toString(), src, rowMapper);
 	}
 
 	public Optional<String> findAlertTypeByIdAndOwner(long id, int ownerId) {

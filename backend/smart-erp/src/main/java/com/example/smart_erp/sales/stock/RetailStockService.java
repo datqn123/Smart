@@ -5,9 +5,11 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.Year;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -50,14 +52,19 @@ public class RetailStockService {
 
 		Map<Integer, Integer> requiredBaseByProduct = computeRequiredBaseByProduct(lines);
 
+		Map<Integer, Integer> baseUnitIds = repo.findBaseUnitIds(new ArrayList<>(requiredBaseByProduct.keySet()));
+		List<RetailStockJdbcRepository.InventoryBucketRow> allBuckets = repo
+				.lockInventoryBucketsFefoBatch(new ArrayList<>(requiredBaseByProduct.keySet()), locationId);
+		Map<Integer, List<RetailStockJdbcRepository.InventoryBucketRow>> bucketsByProduct = allBuckets.stream()
+				.collect(Collectors.groupingBy(RetailStockJdbcRepository.InventoryBucketRow::productId));
+
 		// Lock + kiểm tra tồn
 		Map<String, String> insufficient = new LinkedHashMap<>();
-		Map<Integer, List<RetailStockJdbcRepository.InventoryBucketRow>> bucketsByProduct = new LinkedHashMap<>();
 		for (var e : requiredBaseByProduct.entrySet()) {
 			int productId = e.getKey();
 			int required = e.getValue();
-			List<RetailStockJdbcRepository.InventoryBucketRow> buckets = repo.lockInventoryBucketsFefo(productId, locationId);
-			bucketsByProduct.put(productId, buckets);
+			List<RetailStockJdbcRepository.InventoryBucketRow> buckets = bucketsByProduct.getOrDefault(productId,
+					List.of());
 			int avail = buckets.stream().mapToInt(RetailStockJdbcRepository.InventoryBucketRow::quantityBase).sum();
 			if (avail < required) {
 				insufficient.put("productId:" + productId, "Không đủ tồn. Còn " + avail + ", cần " + required + ".");
@@ -74,26 +81,34 @@ public class RetailStockService {
 		repo.updateStockDispatchCode(dispatchId, buildDispatchCode(dispatchId));
 
 		// Cấp phát FEFO + ghi log
+		Map<Long, Integer> idToDeduct = new LinkedHashMap<>();
+		List<RetailStockJdbcRepository.LogEntry> logEntries = new ArrayList<>();
 		for (var e : requiredBaseByProduct.entrySet()) {
 			int productId = e.getKey();
 			int required = e.getValue();
-			int baseUnitId = repo.findBaseUnitId(productId).orElseThrow(
-					() -> new BusinessException(ApiErrorCode.BAD_REQUEST, "Sản phẩm không có đơn vị cơ sở: " + productId));
-
+			Integer baseUnitId = baseUnitIds.get(productId);
+			if (baseUnitId == null) {
+				throw new BusinessException(ApiErrorCode.BAD_REQUEST,
+						"Sản phẩm không có đơn vị cơ sở: " + productId);
+			}
 			int remain = required;
-			for (var b : bucketsByProduct.get(productId)) {
+			for (var b : bucketsByProduct.getOrDefault(productId, List.of())) {
 				if (remain <= 0) break;
 				int take = Math.min(remain, b.quantityBase());
-				repo.deductInventory(b.inventoryId(), take);
+				idToDeduct.merge(b.inventoryId(), take, Integer::sum);
 				String note = "POS_CHECKOUT orderId=" + orderId + " invId=" + b.inventoryId();
-				repo.insertInventoryLogOutbound(productId, take, baseUnitId, userId, dispatchId, locationId, note);
+				logEntries.add(new RetailStockJdbcRepository.LogEntry(productId, take, baseUnitId, userId, dispatchId,
+						locationId, note));
 				remain -= take;
 			}
 			if (remain != 0) {
 				// Defensive: đã check đủ tồn trước đó; nếu còn → rollback.
-				throw new BusinessException(ApiErrorCode.INTERNAL_SERVER_ERROR, "Không thể cấp phát tồn kho cho sản phẩm: " + productId);
+				throw new BusinessException(ApiErrorCode.INTERNAL_SERVER_ERROR,
+						"Không thể cấp phát tồn kho cho sản phẩm: " + productId);
 			}
 		}
+		repo.deductInventoryQuantitiesBatch(idToDeduct);
+		repo.batchInsertInventoryLogOutbound(logEntries);
 
 		repo.markOrderLinesDispatchedAll(orderId);
 		dispatchLedgerPostingService.postPrimaryCogsIfAbsent(dispatchId, userId);

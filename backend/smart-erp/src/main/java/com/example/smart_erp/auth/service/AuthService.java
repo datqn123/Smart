@@ -61,18 +61,14 @@ public class AuthService {
 	public LoginResult login(String email, String password, String clientSessionId) {
 		String emailNorm = email.strip();
 
-		userRepository.findByEmailIgnoreCase(emailNorm).ifPresent(u -> {
-			if ("Locked".equalsIgnoreCase(u.getStatus())) {
-				throw new BusinessException(ApiErrorCode.FORBIDDEN, ACCOUNT_LOCKED_LOGIN);
-			}
-		});
-
-		if (userRepository.countActiveByEmailIgnoreCase(emailNorm) == 0) {
+		User user = userRepository.findByEmailIgnoreCase(emailNorm)
+				.orElseThrow(() -> new BusinessException(ApiErrorCode.UNAUTHORIZED, UNAUTHORIZED_LOGIN));
+		if ("Locked".equalsIgnoreCase(user.getStatus())) {
+			throw new BusinessException(ApiErrorCode.FORBIDDEN, ACCOUNT_LOCKED_LOGIN);
+		}
+		if (!"Active".equalsIgnoreCase(user.getStatus())) {
 			throw new BusinessException(ApiErrorCode.UNAUTHORIZED, UNAUTHORIZED_LOGIN);
 		}
-
-		User user = userRepository.findActiveByEmailIgnoreCase(emailNorm)
-				.orElseThrow(() -> new BusinessException(ApiErrorCode.UNAUTHORIZED, UNAUTHORIZED_LOGIN));
 
 		if (!passwordEncoder.matches(password, user.getPasswordHash())) {
 			loginBruteForceProtection.onFailure(user.getId(), userRepository);

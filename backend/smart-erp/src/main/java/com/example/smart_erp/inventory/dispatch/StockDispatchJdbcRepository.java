@@ -5,6 +5,8 @@ import java.sql.Date;
 import java.sql.Types;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -195,6 +197,91 @@ public class StockDispatchJdbcRepository {
 	public record DispatchLedgerMetaRow(String dispatchCode, LocalDate dispatchDate, String status) {
 	}
 
+	public record OutboundLogItem(int productId, int quantityChange, int baseUnitId, int userId, long dispatchId,
+			int fromLocationId, String referenceNote) {
+	}
+
+	public Map<Long, LockedInventoryRow> lockInventoryRowsForUpdate(List<Long> inventoryIds) {
+		if (inventoryIds == null || inventoryIds.isEmpty()) {
+			return Map.of();
+		}
+		String sql = """
+				SELECT i.id, i.product_id, p.name AS product_name, p.sku_code, i.location_id, i.quantity,
+				       COALESCE(i.unit_id, pub.id) AS line_unit_id,
+				       pub.id AS base_unit_id,
+				       COALESCE(pud.conversion_rate, 1) AS line_rate
+				FROM inventory i
+				INNER JOIN products p ON p.id = i.product_id
+				INNER JOIN productunits pub ON pub.product_id = p.id AND pub.is_base_unit = TRUE
+				LEFT JOIN productunits pud ON pud.id = i.unit_id
+				WHERE i.id IN (:ids)
+				FOR UPDATE OF i
+				""";
+		List<LockedInventoryRow> rows = namedJdbc.query(sql, new MapSqlParameterSource("ids", inventoryIds),
+				(rs, rn) -> new LockedInventoryRow(
+						rs.getLong("id"),
+						rs.getInt("product_id"),
+						rs.getString("product_name"),
+						rs.getString("sku_code"),
+						rs.getInt("location_id"),
+						rs.getInt("quantity"),
+						rs.getInt("line_unit_id"),
+						rs.getInt("base_unit_id"),
+						rs.getBigDecimal("line_rate")));
+		Map<Long, LockedInventoryRow> map = new LinkedHashMap<>();
+		for (LockedInventoryRow row : rows) {
+			map.put(row.id(), row);
+		}
+		return map;
+	}
+
+	public void deductInventoryQuantitiesBatch(Map<Long, Integer> idToDeduct) {
+		if (idToDeduct == null || idToDeduct.isEmpty()) {
+			return;
+		}
+		StringBuilder sb = new StringBuilder("UPDATE inventory SET quantity = quantity - CASE id ");
+		var src = new MapSqlParameterSource();
+		int i = 0;
+		for (var entry : idToDeduct.entrySet()) {
+			String idParam = "id" + i;
+			String valParam = "v" + i;
+			sb.append("WHEN :").append(idParam).append(" THEN :").append(valParam).append(" ");
+			src.addValue(idParam, entry.getKey());
+			src.addValue(valParam, entry.getValue());
+			i++;
+		}
+		sb.append("END, updated_at = CURRENT_TIMESTAMP WHERE id IN (:ids)");
+		src.addValue("ids", new ArrayList<>(idToDeduct.keySet()));
+		namedJdbc.update(sb.toString(), src);
+	}
+
+	public void batchInsertInventoryLogsOutbound(List<OutboundLogItem> items) {
+		if (items == null || items.isEmpty()) {
+			return;
+		}
+		String sql = """
+				INSERT INTO inventorylogs (
+				  product_id, action_type, quantity_change, unit_id, user_id,
+				  dispatch_id, receipt_id, from_location_id, to_location_id, reference_note
+				) VALUES (
+				  :pid, 'OUTBOUND', :qchg, :unit_id, :uid,
+				  :did, NULL, :from_loc, NULL, :note
+				)
+				""";
+		MapSqlParameterSource[] batch = new MapSqlParameterSource[items.size()];
+		for (int i = 0; i < items.size(); i++) {
+			OutboundLogItem it = items.get(i);
+			batch[i] = new MapSqlParameterSource("pid", it.productId())
+					.addValue("qchg", -it.quantityChange())
+					.addValue("unit_id", it.baseUnitId())
+					.addValue("uid", it.userId())
+					.addValue("did", it.dispatchId())
+					.addValue("from_loc", it.fromLocationId())
+					.addValue("note", it.referenceNote(), Types.VARCHAR);
+		}
+		namedJdbc.batchUpdate(sql, batch);
+	}
+
 	public void updateDispatchCode(long dispatchId, String dispatchCode) {
 		namedJdbc.update("UPDATE stockdispatches SET dispatch_code = :c, updated_at = CURRENT_TIMESTAMP WHERE id = :id",
 				Map.of("c", dispatchCode, "id", dispatchId));
@@ -261,22 +348,27 @@ public class StockDispatchJdbcRepository {
 				       sd.user_id AS creator_user_id,
 				       (sd.order_id IS NULL) AS manual_dispatch,
 				       COALESCE(u.full_name, u.email, '—') AS user_name,
-				       CASE WHEN EXISTS (SELECT 1 FROM stockdispatch_lines sdl WHERE sdl.dispatch_id = sd.id)
-				            THEN (SELECT COUNT(*)::int FROM stockdispatch_lines x WHERE x.dispatch_id = sd.id)
-				            ELSE COALESCE((SELECT COUNT(*)::int FROM inventorylogs il WHERE il.dispatch_id = sd.id
-				                          AND il.action_type = 'OUTBOUND'), 0)
-				       END AS item_count,
+				       CASE WHEN line_agg.has_lines THEN line_agg.line_count ELSE COALESCE(log_agg.log_count, 0) END AS item_count,
 				       sd.status,
-				       EXISTS (SELECT 1 FROM stockdispatch_lines sdlx WHERE sdlx.dispatch_id = sd.id) AS has_stockdispatch_lines,
-				       EXISTS (
-				         SELECT 1 FROM stockdispatch_lines sdl2
-				         INNER JOIN inventory i ON i.id = sdl2.inventory_id
-				         WHERE sdl2.dispatch_id = sd.id AND sdl2.quantity > i.quantity
-				       ) AS has_shortage_warning
+				       line_agg.has_lines AS has_stockdispatch_lines,
+				       COALESCE(line_agg.has_shortage, false) AS has_shortage_warning
 				FROM stockdispatches sd
 				INNER JOIN users u ON u.id = sd.user_id
 				LEFT JOIN salesorders so ON so.id = sd.order_id
 				LEFT JOIN customers c ON c.id = so.customer_id
+				LEFT JOIN LATERAL (
+				  SELECT COUNT(*)::int AS line_count,
+				         COUNT(*) > 0 AS has_lines,
+				         bool_or(sdl.quantity > i.quantity) AS has_shortage
+				  FROM stockdispatch_lines sdl
+				  LEFT JOIN inventory i ON i.id = sdl.inventory_id
+				  WHERE sdl.dispatch_id = sd.id
+				) line_agg ON true
+				LEFT JOIN LATERAL (
+				  SELECT COUNT(*)::int AS log_count
+				  FROM inventorylogs il
+				  WHERE il.dispatch_id = sd.id AND il.action_type = 'OUTBOUND'
+				) log_agg ON true
 				"""
 				+ where + """
 							ORDER BY sd.id DESC

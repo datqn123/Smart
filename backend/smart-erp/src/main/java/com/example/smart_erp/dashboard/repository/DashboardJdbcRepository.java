@@ -1,12 +1,12 @@
 package com.example.smart_erp.dashboard.repository;
 
 import java.math.BigDecimal;
-import java.sql.Date;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 
@@ -35,17 +35,20 @@ public class DashboardJdbcRepository {
 	}
 
 	public DashboardFinancialData loadFinancial(LocalDate today, LocalDate yesterday) {
+		ZoneId zone = ZoneId.systemDefault();
 		MapSqlParameterSource src = new MapSqlParameterSource()
-				.addValue("today", Date.valueOf(today))
-				.addValue("yesterday", Date.valueOf(yesterday));
+				.addValue("todayStart", Timestamp.from(today.atStartOfDay(zone).toInstant()))
+				.addValue("todayEnd", Timestamp.from(today.plusDays(1).atStartOfDay(zone).toInstant()))
+				.addValue("yesterdayStart", Timestamp.from(yesterday.atStartOfDay(zone).toInstant()))
+				.addValue("yesterdayEnd", Timestamp.from(today.atStartOfDay(zone).toInstant()));
 		return namedJdbc.queryForObject("""
 				SELECT
-				  COALESCE(SUM(CASE WHEN created_at::date = :today THEN final_amount ELSE 0 END), 0) AS today_revenue,
-				  COALESCE(SUM(CASE WHEN created_at::date = :yesterday THEN final_amount ELSE 0 END), 0) AS yesterday_revenue,
-				  COUNT(CASE WHEN created_at::date = :today THEN 1 END)::bigint AS today_orders
+				  COALESCE(SUM(CASE WHEN created_at >= :todayStart AND created_at < :todayEnd THEN final_amount ELSE 0 END), 0) AS today_revenue,
+				  COALESCE(SUM(CASE WHEN created_at >= :yesterdayStart AND created_at < :yesterdayEnd THEN final_amount ELSE 0 END), 0) AS yesterday_revenue,
+				  COUNT(CASE WHEN created_at >= :todayStart AND created_at < :todayEnd THEN 1 END)::bigint AS today_orders
 				FROM salesorders
 				WHERE status <> 'Cancelled'
-				  AND created_at::date IN (:today, :yesterday)
+				  AND created_at >= :yesterdayStart AND created_at < :todayEnd
 				""", src, (rs, rowNum) -> {
 			BigDecimal todayRevenue = money(rs, "today_revenue");
 			BigDecimal yesterdayRevenue = money(rs, "yesterday_revenue");
@@ -63,9 +66,12 @@ public class DashboardJdbcRepository {
 	}
 
 	public List<DashboardRevenueTrendPointData> loadRevenueTrend(LocalDate from, LocalDate to) {
+		ZoneId zone = ZoneId.systemDefault();
 		MapSqlParameterSource src = new MapSqlParameterSource()
-				.addValue("from", Date.valueOf(from))
-				.addValue("to", Date.valueOf(to));
+				.addValue("from", java.sql.Date.valueOf(from))
+				.addValue("to", java.sql.Date.valueOf(to))
+				.addValue("fromStart", Timestamp.from(from.atStartOfDay(zone).toInstant()))
+				.addValue("toEnd", Timestamp.from(to.plusDays(1).atStartOfDay(zone).toInstant()));
 		return namedJdbc.query("""
 				WITH days AS (
 				  SELECT generate_series(CAST(:from AS date), CAST(:to AS date), interval '1 day')::date AS day
@@ -73,7 +79,7 @@ public class DashboardJdbcRepository {
 				orders AS (
 				  SELECT created_at::date AS day, COALESCE(SUM(final_amount), 0) AS revenue, COUNT(*)::bigint AS orders
 				  FROM salesorders
-				  WHERE created_at::date BETWEEN :from AND :to AND status <> 'Cancelled'
+				  WHERE created_at >= :fromStart AND created_at < :toEnd AND status <> 'Cancelled'
 				  GROUP BY created_at::date
 				)
 				SELECT d.day, COALESCE(o.revenue, 0) AS revenue, COALESCE(o.orders, 0) AS orders
@@ -88,15 +94,16 @@ public class DashboardJdbcRepository {
 	}
 
 	public DashboardChannelBreakdownData loadChannelBreakdown(LocalDate from, LocalDate to) {
+		ZoneId zone = ZoneId.systemDefault();
 		MapSqlParameterSource src = new MapSqlParameterSource()
-				.addValue("from", Date.valueOf(from))
-				.addValue("to", Date.valueOf(to));
+				.addValue("fromStart", Timestamp.from(from.atStartOfDay(zone).toInstant()))
+				.addValue("toEnd", Timestamp.from(to.plusDays(1).atStartOfDay(zone).toInstant()));
 		return namedJdbc.queryForObject("""
 				SELECT
 				  COALESCE(SUM(CASE WHEN order_channel = 'Retail' THEN final_amount ELSE 0 END), 0) AS retail,
 				  COALESCE(SUM(CASE WHEN order_channel = 'Wholesale' THEN final_amount ELSE 0 END), 0) AS wholesale
 				FROM salesorders
-				WHERE created_at::date BETWEEN :from AND :to
+				WHERE created_at >= :fromStart AND created_at < :toEnd
 				  AND status <> 'Cancelled'
 				""", src, (rs, rowNum) -> {
 			BigDecimal retail = money(rs, "retail");
@@ -136,6 +143,15 @@ public class DashboardJdbcRepository {
 		}
 		Long value = namedJdbc.queryForObject("SELECT COUNT(*)::bigint FROM salesorders" + filter, src, Long.class);
 		return value == null ? 0L : value;
+	}
+
+	public java.util.Map<String, Long> countOrdersTotalAndPending() {
+		MapSqlParameterSource src = new MapSqlParameterSource();
+		return namedJdbc.queryForObject("""
+				SELECT COUNT(*)::bigint AS total,
+				       COUNT(*) FILTER (WHERE status = 'Pending')::bigint AS pending
+				FROM salesorders
+				""", src, (rs, rowNum) -> java.util.Map.of("total", rs.getLong("total"), "pending", rs.getLong("pending")));
 	}
 
 	public long countPendingApprovals() {
@@ -183,15 +199,16 @@ public class DashboardJdbcRepository {
 	}
 
 	public DashboardCashflowData loadCashflow(LocalDate from, LocalDate to) {
+		ZoneId zone = ZoneId.systemDefault();
 		MapSqlParameterSource src = new MapSqlParameterSource()
-				.addValue("from", Date.valueOf(from))
-				.addValue("to", Date.valueOf(to));
+				.addValue("fromStart", Timestamp.from(from.atStartOfDay(zone).toInstant()))
+				.addValue("toEnd", Timestamp.from(to.plusDays(1).atStartOfDay(zone).toInstant()));
 		return namedJdbc.queryForObject("""
 				SELECT
 				  COALESCE(SUM(CASE WHEN direction = 'Income' THEN amount ELSE 0 END), 0) AS income,
 				  COALESCE(SUM(CASE WHEN direction = 'Expense' THEN amount ELSE 0 END), 0) AS expense
 				FROM cashtransactions
-				WHERE transaction_date BETWEEN :from AND :to
+				WHERE transaction_date >= :fromStart AND transaction_date < :toEnd
 				  AND status = 'Completed'
 				""", src, (rs, rowNum) -> {
 			BigDecimal income = money(rs, "income");

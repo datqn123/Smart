@@ -249,15 +249,22 @@ public class CustomerService {
 			throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Danh sách id không hợp lệ",
 					Map.of("ids", "Cần từ 1 đến 50 id khác nhau (trùng trong mảng sẽ được gộp)"));
 		}
-		for (int cid : ids) {
-			if (!customerJdbcRepository.existsCustomerId(cid)) {
-				throw new BusinessException(ApiErrorCode.CONFLICT,
-						"Không thể xóa toàn bộ: ít nhất một khách hàng không đủ điều kiện",
-						Map.of("failedId", String.valueOf(cid), "reason", "NOT_FOUND"));
+		Set<Integer> existing = customerJdbcRepository.findExistingCustomerIds(ids);
+		if (existing.size() != ids.size()) {
+			for (int cid : ids) {
+				if (!existing.contains(cid)) {
+					throw new BusinessException(ApiErrorCode.CONFLICT,
+							"Không thể xóa toàn bộ: ít nhất một khách hàng không đủ điều kiện",
+							Map.of("failedId", String.valueOf(cid), "reason", "NOT_FOUND"));
+				}
 			}
 		}
-		for (int cid : ids) {
-			assertBulkCustomerDeletableOrThrow(cid);
+		Map<Integer, String> blocked = customerJdbcRepository.findBulkDeleteBlockReasons(ids);
+		for (Map.Entry<Integer, String> entry : blocked.entrySet()) {
+			String r = entry.getValue();
+			throw new BusinessException(ApiErrorCode.CONFLICT,
+					"Không thể xóa toàn bộ: ít nhất một khách hàng không đủ điều kiện",
+					Map.of("failedId", String.valueOf(entry.getKey()), "reason", r));
 		}
 		customerJdbcRepository.lockCustomersForUpdate(ids);
 		int deleted = customerJdbcRepository.deleteCustomersHard(ids);

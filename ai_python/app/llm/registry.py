@@ -17,9 +17,6 @@ _STRUCTURED_ROLES = (
     "planner",
     "intent",
     "domain_guard",
-    "sql_review",
-    "sql_table_pick",
-    "schema_plan",
     "idea",
     "chart",
     "chart_critic",
@@ -33,7 +30,7 @@ _STRUCTURED_ROLES = (
 
 @dataclass
 class LlmRegistry:
-    """Maps logical roles (chat, sql_review, …) to an ``LlmClient``."""
+    """Maps logical roles (chat, intent, …) to an ``LlmClient``."""
 
     _clients: dict[str, LlmClient] = field(default_factory=dict)
 
@@ -72,7 +69,7 @@ def build_llm_registry(settings: LlmSettings) -> LlmRegistry:
         structured = OpenAICompatibleChatClient(structured_chat)
         logger.info(
             "LLM registry: primary model=%r (chat, summarize); "
-            "structured model=%r (planner, sql_gen, intent, sql_review, sql_table_pick, schema_plan, idea, chart, chart_critic, review).",
+            "structured model=%r (planner, sql_gen, intent, idea, chart, chart_critic, review).",
             settings.model,
             fork.model,
         )

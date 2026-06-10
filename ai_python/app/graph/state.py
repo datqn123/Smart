@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal, NotRequired, TypedDict
+from typing import Annotated, Any, NotRequired, TypedDict
 
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 
 
 class AgentState(TypedDict, total=False):
-    """Merged across main graph and SQL subgraph."""
+    """Main graph AgentState — survives across turns."""
 
     messages: Annotated[list[BaseMessage], add_messages]
     intent: str | None
@@ -25,23 +25,8 @@ class AgentState(TypedDict, total=False):
     user_id: str | None
     tenant_id: str | None
     thread_id: str | None
-    sql_valid: bool | None
-    verify_intent_ok: bool | None
-    verify_intent_action: str | None
-    verify_intent_reason: str | None
-    empty_verdict: str | None       # "legitimate" | "suspicious" | "wrong"
-    empty_reason: str | None        # explanation of the verdict
-    empty_warning: str | None       # user-facing warning (e.g. "Có thể năm trong câu SQL chưa đúng...")
-    result_ok: bool | None
-    result_empty: bool | None
     error_payload: dict[str, Any] | None
     # Task007 — SQL-Factory-lite (optional keys; safe for old checkpoints)
-    selected_tables: list[str] | None
-    sql_allowlist_tables: list[str] | None
-    sql_gen_mode: Literal["explore", "exploit"] | None
-    sql_attempt_history: list[str] | None
-    sql_local_pool: list[str] | None
-    runtime_schema_artifact: dict[str, Any] | None
     # Chart pipeline (optional; safe for old checkpoints)
     idea_data_request: dict[str, Any] | None
     idea_chart_idea: dict[str, Any] | None
@@ -55,10 +40,7 @@ class AgentState(TypedDict, total=False):
     chart_retry_hint: str | None
     chart_result_profile: dict[str, Any] | None
     chart_degraded: bool | None
-    # Ledger-first schema explorer (optional)
-    schema_plan: dict[str, Any] | None
-    ledger_metric_id: str | None
-    schema_join_hints: list[str] | None
+
     # Catalog draft HITL (optional)
     catalog_entity_type: str | None
     catalog_row_count_hint: int | None
@@ -113,27 +95,10 @@ _TRANSIENT_KEYS = frozenset(
         "error_payload",
         "intent",
         "route_source",
-        "sql_valid",
-        "verify_intent_ok",
-        "verify_intent_action",
-        "verify_intent_reason",
-        "empty_verdict",
-        "empty_reason",
-        "empty_warning",
-        "result_ok",
-        "result_empty",
-        "runtime_schema_artifact",
-        "selected_tables",
-        "sql_gen_mode",
-        "sql_attempt_history",
-        "sql_local_pool",
         "idea_data_request",
         "idea_chart_idea",
         "chart_spec_draft",
         "chart_spec_final",
-        "schema_plan",
-        "ledger_metric_id",
-        "schema_join_hints",
         "chart_brief",
         "chart_thread_context",
         "chart_data_ok",

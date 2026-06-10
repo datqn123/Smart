@@ -41,31 +41,36 @@ public class CategoryService {
 
 	@Transactional(readOnly = true)
 	public CategoryListPageData list(String formatRaw, String searchRaw, String statusRaw) {
+		return list(formatRaw, searchRaw, statusRaw, 1, Integer.MAX_VALUE);
+	}
+
+	@Transactional(readOnly = true)
+	public CategoryListPageData list(String formatRaw, String searchRaw, String statusRaw, int page, int limit) {
+		if (page < 1 || limit < 1 || limit > 1000) {
+			throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Tham số phân trang không hợp lệ",
+					Map.of("page", "page >= 1", "limit", "1–1000"));
+		}
 		String format = formatRaw == null || formatRaw.isBlank() ? "tree" : formatRaw.trim().toLowerCase(Locale.ROOT);
 		if (!"tree".equals(format) && !"flat".equals(format)) {
 			throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Tham số truy vấn không hợp lệ",
 					Map.of("format", "Chỉ chấp nhận tree hoặc flat"));
 		}
 		String statusFilter = normalizeListStatus(statusRaw);
-		List<CategoryFlatRow> rows = categoryJdbcRepository.loadAllActive(statusFilter);
+		String search = searchRaw != null && !searchRaw.isBlank() ? searchRaw.trim() : null;
+		if ("flat".equals(format)) {
+			int offset = (page - 1) * limit;
+			List<CategoryFlatRow> rows = categoryJdbcRepository.loadAllActiveFlat(statusFilter, search, limit, offset);
+			List<CategoryNodeResponse> items = new ArrayList<>();
+			for (CategoryFlatRow r : rows) {
+				items.add(categoryJdbcRepository.toNodeResponseFlat(r));
+			}
+			return new CategoryListPageData(items);
+		}
+		List<CategoryFlatRow> rows = categoryJdbcRepository.loadAllActive(statusFilter, search);
 		List<CategoryFlatRow> filtered = applySearchFilter(rows, searchRaw);
 		Set<Long> allowed = new HashSet<>();
 		for (CategoryFlatRow r : filtered) {
 			allowed.add(r.id());
-		}
-		if ("flat".equals(format)) {
-			filtered.sort((a, b) -> {
-				int c = Integer.compare(a.sortOrder(), b.sortOrder());
-				if (c != 0) {
-					return c;
-				}
-				return a.name().compareToIgnoreCase(b.name());
-			});
-			List<CategoryNodeResponse> items = new ArrayList<>();
-			for (CategoryFlatRow r : filtered) {
-				items.add(categoryJdbcRepository.toNodeResponseFlat(r));
-			}
-			return new CategoryListPageData(items);
 		}
 		Map<Long, CategoryFlatRow> byId = new HashMap<>();
 		for (CategoryFlatRow r : filtered) {

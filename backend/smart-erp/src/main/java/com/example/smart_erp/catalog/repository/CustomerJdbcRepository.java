@@ -7,10 +7,12 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -251,11 +253,71 @@ public class CustomerJdbcRepository {
 		return namedJdbc.update("DELETE FROM customers WHERE id IN (:ids)", Map.of("ids", ids));
 	}
 
+	public Set<Integer> findExistingCustomerIds(List<Integer> ids) {
+		if (ids == null || ids.isEmpty()) {
+			return Collections.emptySet();
+		}
+		List<Integer> rows = namedJdbc.query(
+				"SELECT id FROM customers WHERE id IN (:ids) AND deleted_at IS NULL",
+				Map.of("ids", ids), (rs, rn) -> rs.getInt("id"));
+		return new HashSet<>(rows);
+	}
+
+	public Map<Integer, String> findBulkDeleteBlockReasons(List<Integer> ids) {
+		if (ids == null || ids.isEmpty()) {
+			return Collections.emptyMap();
+		}
+		String sql = """
+				SELECT c.id,
+				  CASE
+				    WHEN EXISTS (SELECT 1 FROM salesorders WHERE customer_id = c.id) THEN 'HAS_SALES_ORDERS'
+				    WHEN EXISTS (SELECT 1 FROM partnerdebts WHERE customer_id = c.id) THEN 'HAS_PARTNER_DEBTS'
+				    ELSE NULL
+				  END AS block_reason
+				FROM unnest(:ids) AS c(id)
+				""";
+		Integer[] idArray = ids.toArray(new Integer[0]);
+		List<BlockedRow> rows = namedJdbc.query(sql, Map.of("ids", idArray), (rs, rn) -> {
+			int id = rs.getInt("id");
+			String reason = rs.getString("block_reason");
+			return new BlockedRow(id, reason);
+		});
+		Map<Integer, String> result = new HashMap<>();
+		for (BlockedRow r : rows) {
+			if (r.reason() != null) {
+				result.put(r.id(), r.reason());
+			}
+		}
+		return result;
+	}
+
+	private record BlockedRow(int id, String reason) {
+	}
+
 	public void lockCustomersForUpdate(List<Integer> ids) {
 		List<Integer> sorted = new ArrayList<>(new HashSet<>(ids));
 		Collections.sort(sorted);
-		for (int cid : sorted) {
-			lockCustomerForUpdate(cid).orElseThrow(() -> new IllegalStateException("customer missing id=" + cid));
+		if (sorted.isEmpty()) {
+			return;
+		}
+		String sql = """
+				SELECT id, customer_code, name, phone, email, address, loyalty_points, status
+				FROM customers WHERE id IN (:ids) AND deleted_at IS NULL ORDER BY id FOR UPDATE
+				""";
+		List<CustomerLockRow> rows = namedJdbc.query(sql, Map.of("ids", sorted),
+				(rs, rn) -> new CustomerLockRow(rs.getInt("id"), rs.getString("customer_code"), rs.getString("name"),
+						rs.getString("phone"), rs.getString("email"), rs.getString("address"), rs.getInt("loyalty_points"),
+						rs.getString("status")));
+		if (rows.size() < sorted.size()) {
+			Set<Integer> locked = new HashSet<>();
+			for (CustomerLockRow r : rows) {
+				locked.add(r.id());
+			}
+			for (Integer id : sorted) {
+				if (!locked.contains(id)) {
+					throw new IllegalStateException("customer missing id=" + id);
+				}
+			}
 		}
 	}
 }

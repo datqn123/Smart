@@ -5,12 +5,16 @@ import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
@@ -274,9 +278,10 @@ public class SalesOrderJdbcRepository {
 		return key == null ? 0 : key.intValue();
 	}
 
-	public void updateOrderCode(int orderId, String orderCode) {
+	public String updateOrderCode(int orderId, String orderCode) {
 		namedJdbc.update("UPDATE salesorders SET order_code = :code WHERE id = :id",
 				Map.of("code", orderCode, "id", orderId));
+		return orderCode;
 	}
 
 	public Optional<String> findOrderCode(int orderId) {
@@ -290,6 +295,44 @@ public class SalesOrderJdbcRepository {
 				INSERT INTO orderdetails (order_id, product_id, unit_id, quantity, price_at_time)
 				VALUES (:oid, :pid, :uid, :qty, :price)
 				""", Map.of("oid", orderId, "pid", productId, "uid", unitId, "qty", quantity, "price", unitPrice));
+	}
+
+	public void batchInsertOrderLines(int orderId, List<LineInput> lines) {
+		if (lines == null || lines.isEmpty()) {
+			return;
+		}
+		String sql = """
+				INSERT INTO orderdetails (order_id, product_id, unit_id, quantity, price_at_time)
+				VALUES (:oid, :pid, :uid, :qty, :price)
+				""";
+		SqlParameterSource[] batch = lines.stream()
+				.map(l -> new MapSqlParameterSource("oid", orderId).addValue("pid", l.productId())
+						.addValue("uid", l.unitId()).addValue("qty", l.quantity()).addValue("price", l.unitPrice()))
+				.toArray(SqlParameterSource[]::new);
+		namedJdbc.batchUpdate(sql, batch);
+	}
+
+	public record LineInput(int productId, int unitId, int quantity, BigDecimal unitPrice) {
+	}
+
+	public record ProductUnitPair(int productId, int unitId) {
+	}
+
+	public Set<ProductUnitPair> findExistingProductUnitPairs(List<ProductUnitPair> pairs) {
+		if (pairs == null || pairs.isEmpty()) {
+			return Collections.emptySet();
+		}
+		Integer[] pids = pairs.stream().map(ProductUnitPair::productId).toArray(Integer[]::new);
+		Integer[] uids = pairs.stream().map(ProductUnitPair::unitId).toArray(Integer[]::new);
+		String sql = """
+				SELECT product_id, unit_id FROM productunits
+				WHERE (product_id, unit_id) IN (
+				  SELECT * FROM unnest(:pids, :uids) AS t(product_id, unit_id)
+				)
+				""";
+		List<ProductUnitPair> rows = namedJdbc.query(sql, Map.of("pids", pids, "uids", uids),
+				(rs, rn) -> new ProductUnitPair(rs.getInt("product_id"), rs.getInt("unit_id")));
+		return new HashSet<>(rows);
 	}
 
 	public Optional<OrderLockRow> lockOrderForUpdate(int id) {

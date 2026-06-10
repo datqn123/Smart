@@ -83,9 +83,8 @@ public class CashTransactionJdbcRepository {
 			String searchPattern) {
 		StringBuilder where = new StringBuilder(" WHERE 1=1 ");
 		var src = new MapSqlParameterSource();
-		appendFilters(where, src, direction, status, dateFrom, dateTo, fundId, searchPattern);
-		String sql = "SELECT COUNT(*) FROM cashtransactions ct LEFT JOIN users uc ON uc.id = ct.created_by "
-				+ "LEFT JOIN users up ON up.id = ct.performed_by " + where;
+		appendFilters(where, src, direction, status, dateFrom, dateTo, fundId, searchPattern, false);
+		String sql = "SELECT COUNT(*) FROM cashtransactions ct" + where;
 		Long c = namedJdbc.queryForObject(sql, src, Long.class);
 		return c != null ? c : 0L;
 	}
@@ -94,7 +93,7 @@ public class CashTransactionJdbcRepository {
 			Integer fundId, String searchPattern, int limit, int offset, boolean sortByCreatedAt) {
 		StringBuilder where = new StringBuilder(" WHERE 1=1 ");
 		var src = new MapSqlParameterSource();
-		appendFilters(where, src, direction, status, dateFrom, dateTo, fundId, searchPattern);
+		appendFilters(where, src, direction, status, dateFrom, dateTo, fundId, searchPattern, true);
 		String orderBy = sortByCreatedAt ? "ct.created_at DESC, ct.id DESC" : "ct.transaction_date DESC, ct.id DESC";
 		String sql = ITEM_SELECT + where + " ORDER BY " + orderBy + " LIMIT :lim OFFSET :off";
 		src.addValue("lim", limit).addValue("off", offset);
@@ -102,7 +101,7 @@ public class CashTransactionJdbcRepository {
 	}
 
 	private static void appendFilters(StringBuilder where, MapSqlParameterSource src, String direction, String status,
-			LocalDate dateFrom, LocalDate dateTo, Integer fundId, String searchPattern) {
+			LocalDate dateFrom, LocalDate dateTo, Integer fundId, String searchPattern, boolean includeUserSearch) {
 		if (direction != null && !direction.isBlank()) {
 			where.append(" AND ct.direction = :dir ");
 			src.addValue("dir", direction.trim());
@@ -123,8 +122,14 @@ public class CashTransactionJdbcRepository {
 			src.addValue("fundId", fundId);
 		}
 		if (searchPattern != null) {
-			where.append(
-					" AND (ct.transaction_code ILIKE :sp OR ct.category ILIKE :sp OR ct.description ILIKE :sp OR uc.full_name ILIKE :sp OR up.full_name ILIKE :sp) ");
+			if (includeUserSearch) {
+				where.append(
+						" AND (ct.transaction_code ILIKE :sp OR ct.category ILIKE :sp OR ct.description ILIKE :sp OR uc.full_name ILIKE :sp OR up.full_name ILIKE :sp) ");
+			}
+			else {
+				where.append(
+						" AND (ct.transaction_code ILIKE :sp OR ct.category ILIKE :sp OR ct.description ILIKE :sp) ");
+			}
 			src.addValue("sp", searchPattern);
 		}
 	}

@@ -39,14 +39,58 @@ public class CategoryJdbcRepository {
 				       c.created_at, c.updated_at,
 				       COALESCE(pc.cnt, 0)::bigint AS product_count
 				FROM categories c
-				LEFT JOIN (
-				  SELECT category_id, COUNT(*)::bigint AS cnt FROM products GROUP BY category_id
-				) pc ON pc.category_id = c.id
+				LEFT JOIN LATERAL (
+				  SELECT COUNT(*)::bigint AS cnt FROM products WHERE category_id = c.id
+				) pc ON true
 				WHERE c.deleted_at IS NULL
 				""");
 		MapSqlParameterSource p = new MapSqlParameterSource();
 		appendStatus(sql, statusFilter);
 		sql.append(" ORDER BY c.sort_order, c.name");
+		return namedJdbc.query(sql.toString(), p, FLAT_ROW_MAPPER);
+	}
+
+	public List<CategoryFlatRow> loadAllActive(String statusFilter, String search) {
+		if (search == null || search.isBlank()) {
+			return loadAllActive(statusFilter);
+		}
+		StringBuilder sql = new StringBuilder("""
+				SELECT c.id, c.category_code, c.name, c.description, c.parent_id, c.sort_order, c.status,
+				       c.created_at, c.updated_at,
+				       COALESCE(pc.cnt, 0)::bigint AS product_count
+				FROM categories c
+				LEFT JOIN LATERAL (
+				  SELECT COUNT(*)::bigint AS cnt FROM products WHERE category_id = c.id
+				) pc ON true
+				WHERE c.deleted_at IS NULL
+				""");
+		MapSqlParameterSource p = new MapSqlParameterSource();
+		appendStatus(sql, statusFilter);
+		sql.append(" AND (c.name ILIKE :search OR c.category_code ILIKE :search)");
+		p.addValue("search", "%" + search.trim() + "%");
+		sql.append(" ORDER BY c.sort_order, c.name");
+		return namedJdbc.query(sql.toString(), p, FLAT_ROW_MAPPER);
+	}
+
+	public List<CategoryFlatRow> loadAllActiveFlat(String statusFilter, String search, int limit, int offset) {
+		StringBuilder sql = new StringBuilder("""
+				SELECT c.id, c.category_code, c.name, c.description, c.parent_id, c.sort_order, c.status,
+				       c.created_at, c.updated_at,
+				       COALESCE(pc.cnt, 0)::bigint AS product_count
+				FROM categories c
+				LEFT JOIN LATERAL (
+				  SELECT COUNT(*)::bigint AS cnt FROM products WHERE category_id = c.id
+				) pc ON true
+				WHERE c.deleted_at IS NULL
+				""");
+		MapSqlParameterSource p = new MapSqlParameterSource();
+		appendStatus(sql, statusFilter);
+		if (search != null && !search.isBlank()) {
+			sql.append(" AND (c.name ILIKE :search OR c.category_code ILIKE :search)");
+			p.addValue("search", "%" + search.trim() + "%");
+		}
+		sql.append(" ORDER BY c.sort_order, c.name LIMIT :limit OFFSET :offset");
+		p.addValue("limit", limit).addValue("offset", offset);
 		return namedJdbc.query(sql.toString(), p, FLAT_ROW_MAPPER);
 	}
 
@@ -174,18 +218,18 @@ public class CategoryJdbcRepository {
 		if (c.parentId() != null) {
 			parentName = findActiveName(c.parentId()).orElse(null);
 		}
-		List<CategoryBreadcrumbItemData> trail = new ArrayList<>();
-		Long cur = id;
-		int guard = 0;
-		while (cur != null && guard++ < 256) {
-			Optional<CategoryFlatRow> step = findActiveById(cur);
-			if (step.isEmpty()) {
-				break;
-			}
-			CategoryFlatRow s = step.get();
-			trail.addFirst(new CategoryBreadcrumbItemData(s.id(), s.name(), s.categoryCode()));
-			cur = s.parentId();
-		}
+		String sql = """
+				WITH RECURSIVE ancestors AS (
+				  SELECT id, parent_id, name, category_code, 1 AS depth FROM categories WHERE id = :id AND deleted_at IS NULL
+				  UNION ALL
+				  SELECT c.id, c.parent_id, c.name, c.category_code, a.depth + 1
+				  FROM categories c INNER JOIN ancestors a ON c.id = a.parent_id
+				  WHERE c.deleted_at IS NULL AND a.depth < 100
+				)
+				SELECT id, name, category_code FROM ancestors ORDER BY depth DESC
+				""";
+		List<CategoryBreadcrumbItemData> trail = namedJdbc.query(sql, Map.of("id", id), (rs, rn) ->
+				new CategoryBreadcrumbItemData(rs.getLong("id"), rs.getString("name"), rs.getString("category_code")));
 		return Optional.of(new CategoryDetailData(c.id(), c.categoryCode(), c.name(), c.description(), c.parentId(),
 				parentName, c.sortOrder(), c.status(), c.productCount(), c.createdAt(), c.updatedAt(), trail));
 	}

@@ -23,7 +23,9 @@ public class CustomInterfaceJdbcRepository {
 
 	public List<FolderRow> findActiveFolders() {
 		return jdbcTemplate.query("""
-				SELECT * FROM custom_menu_folders
+				SELECT id, folder_key, label, icon, description, status, sort_order, visibility_roles,
+				       draft_version, published_version, etag, updated_at, published_at
+				FROM custom_menu_folders
 				WHERE archived_at IS NULL
 				ORDER BY sort_order ASC, id ASC
 				""", folderMapper());
@@ -31,7 +33,10 @@ public class CustomInterfaceJdbcRepository {
 
 	public List<PageRow> findActivePages() {
 		return jdbcTemplate.query("""
-				SELECT * FROM custom_menu_pages
+				SELECT id, page_key, parent_folder_key, label, icon, description, route_path, entity_key, page_type,
+				       status, sort_order, visibility_roles, entity_permission, data_permission,
+				       draft_version, published_version, etag, updated_at, published_at
+				FROM custom_menu_pages
 				WHERE archived_at IS NULL
 				ORDER BY parent_folder_key ASC, sort_order ASC, id ASC
 				""", pageMapper());
@@ -39,7 +44,9 @@ public class CustomInterfaceJdbcRepository {
 
 	public Optional<FolderRow> findFolder(String key) {
 		List<FolderRow> rows = jdbcTemplate.query("""
-				SELECT * FROM custom_menu_folders
+				SELECT id, folder_key, label, icon, description, status, sort_order, visibility_roles,
+				       draft_version, published_version, etag, updated_at, published_at
+				FROM custom_menu_folders
 				WHERE folder_key = ? AND archived_at IS NULL
 				""", folderMapper(), key);
 		return rows.stream().findFirst();
@@ -47,7 +54,10 @@ public class CustomInterfaceJdbcRepository {
 
 	public Optional<PageRow> findPage(String key) {
 		List<PageRow> rows = jdbcTemplate.query("""
-				SELECT * FROM custom_menu_pages
+				SELECT id, page_key, parent_folder_key, label, icon, description, route_path, entity_key, page_type,
+				       status, sort_order, visibility_roles, entity_permission, data_permission,
+				       draft_version, published_version, etag, updated_at, published_at
+				FROM custom_menu_pages
 				WHERE page_key = ? AND archived_at IS NULL
 				""", pageMapper(), key);
 		return rows.stream().findFirst();
@@ -55,7 +65,10 @@ public class CustomInterfaceJdbcRepository {
 
 	public Optional<PageRow> findPublishedPage(String key) {
 		List<PageRow> rows = jdbcTemplate.query("""
-				SELECT * FROM custom_menu_pages
+				SELECT id, page_key, parent_folder_key, label, icon, description, route_path, entity_key, page_type,
+				       status, sort_order, visibility_roles, entity_permission, data_permission,
+				       draft_version, published_version, etag, updated_at, published_at
+				FROM custom_menu_pages
 				WHERE page_key = ? AND status = 'Published' AND archived_at IS NULL
 				""", pageMapper(), key);
 		return rows.stream().findFirst();

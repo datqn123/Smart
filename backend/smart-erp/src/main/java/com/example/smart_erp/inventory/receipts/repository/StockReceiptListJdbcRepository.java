@@ -30,6 +30,11 @@ public class StockReceiptListJdbcRepository {
 			INNER JOIN users u_staff ON u_staff.id = sr.staff_id
 			LEFT JOIN users u_appr ON u_appr.id = sr.approved_by
 			LEFT JOIN users u_rev ON u_rev.id = sr.reviewed_by
+			LEFT JOIN LATERAL (
+			  SELECT COUNT(*)::int AS line_count
+			  FROM stockreceiptdetails d
+			  WHERE d.receipt_id = sr.id
+			) line_agg ON true
 			""";
 
 	private static final String SELECT_LIST = """
@@ -54,7 +59,7 @@ public class StockReceiptListJdbcRepository {
 			  sr.rejection_reason,
 			  sr.created_at,
 			  sr.updated_at,
-			  (SELECT COUNT(*)::int FROM stockreceiptdetails d WHERE d.receipt_id = sr.id) AS line_count
+			  line_agg.line_count
 			""";
 
 	private final NamedParameterJdbcTemplate namedJdbc;

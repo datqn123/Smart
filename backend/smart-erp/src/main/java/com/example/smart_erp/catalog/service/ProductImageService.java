@@ -75,6 +75,9 @@ public class ProductImageService {
 			throw new BusinessException(ApiErrorCode.BAD_REQUEST, "primaryImageIndex không hợp lệ",
 					Map.of("primaryImageIndex", "Nằm trong [0, số file - 1]"));
 		}
+		String primaryUrl = urls.get(primaryIndex);
+		productImageJdbcRepository.clearPrimaryForProduct(productId);
+		productImageJdbcRepository.updateProductMainImageUrl(productId, primaryUrl);
 		List<ProductImageData> out = new ArrayList<>();
 		for (int i = 0; i < urls.size(); i++) {
 			String url = urls.get(i);
@@ -83,7 +86,9 @@ public class ProductImageService {
 						Map.of("file", "Tối đa 500 ký tự"));
 			}
 			boolean isPrimary = (i == primaryIndex);
-			out.add(persistAfterOptionalPrimaryReset(productId, url, i, isPrimary, fileSizes.get(i), mimeTypes.get(i)));
+			int id = productImageJdbcRepository.insertImage(productId, url, isPrimary, i, fileSizes.get(i),
+					mimeTypes.get(i));
+			out.add(new ProductImageData(id, productId, url, i, isPrimary));
 		}
 		return out;
 	}

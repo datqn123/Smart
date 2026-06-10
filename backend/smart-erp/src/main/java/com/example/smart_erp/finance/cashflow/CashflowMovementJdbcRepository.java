@@ -35,7 +35,7 @@ public class CashflowMovementJdbcRepository {
 		String searchCash = searchPattern == null ? ""
 				: " AND (ct.transaction_code ILIKE :sp OR ct.category ILIKE :sp OR ct.description ILIKE :sp) ";
 		return """
-				movements AS (
+				movements AS NOT MATERIALIZED (
 				  SELECT
 				    'ledger:' || fl.id::text AS line_id,
 				    'Ledger' AS source_kind,

@@ -37,6 +37,27 @@ public class GlobalTableColumnSettingsJdbcRepository {
 				rs.getString("updated_by_name")));
 	}
 
+	public List<Row> findByKeys(List<String> keys) {
+		String sql = """
+				SELECT
+				  s.table_key,
+				  s.hidden_columns::text AS hidden_columns_json,
+				  s.column_order::text AS column_order_json,
+				  s.updated_at,
+				  u.full_name AS updated_by_name
+				FROM global_table_column_settings s
+				LEFT JOIN users u ON u.id = s.updated_by
+				WHERE s.table_key IN (:keys)
+				ORDER BY s.table_key
+				""";
+		return namedJdbc.query(sql, new MapSqlParameterSource("keys", keys), (rs, i) -> new Row(
+				rs.getString("table_key"),
+				rs.getString("hidden_columns_json"),
+				rs.getString("column_order_json"),
+				toInstant(rs.getTimestamp("updated_at")),
+				rs.getString("updated_by_name")));
+	}
+
 	public void upsert(String tableKey, String hiddenColumnsJson, String columnOrderJson, int updatedBy) {
 		String sql = """
 				INSERT INTO global_table_column_settings (

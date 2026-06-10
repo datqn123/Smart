@@ -223,26 +223,22 @@ public class SupplierService {
 		if (uniq.size() != ids.size()) {
 			throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Danh sách ids không được trùng lặp");
 		}
-		for (int sid : ids) {
-			if (!supplierJdbcRepository.existsSupplierId(sid)) {
-				throw new BusinessException(ApiErrorCode.CONFLICT,
-						"Không thể xóa toàn bộ: ít nhất một nhà cung cấp không tồn tại",
-						Map.of("failedId", String.valueOf(sid), "reason", "NOT_FOUND"));
+		Set<Integer> existing = supplierJdbcRepository.findExistingSupplierIds(ids);
+		if (existing.size() != ids.size()) {
+			for (int sid : ids) {
+				if (!existing.contains(sid)) {
+					throw new BusinessException(ApiErrorCode.CONFLICT,
+							"Không thể xóa toàn bộ: ít nhất một nhà cung cấp không tồn tại",
+							Map.of("failedId", String.valueOf(sid), "reason", "NOT_FOUND"));
+				}
 			}
 		}
-		for (int sid : ids) {
-			if (supplierJdbcRepository.existsStockReceiptForSupplier(sid)) {
-				throw new BusinessException(ApiErrorCode.CONFLICT,
-						"Không thể xóa toàn bộ: ít nhất một nhà cung cấp không đủ điều kiện",
-						Map.of("failedId", String.valueOf(sid), "reason", "HAS_RECEIPTS"));
-			}
-		}
-		for (int sid : ids) {
-			if (supplierJdbcRepository.existsPartnerDebtForSupplier(sid)) {
-				throw new BusinessException(ApiErrorCode.CONFLICT,
-						"Không thể xóa toàn bộ: ít nhất một nhà cung cấp không đủ điều kiện",
-						Map.of("failedId", String.valueOf(sid), "reason", "HAS_PARTNER_DEBTS"));
-			}
+		Map<Integer, String> blocked = supplierJdbcRepository.findBulkDeleteBlockReasons(ids);
+		for (Map.Entry<Integer, String> entry : blocked.entrySet()) {
+			String r = entry.getValue();
+			throw new BusinessException(ApiErrorCode.CONFLICT,
+					"Không thể xóa toàn bộ: ít nhất một nhà cung cấp không đủ điều kiện",
+					Map.of("failedId", String.valueOf(entry.getKey()), "reason", r));
 		}
 		supplierJdbcRepository.lockSuppliersForUpdate(ids);
 		int deleted = supplierJdbcRepository.deleteSuppliers(ids);

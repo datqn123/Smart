@@ -95,16 +95,6 @@ class GraphSettings(BaseSettings):
         le=300,
         description="Interval between lightweight DB fingerprint checks.",
     )
-    sql_review_max_retries: int = Field(
-        default=2,
-        ge=0,
-        le=8,
-        description="Max structured retries for sql_review LLM call.",
-    )
-    sql_review_skip_low_risk: bool = Field(
-        default=True,
-        description="Skip sql_review LLM for low-risk SQL queries when deterministic checks already pass.",
-    )
     sql_repair_max_attempts: int = Field(
         default=3,
         ge=1,
@@ -201,16 +191,6 @@ class GraphSettings(BaseSettings):
         description="IANA zone for SQL summarize prompts: ISO timestamps with Z/offset → local wall time. Empty = raw.",
     )
     # --- Ledger-first schema explorer ---
-    sql_schema_explorer_enabled: bool = Field(
-        default=False,
-        description="Insert schema_explore node before gen_sql (list_tables + schema_plan + describe).",
-    )
-    sql_schema_explorer_describe_max_tables: int = Field(
-        default=6,
-        ge=0,
-        le=16,
-        description="Max Spring describe HTTP calls per schema_explore turn.",
-    )
     sql_ledger_first_prompts: bool = Field(
         default=True,
         description="Ledger-first gen_sql prompts even when schema explorer is off.",
@@ -218,15 +198,6 @@ class GraphSettings(BaseSettings):
     sql_validate_ledger_metric: bool = Field(
         default=True,
         description="Policy check: revenue/expense questions must use financeledger.",
-    )
-    # --- LLM-first chart pipeline ---
-    chart_readiness_enabled: bool = Field(
-        default=True,
-        description="After SQL for system_data_chart, run shape checks (+ optional LLM critic) before agent_chart.",
-    )
-    chart_readiness_use_llm_critic: bool = Field(
-        default=True,
-        description="Use chart_critic LLM when heuristics warn or fail (requires LLM registry).",
     )
     chart_brief_catalog_max_tables: int = Field(
         default=40,
@@ -536,19 +507,15 @@ class GraphSettings(BaseSettings):
         "sql_hybrid_similarity_enabled",
         "sql_exploit_on_retry",
         "sql_separate_select_tables_node",
-        "sql_schema_explorer_enabled",
         "sql_introspection_enabled",
         "sql_introspection_warmup_enabled",
         "sql_ledger_first_prompts",
         "sql_validate_ledger_metric",
-        "chart_readiness_enabled",
-        "chart_readiness_use_llm_critic",
         "planner_enabled",
         "planner_md_context_enabled",
         "context_compact_enabled",
         "conversation_memory_enabled",
         "schema_cache_enabled",
-        "sql_review_skip_low_risk",
         "harness_enabled",
         "harness_loop_enabled",
         "agentic_async_enabled",
@@ -586,7 +553,6 @@ class GraphSettings(BaseSettings):
         "schema_cache_ttl_seconds",
         "schema_cache_max_items",
         "schema_fingerprint_check_interval_seconds",
-        "sql_review_max_retries",
         "sql_repair_max_attempts",
         "planner_max_md_chars",
         "harness_max_steps",

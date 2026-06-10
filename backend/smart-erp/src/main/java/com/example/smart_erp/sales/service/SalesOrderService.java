@@ -237,10 +237,10 @@ public class SalesOrderService {
 			throw new BusinessException(ApiErrorCode.INTERNAL_SERVER_ERROR, "Không tạo được đơn hàng");
 		}
 		salesOrderJdbcRepository.updateOrderCode(id, buildOrderCode(id));
-		for (SalesOrderLineRequest line : body.lines()) {
-			salesOrderJdbcRepository.insertOrderLine(id, line.productId(), line.unitId(), line.quantity(),
-					line.unitPrice());
-		}
+		var lineInputs = body.lines().stream()
+				.map(l -> new SalesOrderJdbcRepository.LineInput(l.productId(), l.unitId(), l.quantity(), l.unitPrice()))
+				.toList();
+		salesOrderJdbcRepository.batchInsertOrderLines(id, lineInputs);
 		salesOrderJdbcRepository.loadOrderFinancialForLedger(id)
 				.ifPresent(fin -> financeLedgerPostingService.tryPostOrderLedgerOnFinancialState(fin, uid));
 		return getById(id);
@@ -296,12 +296,11 @@ public class SalesOrderService {
 		if (id <= 0) {
 			throw new BusinessException(ApiErrorCode.INTERNAL_SERVER_ERROR, "Không tạo được đơn hàng");
 		}
-		salesOrderJdbcRepository.updateOrderCode(id, buildOrderCode(id));
-		for (SalesOrderLineRequest line : body.lines()) {
-			salesOrderJdbcRepository.insertOrderLine(id, line.productId(), line.unitId(), line.quantity(),
-					line.unitPrice());
-		}
-		String orderCode = salesOrderJdbcRepository.findOrderCode(id).orElseGet(() -> buildOrderCode(id));
+		String orderCode = salesOrderJdbcRepository.updateOrderCode(id, buildOrderCode(id));
+		var lineInputs = body.lines().stream()
+				.map(l -> new SalesOrderJdbcRepository.LineInput(l.productId(), l.unitId(), l.quantity(), l.unitPrice()))
+				.toList();
+		salesOrderJdbcRepository.batchInsertOrderLines(id, lineInputs);
 		retailStockService.deductStockForRetailCheckout(id, orderCode, uid, body.lines());
 		if (voucherId != null) {
 			voucherJdbcRepository.incrementUsedCount(voucherId);
@@ -543,10 +542,20 @@ public class SalesOrderService {
 			if (line.unitPrice() == null || line.unitPrice().signum() < 0) {
 				throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Đơn giá không hợp lệ");
 			}
-			if (!salesOrderJdbcRepository.existsProductUnitForProduct(line.productId(), line.unitId())) {
+		}
+		List<Integer> productIds = lines.stream().map(SalesOrderLineRequest::productId).distinct().toList();
+		java.util.Set<Integer> existingProductIds = productJdbcRepository.findExistingProductIds(productIds);
+		List<SalesOrderJdbcRepository.ProductUnitPair> pairs = lines.stream()
+				.map(l -> new SalesOrderJdbcRepository.ProductUnitPair(l.productId(), l.unitId()))
+				.distinct()
+				.toList();
+		java.util.Set<SalesOrderJdbcRepository.ProductUnitPair> existingPairs = salesOrderJdbcRepository
+				.findExistingProductUnitPairs(pairs);
+		for (SalesOrderLineRequest line : lines) {
+			if (!existingPairs.contains(new SalesOrderJdbcRepository.ProductUnitPair(line.productId(), line.unitId()))) {
 				throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Đơn vị không thuộc sản phẩm");
 			}
-			if (!productJdbcRepository.existsProductId(line.productId())) {
+			if (!existingProductIds.contains(line.productId())) {
 				throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Sản phẩm không tồn tại");
 			}
 			validateUnitPriceAgainstCatalog(line.productId(), line.unitId(), line.unitPrice());

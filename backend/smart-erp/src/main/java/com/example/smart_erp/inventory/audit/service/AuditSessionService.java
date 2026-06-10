@@ -4,12 +4,12 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,6 +28,7 @@ import com.example.smart_erp.inventory.audit.AuditSessionPatchRequest;
 import com.example.smart_erp.inventory.audit.AuditSessionRejectRequest;
 import com.example.smart_erp.inventory.audit.query.AuditSessionListQuery;
 import com.example.smart_erp.inventory.audit.repository.AuditSessionJdbcRepository;
+import com.example.smart_erp.inventory.audit.repository.AuditSessionJdbcRepository.AuditLogItem;
 import com.example.smart_erp.inventory.audit.repository.AuditSessionJdbcRepository.InventorySnapRow;
 import com.example.smart_erp.inventory.audit.repository.AuditSessionJdbcRepository.LineApplyRow;
 import com.example.smart_erp.inventory.audit.repository.AuditSessionJdbcRepository.SessionLockRow;
@@ -97,8 +98,7 @@ public class AuditSessionService {
 			default -> throw new BusinessException(ApiErrorCode.BAD_REQUEST, "scope.mode không hợp lệ");
 		}
 		int year = auditDate.getYear();
-		int maxSuffix = repo.nextAuditSequenceSuffix(year);
-		int sessionId = insertSessionWithCodeRetry(year, maxSuffix, req.title(), auditDate, locFilter, catFilter, req.notes(), userId);
+		int sessionId = insertSessionWithCode(year, req.title(), auditDate, locFilter, catFilter, req.notes(), userId);
 		for (InventorySnapRow row : snaps) {
 			repo.insertLine(sessionId, row.inventoryId(), new BigDecimal(row.quantity()));
 		}
@@ -106,18 +106,11 @@ public class AuditSessionService {
 				.orElseThrow(() -> new BusinessException(ApiErrorCode.INTERNAL_SERVER_ERROR, "Không đọc lại đợt kiểm kê sau khi tạo"));
 	}
 
-	private int insertSessionWithCodeRetry(int year, int maxSuffix, String title, LocalDate auditDate, String locFilter,
+	private int insertSessionWithCode(int year, String title, LocalDate auditDate, String locFilter,
 			String catFilter, String notes, int userId) {
-		for (int bump = 1; bump <= 20; bump++) {
-			String code = String.format("KK-%d-%04d", year, maxSuffix + bump);
-			try {
-				return repo.insertSession(code, title, auditDate, ST_PENDING, locFilter, catFilter, notes, userId);
-			}
-			catch (DuplicateKeyException ignored) {
-				// thử mã tiếp theo
-			}
-		}
-		throw new BusinessException(ApiErrorCode.CONFLICT, "Không thể sinh mã đợt kiểm kê duy nhất, vui lòng thử lại");
+		int suffix = repo.nextAuditSequenceSuffix(year);
+		String code = String.format("KK-%d-%04d", year, suffix);
+		return repo.insertSession(code, title, auditDate, ST_PENDING, locFilter, catFilter, notes, userId);
 	}
 
 	private List<InventorySnapRow> resolveScope(AuditScopeBody scope) {
@@ -391,28 +384,52 @@ public class AuditSessionService {
 		if (pending.isEmpty()) {
 			throw new BusinessException(ApiErrorCode.CONFLICT, "Đã áp chênh lệch cho đợt này");
 		}
+
+		List<Integer> invIds = pending.stream().map(r -> Math.toIntExact(r.inventoryId())).toList();
+		Map<Integer, Integer> qtyMap = repo.lockInventoryQuantities(invIds);
+		List<Integer> productIds = pending.stream().map(LineApplyRow::productId).toList();
+		Map<Integer, Integer> baseUnitMap = repo.findBaseUnitIdsByProductIds(productIds);
+
+		Map<Integer, Integer> idToNewQty = new HashMap<>();
+		List<AuditLogItem> logItems = new ArrayList<>();
+		List<Long> appliedLineIds = new ArrayList<>();
 		List<AuditApplyVarianceLineResult> results = new ArrayList<>();
+
 		for (LineApplyRow row : pending) {
 			int invId = Math.toIntExact(row.inventoryId());
-			int oldQty = repo.lockInventoryQuantity(invId)
-					.orElseThrow(() -> new BusinessException(ApiErrorCode.CONFLICT, "Không khóa được dòng tồn kho"));
+			Integer oldQty = qtyMap.get(invId);
+			if (oldQty == null) {
+				throw new BusinessException(ApiErrorCode.CONFLICT, "Không khóa được dòng tồn kho");
+			}
 			int newQty = computeNewQuantity(oldQty, row, mode);
 			if (newQty < 0) {
 				throw new BusinessException(ApiErrorCode.CONFLICT, "Số lượng tồn sau điều chỉnh không được âm");
 			}
 			int delta = newQty - oldQty;
 			if (delta == 0) {
-				repo.setVarianceAppliedAt(row.lineId());
+				appliedLineIds.add(row.lineId());
 				results.add(new AuditApplyVarianceLineResult(row.lineId(), row.inventoryId(), 0, oldQty));
 				continue;
 			}
-			repo.updateInventoryQuantity(invId, newQty);
-			int baseUnitId = repo.findBaseUnitId(row.productId())
-					.orElseThrow(() -> new BusinessException(ApiErrorCode.INTERNAL_SERVER_ERROR, "Thiếu đơn vị cơ sở cho sản phẩm"));
+			idToNewQty.put(invId, newQty);
+			Integer baseUnitId = baseUnitMap.get(row.productId());
+			if (baseUnitId == null) {
+				throw new BusinessException(ApiErrorCode.INTERNAL_SERVER_ERROR, "Thiếu đơn vị cơ sở cho sản phẩm");
+			}
 			String note = buildApplyReferenceNote(sid, row.lineId(), req.reason());
-			repo.insertInventoryLog(row.productId(), delta, baseUnitId, userId, note);
-			repo.setVarianceAppliedAt(row.lineId());
+			logItems.add(new AuditLogItem(row.productId(), delta, baseUnitId, userId, note));
+			appliedLineIds.add(row.lineId());
 			results.add(new AuditApplyVarianceLineResult(row.lineId(), row.inventoryId(), delta, newQty));
+		}
+
+		if (!idToNewQty.isEmpty()) {
+			repo.updateInventoryQuantitiesBatch(idToNewQty);
+		}
+		if (!logItems.isEmpty()) {
+			repo.batchInsertInventoryLogs(logItems);
+		}
+		if (!appliedLineIds.isEmpty()) {
+			repo.setVarianceAppliedAtBatch(appliedLineIds);
 		}
 		return new AuditApplyVarianceData(sid, results);
 	}

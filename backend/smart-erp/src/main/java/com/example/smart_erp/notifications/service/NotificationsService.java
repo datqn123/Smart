@@ -58,8 +58,6 @@ public class NotificationsService {
 		}
 		String title = "Yêu cầu đặt lại mật khẩu";
 		String msg = String.format("Nhân viên %s đã gửi yêu cầu đặt lại mật khẩu.", staffUsername.strip());
-		for (int uid : recipients) {
-			notificationJdbcRepository.insertPasswordResetRequested(uid, title, msg, passwordResetRequestId);
-		}
+		notificationJdbcRepository.batchInsertPasswordResetRequested(recipients, title, msg, passwordResetRequestId);
 	}
 }

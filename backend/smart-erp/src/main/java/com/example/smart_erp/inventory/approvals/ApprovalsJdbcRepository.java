@@ -51,6 +51,7 @@ public class ApprovalsJdbcRepository {
 	public List<ApprovalsPendingItemData> loadPendingPage(String searchPattern, LocalDate fromDate, LocalDate toDate,
 			int limit, int offset) {
 		Filter f = buildPendingWhere(searchPattern, fromDate, toDate);
+		// Note: composite index (status, created_at) recommended for pending list ordering
 		String sql = """
 				SELECT
 				  sr.id,
@@ -128,11 +129,11 @@ public class ApprovalsJdbcRepository {
 			src.addValue("_sp", searchPattern);
 		}
 		if (fromDate != null) {
-			sb.append(" AND sr.reviewed_at::date >= :_from");
+			sb.append(" AND sr.reviewed_at >= :_from::timestamptz");
 			src.addValue("_from", fromDate);
 		}
 		if (toDate != null) {
-			sb.append(" AND sr.reviewed_at::date <= :_to");
+			sb.append(" AND sr.reviewed_at < (:_to::timestamptz + interval '1 day')");
 			src.addValue("_to", toDate);
 		}
 		return new Filter(sb.toString(), src);

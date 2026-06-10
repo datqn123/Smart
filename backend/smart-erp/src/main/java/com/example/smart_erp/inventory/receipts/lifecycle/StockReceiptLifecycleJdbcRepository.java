@@ -5,7 +5,10 @@ import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.jdbc.core.RowMapper;
@@ -220,6 +223,162 @@ public class StockReceiptLifecycleJdbcRepository {
 			LocalDate expiryDate, BigDecimal conversionRate, boolean baseUnit) {
 	}
 
+	public record InventoryInsert(int productId, int locationId, String batchNumber, LocalDate expiryDate, int quantity) {
+	}
+
+	public record InventoryLogItem(int productId, int quantityChange, int unitId, Integer userId, long receiptId,
+			Integer toLocationId, String referenceNote) {
+	}
+
+	public record InventoryLockRow(long id, int productId, String batchNumber) {
+	}
+
+	public List<Integer> findActiveProductIds(List<Integer> ids) {
+		if (ids == null || ids.isEmpty()) {
+			return List.of();
+		}
+		String sql = "SELECT id FROM products WHERE id IN (:ids) AND status = 'Active'";
+		return namedJdbc.query(sql, new MapSqlParameterSource("ids", ids), (rs, i) -> rs.getInt("id"));
+	}
+
+	public List<UnitRow> findUnitsByTuples(List<int[]> tuples) {
+		if (tuples == null || tuples.isEmpty()) {
+			return List.of();
+		}
+		Integer[] ids = tuples.stream().map(t -> t[0]).toArray(Integer[]::new);
+		Integer[] productIds = tuples.stream().map(t -> t[1]).toArray(Integer[]::new);
+		String sql = """
+				SELECT id, product_id, is_base_unit, conversion_rate
+				FROM productunits
+				WHERE (id, product_id) IN (
+				  SELECT * FROM unnest(:ids, :productIds) AS t(id, product_id)
+				)
+				""";
+		return namedJdbc.query(sql, Map.of("ids", ids, "productIds", productIds), UNIT_ROW);
+	}
+
+	public void batchInsertDetails(long receiptId, List<StockReceiptDetailRequest> details) {
+		if (details == null || details.isEmpty()) {
+			return;
+		}
+		String sql = """
+				INSERT INTO stockreceiptdetails (receipt_id, product_id, unit_id, quantity, cost_price, batch_number, expiry_date)
+				VALUES (:receipt_id, :product_id, :unit_id, :quantity, :cost_price, :batch_number, :expiry_date)
+				""";
+		MapSqlParameterSource[] batch = new MapSqlParameterSource[details.size()];
+		for (int i = 0; i < details.size(); i++) {
+			StockReceiptDetailRequest d = details.get(i);
+			LocalDate exp = null;
+			if (d.expiryDate() != null && !d.expiryDate().isBlank()) {
+				exp = LocalDate.parse(d.expiryDate());
+			}
+			batch[i] = new MapSqlParameterSource("receipt_id", receiptId)
+					.addValue("product_id", d.productId())
+					.addValue("unit_id", d.unitId())
+					.addValue("quantity", d.quantity())
+					.addValue("cost_price", d.costPrice())
+					.addValue("batch_number", blankToNull(d.batchNumber()), Types.VARCHAR)
+					.addValue("expiry_date", exp != null ? java.sql.Date.valueOf(exp) : null, Types.DATE);
+		}
+		namedJdbc.batchUpdate(sql, batch);
+	}
+
+	public Map<Integer, Integer> findBaseUnitIdsByProductIds(List<Integer> productIds) {
+		if (productIds == null || productIds.isEmpty()) {
+			return Map.of();
+		}
+		String sql = "SELECT id, product_id FROM productunits WHERE product_id IN (:pids) AND is_base_unit = TRUE";
+		List<Map<String, Object>> rows = namedJdbc.queryForList(sql, new MapSqlParameterSource("pids", productIds));
+		Map<Integer, Integer> map = new HashMap<>();
+		for (Map<String, Object> row : rows) {
+			map.put((Integer) row.get("product_id"), (Integer) row.get("id"));
+		}
+		return map;
+	}
+
+	public List<InventoryLockRow> findInventoryByProductsForUpdate(int locationId, List<Integer> productIds) {
+		if (productIds == null || productIds.isEmpty()) {
+			return List.of();
+		}
+		String sql = """
+				SELECT id, product_id, batch_number
+				FROM inventory
+				WHERE location_id = :loc AND product_id IN (:pids)
+				FOR UPDATE
+				""";
+		return namedJdbc.query(sql, new MapSqlParameterSource("loc", locationId).addValue("pids", productIds),
+				(rs, rn) -> new InventoryLockRow(rs.getLong("id"), rs.getInt("product_id"), rs.getString("batch_number")));
+	}
+
+	public void updateInventoryQuantitiesBatch(Map<Long, Integer> idToDelta) {
+		if (idToDelta == null || idToDelta.isEmpty()) {
+			return;
+		}
+		StringBuilder sb = new StringBuilder("UPDATE inventory SET quantity = quantity + CASE id ");
+		var src = new MapSqlParameterSource();
+		int i = 0;
+		for (var entry : idToDelta.entrySet()) {
+			String idParam = "id" + i;
+			String valParam = "v" + i;
+			sb.append("WHEN :").append(idParam).append(" THEN :").append(valParam).append(" ");
+			src.addValue(idParam, entry.getKey());
+			src.addValue(valParam, entry.getValue());
+			i++;
+		}
+		sb.append("END, updated_at = CURRENT_TIMESTAMP WHERE id IN (:ids)");
+		src.addValue("ids", new ArrayList<>(idToDelta.keySet()));
+		namedJdbc.update(sb.toString(), src);
+	}
+
+	public void batchInsertInventory(List<InventoryInsert> items) {
+		if (items == null || items.isEmpty()) {
+			return;
+		}
+		String sql = """
+				INSERT INTO inventory (product_id, location_id, batch_number, expiry_date, quantity, min_quantity)
+				VALUES (:pid, :loc, :batch, :exp, :qty, 0)
+				""";
+		MapSqlParameterSource[] batch = new MapSqlParameterSource[items.size()];
+		for (int i = 0; i < items.size(); i++) {
+			InventoryInsert it = items.get(i);
+			batch[i] = new MapSqlParameterSource("pid", it.productId())
+					.addValue("loc", it.locationId())
+					.addValue("batch", it.batchNumber(), Types.VARCHAR)
+					.addValue("exp", it.expiryDate() != null ? java.sql.Date.valueOf(it.expiryDate()) : null, Types.DATE)
+					.addValue("qty", it.quantity());
+		}
+		namedJdbc.batchUpdate(sql, batch);
+	}
+
+	public void batchInsertInventoryLogs(List<InventoryLogItem> items) {
+		if (items == null || items.isEmpty()) {
+			return;
+		}
+		String sql = """
+				INSERT INTO inventorylogs (product_id, action_type, quantity_change, unit_id, user_id, dispatch_id, receipt_id, from_location_id, to_location_id, reference_note)
+				VALUES (:pid, 'INBOUND', :qchg, :uid_unit, :user_id, NULL, :receipt_id, NULL, :to_loc, :note)
+				""";
+		MapSqlParameterSource[] batch = new MapSqlParameterSource[items.size()];
+		for (int i = 0; i < items.size(); i++) {
+			InventoryLogItem it = items.get(i);
+			batch[i] = new MapSqlParameterSource("pid", it.productId())
+					.addValue("qchg", it.quantityChange())
+					.addValue("uid_unit", it.unitId())
+					.addValue("user_id", it.userId(), Types.INTEGER)
+					.addValue("receipt_id", it.receiptId())
+					.addValue("to_loc", it.toLocationId())
+					.addValue("note", it.referenceNote(), Types.VARCHAR);
+		}
+		namedJdbc.batchUpdate(sql, batch);
+	}
+
+	private static String blankToNull(String s) {
+		if (s == null || s.isBlank()) {
+			return null;
+		}
+		return s.trim();
+	}
+
 	public Optional<Long> findInventoryIdForUpdate(int productId, int locationId, String batchNumber) {
 		String sql = """
 				SELECT i.id FROM inventory i
@@ -302,7 +461,30 @@ public class StockReceiptLifecycleJdbcRepository {
 		return Optional.of(h.toView(lines));
 	}
 
-	private record HeaderSnapshot(long id, String receiptCode, long supplierId, String supplierName, int staffId,
+	public List<StockReceiptLineViewData> loadDetailLines(long receiptId) {
+		String dsql = """
+				SELECT d.id, d.receipt_id, d.product_id, p.name AS product_name, p.sku_code, d.unit_id, pu.unit_name,
+				  d.quantity, d.cost_price, d.batch_number, d.expiry_date, d.line_total
+				FROM stockreceiptdetails d
+				INNER JOIN products p ON p.id = d.product_id
+				INNER JOIN productunits pu ON pu.id = d.unit_id
+				WHERE d.receipt_id = :id
+				ORDER BY d.id
+				""";
+		return namedJdbc.query(dsql, new MapSqlParameterSource("id", receiptId), VIEW_LINE);
+	}
+
+	public record NamePair(String supplierName, String staffName) {
+	}
+
+	public NamePair loadNames(int supplierId, int staffId) {
+		String sql = "SELECT (SELECT name FROM suppliers WHERE id = :supplierId) AS supplier_name, (SELECT full_name FROM users WHERE id = :staffId) AS staff_name";
+		return namedJdbc.queryForObject(sql,
+				new MapSqlParameterSource("supplierId", supplierId).addValue("staffId", staffId),
+				(rs, i) -> new NamePair(rs.getString("supplier_name"), rs.getString("staff_name")));
+	}
+
+	public record HeaderSnapshot(long id, String receiptCode, long supplierId, String supplierName, int staffId,
 			String staffName, LocalDate receiptDate, String status, String invoiceNumber, BigDecimal totalAmount, String notes,
 			Integer approvedBy, String approvedByName, Instant approvedAt, Integer reviewedBy, String reviewedByName,
 			Instant reviewedAt, String rejectionReason, Instant createdAt, Instant updatedAt) {
@@ -311,6 +493,29 @@ public class StockReceiptLifecycleJdbcRepository {
 					invoiceNumber, totalAmount, notes, approvedBy, approvedByName, approvedAt, reviewedBy, reviewedByName,
 					reviewedAt, rejectionReason, createdAt, updatedAt, details);
 		}
+	}
+
+	public StockReceiptViewData buildView(HeaderSnapshot header, List<StockReceiptLineViewData> lines) {
+		return header.toView(lines);
+	}
+
+	public Optional<HeaderSnapshot> loadHeaderSnapshot(long receiptId) {
+		String sql = """
+				SELECT
+				  sr.id, sr.receipt_code, sr.supplier_id, s.name AS supplier_name, sr.staff_id, u_staff.full_name AS staff_name,
+				  sr.receipt_date, sr.status, sr.invoice_number, sr.total_amount, sr.notes,
+				  sr.approved_by, u_appr.full_name AS approved_by_name, sr.approved_at,
+				  sr.reviewed_by, u_rev.full_name AS reviewed_by_name, sr.reviewed_at,
+				  sr.rejection_reason, sr.created_at, sr.updated_at
+				FROM stockreceipts sr
+				INNER JOIN suppliers s ON s.id = sr.supplier_id
+				INNER JOIN users u_staff ON u_staff.id = sr.staff_id
+				LEFT JOIN users u_appr ON u_appr.id = sr.approved_by
+				LEFT JOIN users u_rev ON u_rev.id = sr.reviewed_by
+				WHERE sr.id = :id
+				""";
+		var list = namedJdbc.query(sql, new MapSqlParameterSource("id", receiptId), HEADER_SNAPSHOT);
+		return list.isEmpty() ? Optional.empty() : Optional.of(list.getFirst());
 	}
 
 	private static final RowMapper<ReceiptHeaderLockRow> HEADER_LOCK_ROW = (rs, i) -> new ReceiptHeaderLockRow(rs.getLong("id"),

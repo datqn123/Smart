@@ -6,10 +6,12 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -227,11 +229,71 @@ public class SupplierJdbcRepository {
 		return namedJdbc.update("DELETE FROM suppliers WHERE id IN (:ids)", Map.of("ids", ids));
 	}
 
+	public Set<Integer> findExistingSupplierIds(List<Integer> ids) {
+		if (ids == null || ids.isEmpty()) {
+			return Collections.emptySet();
+		}
+		List<Integer> rows = namedJdbc.query(
+				"SELECT id FROM suppliers WHERE id IN (:ids)",
+				Map.of("ids", ids), (rs, rn) -> rs.getInt("id"));
+		return new HashSet<>(rows);
+	}
+
+	public Map<Integer, String> findBulkDeleteBlockReasons(List<Integer> ids) {
+		if (ids == null || ids.isEmpty()) {
+			return Collections.emptyMap();
+		}
+		String sql = """
+				SELECT s.id,
+				  CASE
+				    WHEN EXISTS (SELECT 1 FROM stockreceipts WHERE supplier_id = s.id) THEN 'HAS_RECEIPTS'
+				    WHEN EXISTS (SELECT 1 FROM partnerdebts WHERE supplier_id = s.id) THEN 'HAS_PARTNER_DEBTS'
+				    ELSE NULL
+				  END AS block_reason
+				FROM unnest(:ids) AS s(id)
+				""";
+		Integer[] idArray = ids.toArray(new Integer[0]);
+		List<BlockedRow> rows = namedJdbc.query(sql, Map.of("ids", idArray), (rs, rn) -> {
+			int id = rs.getInt("id");
+			String reason = rs.getString("block_reason");
+			return new BlockedRow(id, reason);
+		});
+		Map<Integer, String> result = new HashMap<>();
+		for (BlockedRow r : rows) {
+			if (r.reason() != null) {
+				result.put(r.id(), r.reason());
+			}
+		}
+		return result;
+	}
+
+	private record BlockedRow(int id, String reason) {
+	}
+
 	public void lockSuppliersForUpdate(List<Integer> ids) {
 		List<Integer> sorted = new ArrayList<>(new HashSet<>(ids));
 		Collections.sort(sorted);
-		for (int sid : sorted) {
-			lockSupplierForUpdate(sid).orElseThrow(() -> new IllegalStateException("supplier missing id=" + sid));
+		if (sorted.isEmpty()) {
+			return;
+		}
+		String sql = """
+				SELECT id, supplier_code, name, contact_person, phone, email, address, tax_code, status
+				FROM suppliers WHERE id IN (:ids) ORDER BY id FOR UPDATE
+				""";
+		List<SupplierLockRow> rows = namedJdbc.query(sql, Map.of("ids", sorted),
+				(rs, rn) -> new SupplierLockRow(rs.getInt("id"), rs.getString("supplier_code"), rs.getString("name"),
+						rs.getString("contact_person"), rs.getString("phone"), rs.getString("email"),
+						rs.getString("address"), rs.getString("tax_code"), rs.getString("status")));
+		if (rows.size() < sorted.size()) {
+			Set<Integer> locked = new HashSet<>();
+			for (SupplierLockRow r : rows) {
+				locked.add(r.id());
+			}
+			for (Integer id : sorted) {
+				if (!locked.contains(id)) {
+					throw new IllegalStateException("supplier missing id=" + id);
+				}
+			}
 		}
 	}
 

@@ -104,8 +104,7 @@ public class SystemLogsJdbcRepository {
 					  s.message ILIKE :_search OR
 					  s.action  ILIKE :_search OR
 					  s.module  ILIKE :_search OR
-					  COALESCE(u.full_name, '') ILIKE :_search OR
-					  COALESCE(s.context_data::text, '') ILIKE :_search
+					  COALESCE(u.full_name, '') ILIKE :_search
 					)
 					""");
 			src.addValue("_search", searchPattern);

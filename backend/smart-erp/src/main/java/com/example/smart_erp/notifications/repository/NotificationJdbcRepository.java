@@ -92,6 +92,24 @@ public class NotificationJdbcRepository {
 		namedJdbc.update(sql, src);
 	}
 
+	public void batchInsertPasswordResetRequested(List<Integer> recipientUserIds, String title, String message, long requestId) {
+		int refId = Math.toIntExact(requestId);
+		String sql = """
+				INSERT INTO notifications (user_id, notification_type, title, message, is_read,
+					reference_type, reference_id)
+				VALUES (:_uid, 'PasswordResetRequest', :_title, :_message, FALSE,
+					'StaffPasswordResetRequest', :_ref_id)
+				""";
+		MapSqlParameterSource[] batch = new MapSqlParameterSource[recipientUserIds.size()];
+		for (int i = 0; i < recipientUserIds.size(); i++) {
+			batch[i] = new MapSqlParameterSource("_uid", recipientUserIds.get(i))
+					.addValue("_title", title)
+					.addValue("_message", message)
+					.addValue("_ref_id", refId);
+		}
+		namedJdbc.batchUpdate(sql, batch);
+	}
+
 	public long countForUser(int userId, Boolean unreadOnly) {
 		boolean unread = Boolean.TRUE.equals(unreadOnly);
 		String sql = "SELECT COUNT(*) FROM notifications WHERE user_id = :_uid "

@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,7 +18,6 @@ import com.example.smart_erp.common.api.ApiErrorCode;
 import com.example.smart_erp.common.exception.BusinessException;
 import com.example.smart_erp.inventory.dispatch.response.StockDispatchCreatedData;
 import com.example.smart_erp.inventory.receipts.lifecycle.StockReceiptAccessPolicy;
-import com.example.smart_erp.notifications.repository.NotificationJdbcRepository;
 import com.example.smart_erp.sales.repository.SalesOrderJdbcRepository;
 
 @Service
@@ -25,16 +25,16 @@ public class OrderLinkedDispatchService {
 
 	private final StockDispatchJdbcRepository dispatchRepo;
 	private final SalesOrderJdbcRepository salesOrderRepo;
-	private final NotificationJdbcRepository notificationRepo;
 	private final StockDispatchNotifier dispatchNotifier;
+	private final ApplicationEventPublisher eventPublisher;
 
 	public OrderLinkedDispatchService(StockDispatchJdbcRepository dispatchRepo,
-			SalesOrderJdbcRepository salesOrderRepo, NotificationJdbcRepository notificationRepo,
-			StockDispatchNotifier dispatchNotifier) {
+			SalesOrderJdbcRepository salesOrderRepo, StockDispatchNotifier dispatchNotifier,
+			ApplicationEventPublisher eventPublisher) {
 		this.dispatchRepo = dispatchRepo;
 		this.salesOrderRepo = salesOrderRepo;
-		this.notificationRepo = notificationRepo;
 		this.dispatchNotifier = dispatchNotifier;
+		this.eventPublisher = eventPublisher;
 	}
 
 	@Transactional
@@ -97,26 +97,13 @@ public class OrderLinkedDispatchService {
 
 		String orderCode = salesOrderRepo.findOrderCode(req.orderId()).orElse("đơn #" + req.orderId());
 		if (!shortageLines.isEmpty()) {
-			dispatchNotifier.notifyDispatchShortage(userId, dispatchId, finalCode, shortageLines);
+			eventPublisher.publishEvent(new StockDispatchShortageEvent(userId, dispatchId, finalCode, shortageLines));
 		}
 		else {
-			notifyDispatchWaitingApproval(userId, dispatchId, orderCode);
+			eventPublisher.publishEvent(new OrderDispatchWaitingApprovalEvent(userId, dispatchId, orderCode));
 		}
 
 		return new StockDispatchCreatedData(dispatchId, finalCode, req.dispatchDate(), initialStatus, null);
-	}
-
-	private void notifyDispatchWaitingApproval(int actorUserId, long dispatchId, String orderCode) {
-		String title = "Phiếu xuất chờ duyệt";
-		String message = "Đơn " + orderCode + ": phiếu đã tạo — đủ tồn, chờ Owner/Admin duyệt.";
-		int refId = Math.toIntExact(dispatchId);
-		for (int recipientId : notificationRepo.findActiveOwnerAdminUserIds()) {
-			if (recipientId == actorUserId) {
-				continue;
-			}
-			notificationRepo.insertTyped(recipientId, "StockDispatchPendingApproval", title, message, "StockDispatch",
-					refId);
-		}
 	}
 
 	private static String buildDispatchCode(long dispatchId) {

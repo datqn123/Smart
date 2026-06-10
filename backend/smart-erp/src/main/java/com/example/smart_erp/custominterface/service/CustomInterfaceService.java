@@ -70,10 +70,10 @@ public class CustomInterfaceService {
 		if (repository.folderKeyExists(key, null) || repository.pageKeyExists(key, null)) {
 			throw new BusinessException(ApiErrorCode.CONFLICT, CONFLICT, Map.of("key", "Mã danh mục đã tồn tại."));
 		}
-		repository.insertFolder(key, label, clean(req.icon()), clean(req.description()), rolesJson(req.visibilityRoles()),
-				req.sortOrder() == null ? repository.findActiveFolders().size() : req.sortOrder(), userId);
+		FolderRow folder = repository.insertFolder(key, label, clean(req.icon()), clean(req.description()),
+				rolesJson(req.visibilityRoles()), req.sortOrder() == null ? repository.findActiveFolders().size() : req.sortOrder(), userId);
 		repository.event("folder", key, "create", userId);
-		return menuTree();
+		return simpleTree(folder, List.of());
 	}
 
 	@Transactional
@@ -90,10 +90,10 @@ public class CustomInterfaceService {
 		if (repository.folderKeyExists(key, current.id()) || repository.pageKeyExists(key, null)) {
 			throw new BusinessException(ApiErrorCode.CONFLICT, CONFLICT, Map.of("key", "Mã danh mục đã tồn tại."));
 		}
-		repository.updateFolder(current, key, label, clean(req.icon()), clean(req.description()),
+		FolderRow updated = repository.updateFolder(current, key, label, clean(req.icon()), clean(req.description()),
 				rolesJson(req.visibilityRoles()), req.sortOrder() == null ? current.sortOrder() : req.sortOrder(), userId);
 		repository.event("folder", key, "update", userId);
-		return menuTree();
+		return simpleTree(updated, List.of());
 	}
 
 	@Transactional
@@ -110,7 +110,7 @@ public class CustomInterfaceService {
 		String routePath = requireRoute(req.routePath());
 		validatePageUniqueness(key, routePath, null);
 		String pageType = requirePageType(req.pageType());
-		repository.insertPage(parent.key(), key, requireText(req.label(), "label", "Tên giao diện không được để trống."),
+		PageRow page = repository.insertPage(parent.key(), key, requireText(req.label(), "label", "Tên giao diện không được để trống."),
 				clean(req.icon()), clean(req.description()), routePath, requireText(req.entityKey(), "entityKey",
 						"Entity liên kết không được để trống."),
 				pageType, rolesJson(req.visibilityRoles()), clean(req.entityPermission()), clean(req.dataPermission()),
@@ -118,7 +118,7 @@ public class CustomInterfaceService {
 						.filter(p -> parent.key().equals(p.parentKey())).toList().size() : req.sortOrder(),
 				userId);
 		repository.event("page", key, "create", userId);
-		return menuTree();
+		return simpleTree(parent, List.of(page));
 	}
 
 	@Transactional
@@ -137,14 +137,14 @@ public class CustomInterfaceService {
 		String key = requireKey(req.key(), "key");
 		String routePath = requireRoute(req.routePath());
 		validatePageUniqueness(key, routePath, current.id());
-		repository.updatePage(current, parent.key(), key,
+		PageRow updated = repository.updatePage(current, parent.key(), key,
 				requireText(req.label(), "label", "Tên giao diện không được để trống."),
 				clean(req.icon()), clean(req.description()), routePath,
 				requireText(req.entityKey(), "entityKey", "Entity liên kết không được để trống."),
 				requirePageType(req.pageType()), rolesJson(req.visibilityRoles()), clean(req.entityPermission()),
 				clean(req.dataPermission()), req.sortOrder() == null ? current.sortOrder() : req.sortOrder(), userId);
 		repository.event("page", key, "update", userId);
-		return menuTree();
+		return simpleTree(parent, List.of(updated));
 	}
 
 	@Transactional
@@ -173,7 +173,7 @@ public class CustomInterfaceService {
 			}
 		}
 		repository.event("menu", "tree", "reorder", userId);
-		return menuTree();
+		return new CustomMenuTreeData("reorder-" + req.etag(), List.of());
 	}
 
 	@Transactional(readOnly = true)
@@ -202,7 +202,7 @@ public class CustomInterfaceService {
 		int userId = StockReceiptAccessPolicy.parseUserId(jwt);
 		repository.publishAll(userId);
 		repository.event("menu", "tree", "publish", userId);
-		return menuTree();
+		return new CustomMenuTreeData("publish", List.of());
 	}
 
 	@Transactional
@@ -216,7 +216,7 @@ public class CustomInterfaceService {
 		int userId = StockReceiptAccessPolicy.parseUserId(jwt);
 		repository.archiveFolder(folder.key(), userId);
 		repository.event("folder", folder.key(), "archive", userId);
-		return menuTree();
+		return new CustomMenuTreeData("archive-folder-" + folderKey, List.of());
 	}
 
 	@Transactional
@@ -226,7 +226,7 @@ public class CustomInterfaceService {
 		int userId = StockReceiptAccessPolicy.parseUserId(jwt);
 		repository.archivePage(page.key(), userId);
 		repository.event("page", page.key(), "archive", userId);
-		return menuTree();
+		return new CustomMenuTreeData("archive-page-" + pageKey, List.of());
 	}
 
 	@Transactional(readOnly = true)
@@ -268,6 +268,12 @@ public class CustomInterfaceService {
 		}
 		CustomMenuFolderData folderData = toFolderData(folder, List.of(pageData));
 		return new CustomMenuTreeData("runtime-page-" + page.key(), List.of(folderData));
+	}
+
+	private CustomMenuTreeData simpleTree(FolderRow folder, List<PageRow> pages) {
+		List<CustomMenuPageData> pageData = pages.stream().map(this::toPageData).toList();
+		CustomMenuFolderData folderData = toFolderData(folder, pageData);
+		return new CustomMenuTreeData("simple-" + folder.key(), List.of(folderData));
 	}
 
 	private CustomMenuTreeData tree(List<FolderRow> folders, List<PageRow> pages) {

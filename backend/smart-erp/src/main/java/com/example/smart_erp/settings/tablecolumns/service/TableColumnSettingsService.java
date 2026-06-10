@@ -48,8 +48,9 @@ public class TableColumnSettingsService {
 	@Transactional(readOnly = true)
 	public TableColumnSettingsData getByScope(Jwt jwt, String scopeWire) {
 		Scope scope = Scope.parse(scopeWire);
+		List<String> keys = scope.tableKeys().stream().map(TableKey::key).toList();
 		Map<String, GlobalTableColumnSettingsJdbcRepository.Row> byKey = new LinkedHashMap<>();
-		for (GlobalTableColumnSettingsJdbcRepository.Row row : repo.findAll()) {
+		for (GlobalTableColumnSettingsJdbcRepository.Row row : repo.findByKeys(keys)) {
 			byKey.put(row.tableKey(), row);
 		}
 		List<TableColumnSettingsData.ItemData> out = new ArrayList<>();

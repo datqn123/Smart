@@ -2,8 +2,10 @@ package com.example.smart_erp.inventory.receipts.lifecycle;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -11,7 +13,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-import org.springframework.dao.DuplicateKeyException;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
@@ -24,6 +26,10 @@ import com.example.smart_erp.auth.repository.SystemLogJdbcRepository;
 import com.example.smart_erp.common.api.ApiErrorCode;
 import com.example.smart_erp.common.exception.BusinessException;
 import com.example.smart_erp.finance.ledger.BusinessFinanceLedgerPostingService;
+import com.example.smart_erp.inventory.receipts.lifecycle.StockReceiptLifecycleJdbcRepository.InventoryInsert;
+import com.example.smart_erp.inventory.receipts.lifecycle.StockReceiptLifecycleJdbcRepository.InventoryLogItem;
+import com.example.smart_erp.inventory.receipts.lifecycle.StockReceiptLifecycleJdbcRepository.InventoryLockRow;
+import com.example.smart_erp.inventory.receipts.lifecycle.StockReceiptLifecycleJdbcRepository.UnitRow;
 import com.example.smart_erp.inventory.receipts.lifecycle.StockReceiptLifecycleJdbcRepository.ReceiptHeaderLockRow;
 import com.example.smart_erp.inventory.receipts.response.StockReceiptViewData;
 
@@ -44,14 +50,18 @@ public class StockReceiptLifecycleService {
 
 	private final BusinessFinanceLedgerPostingService financeLedgerPostingService;
 
+	private final ApplicationEventPublisher eventPublisher;
+
 	public StockReceiptLifecycleService(StockReceiptLifecycleJdbcRepository repo,
 			SystemLogJdbcRepository systemLogJdbcRepository, ObjectMapper objectMapper,
-			StockReceiptNotifier stockReceiptNotifier, BusinessFinanceLedgerPostingService financeLedgerPostingService) {
+			StockReceiptNotifier stockReceiptNotifier, BusinessFinanceLedgerPostingService financeLedgerPostingService,
+			ApplicationEventPublisher eventPublisher) {
 		this.repo = repo;
 		this.systemLogJdbcRepository = systemLogJdbcRepository;
 		this.objectMapper = objectMapper;
 		this.stockReceiptNotifier = stockReceiptNotifier;
 		this.financeLedgerPostingService = financeLedgerPostingService;
+		this.eventPublisher = eventPublisher;
 	}
 
 	@Transactional
@@ -69,14 +79,20 @@ public class StockReceiptLifecycleService {
 			try {
 				long id = repo.insertReceipt(code, req.supplierId(), staffId, receiptDate, status, invoice, total,
 						blankToNull(req.notes()));
-				insertAllDetails(id, req.details());
-				StockReceiptViewData created = loadOrThrow(id);
+				repo.batchInsertDetails(id, req.details());
+				// Avoid re-reading the entire receipt after creation
+				var names = repo.loadNames(req.supplierId(), staffId);
+				var header = new StockReceiptLifecycleJdbcRepository.HeaderSnapshot(id, code, req.supplierId(),
+						names.supplierName(), staffId, names.staffName(), receiptDate, status, invoice, total,
+						blankToNull(req.notes()), null, null, null, null, null, null, null, Instant.now(), Instant.now());
+				var lines = repo.loadDetailLines(id);
+				StockReceiptViewData created = header.toView(lines);
 				if ("Pending".equals(created.status())) {
-					stockReceiptNotifier.notifyPendingApproval(staffId, id, created.receiptCode());
+					eventPublisher.publishEvent(new StockReceiptPendingApprovalEvent(staffId, id, created.receiptCode()));
 				}
 				return created;
 			}
-			catch (DuplicateKeyException e) {
+			catch (org.springframework.dao.DuplicateKeyException e) {
 				if (attempt == RECEIPT_CODE_RETRY - 1) {
 					throw new BusinessException(ApiErrorCode.CONFLICT, "Trùng mã phiếu hoặc trùng lô trong cùng phiếu, vui lòng thử lại");
 				}
@@ -129,9 +145,11 @@ public class StockReceiptLifecycleService {
 				invVal, setNotes, notesVal, newDetails != null ? total : null);
 		if (newDetails != null) {
 			repo.deleteDetails(id);
-			insertAllDetails(id, newDetails);
+			repo.batchInsertDetails(id, newDetails);
 		}
-		return loadOrThrow(id);
+		var header = repo.loadHeaderSnapshot(id).orElseThrow(StockReceiptLifecycleService::notFound);
+		var lines = repo.loadDetailLines(id);
+		return repo.buildView(header, lines);
 	}
 
 	@Transactional
@@ -163,8 +181,10 @@ public class StockReceiptLifecycleService {
 			throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Không thể gửi duyệt phiếu không có dòng chi tiết");
 		}
 		repo.updateStatusSubmit(id);
-		StockReceiptViewData submitted = loadOrThrow(id);
-		stockReceiptNotifier.notifyPendingApproval(StockReceiptAccessPolicy.parseUserId(jwt), id, submitted.receiptCode());
+		var header = repo.loadHeaderSnapshot(id).orElseThrow(StockReceiptLifecycleService::notFound);
+		var lines = repo.loadDetailLines(id);
+		StockReceiptViewData submitted = repo.buildView(header, lines);
+		eventPublisher.publishEvent(new StockReceiptPendingApprovalEvent(StockReceiptAccessPolicy.parseUserId(jwt), id, submitted.receiptCode()));
 		return submitted;
 	}
 
@@ -193,25 +213,62 @@ public class StockReceiptLifecycleService {
 				throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Số lượng quy đổi không hợp lệ");
 			}
 			int baseQty = baseBd.intValueExact();
+		}
+
+		List<Integer> productIds = rows.stream().map(StockReceiptLifecycleJdbcRepository.ApproveDetailRow::productId).toList();
+		Map<Integer, Integer> baseUnitIdMap = repo.findBaseUnitIdsByProductIds(productIds);
+
+		List<Integer> distinctProductIds = productIds.stream().distinct().toList();
+		List<InventoryLockRow> lockedInvRows = repo.findInventoryByProductsForUpdate(req.inboundLocationId(), distinctProductIds);
+		Map<String, Long> existingKeyToId = new HashMap<>();
+		for (InventoryLockRow inv : lockedInvRows) {
+			String key = inv.productId() + "\0" + Objects.toString(inv.batchNumber(), "");
+			existingKeyToId.put(key, inv.id());
+		}
+
+		Map<Long, Integer> idToDelta = new HashMap<>();
+		List<InventoryInsert> newInventories = new ArrayList<>();
+		List<InventoryLogItem> logItems = new ArrayList<>();
+
+		for (var d : rows) {
+			BigDecimal baseBd = d.conversionRate().multiply(BigDecimal.valueOf(d.quantity())).setScale(0, RoundingMode.HALF_UP);
+			int baseQty = baseBd.intValueExact();
 			String batch = blankToNull(d.batchNumber());
-			var existingInv = repo.findInventoryIdForUpdate(d.productId(), req.inboundLocationId(), batch);
-			if (existingInv.isPresent()) {
-				repo.updateInventoryQuantity(existingInv.get(), baseQty);
+			String key = d.productId() + "\0" + Objects.toString(batch, "");
+			Long existingId = existingKeyToId.get(key);
+			if (existingId != null) {
+				idToDelta.merge(existingId, baseQty, Integer::sum);
 			}
 			else {
-				repo.insertInventory(d.productId(), req.inboundLocationId(), batch, d.expiryDate(), baseQty);
+				newInventories.add(new InventoryInsert(d.productId(), req.inboundLocationId(), batch, d.expiryDate(), baseQty));
 			}
-			int baseUnitId = repo.findBaseUnitId(d.productId()).orElseThrow(() -> new BusinessException(ApiErrorCode.BAD_REQUEST,
-					"Sản phẩm không có đơn vị cơ sở: " + d.productId()));
+			Integer baseUnitId = baseUnitIdMap.get(d.productId());
+			if (baseUnitId == null) {
+				throw new BusinessException(ApiErrorCode.BAD_REQUEST,
+						"Sản phẩm không có đơn vị cơ sở: " + d.productId());
+			}
 			String note = "Phiếu " + h.receiptCode();
-			repo.insertInventoryLog(d.productId(), baseQty, baseUnitId, approverId, id, req.inboundLocationId(), note);
+			logItems.add(new InventoryLogItem(d.productId(), baseQty, baseUnitId, approverId, id, req.inboundLocationId(), note));
 		}
+
+		if (!idToDelta.isEmpty()) {
+			repo.updateInventoryQuantitiesBatch(idToDelta);
+		}
+		if (!newInventories.isEmpty()) {
+			repo.batchInsertInventory(newInventories);
+		}
+		if (!logItems.isEmpty()) {
+			repo.batchInsertInventoryLogs(logItems);
+		}
+
 		repo.updateApprove(id, approverId);
 		financeLedgerPostingService.postStockReceiptPurchaseCostIfAbsent(h.receiptDate(), (int) id, h.totalAmount(),
 				h.receiptCode(), approverId);
 		writeStockReceiptAudit(approverId, "STOCK_RECEIPT_APPROVE", "Phê duyệt phiếu nhập kho " + h.receiptCode(),
 				Map.of("receiptId", id, "receiptCode", h.receiptCode(), "inboundLocationId", req.inboundLocationId()));
-		return loadOrThrow(id);
+		var header = repo.loadHeaderSnapshot(id).orElseThrow(StockReceiptLifecycleService::notFound);
+		var lines = repo.loadDetailLines(id);
+		return repo.buildView(header, lines);
 	}
 
 	@Transactional
@@ -235,7 +292,9 @@ public class StockReceiptLifecycleService {
 		ctx.put("receiptCode", h.receiptCode());
 		ctx.put("reason", reason);
 		writeStockReceiptAudit(reviewerId, "STOCK_RECEIPT_REJECT", "Từ chối phiếu nhập kho " + h.receiptCode(), ctx);
-		return loadOrThrow(id);
+		var header = repo.loadHeaderSnapshot(id).orElseThrow(StockReceiptLifecycleService::notFound);
+		var lines = repo.loadDetailLines(id);
+		return repo.buildView(header, lines);
 	}
 
 	// --- helpers ---
@@ -269,17 +328,33 @@ public class StockReceiptLifecycleService {
 	}
 
 	private void validateDetails(List<StockReceiptDetailRequest> details, LocalDate receiptDate, boolean requireBaseUnit) {
+		List<Integer> productIds = new ArrayList<>();
+		List<int[]> tuples = new ArrayList<>();
+		for (StockReceiptDetailRequest d : details) {
+			productIds.add(d.productId());
+			tuples.add(new int[] { d.unitId(), d.productId() });
+		}
+		List<Integer> activeIds = repo.findActiveProductIds(productIds);
+		Set<Integer> activeSet = new HashSet<>(activeIds);
+		List<UnitRow> unitRows = repo.findUnitsByTuples(tuples);
+		Map<String, UnitRow> unitMap = new HashMap<>();
+		for (UnitRow u : unitRows) {
+			unitMap.put(u.id() + ":" + u.productId(), u);
+		}
+
 		Set<String> batchKeys = new HashSet<>();
 		for (int i = 0; i < details.size(); i++) {
 			StockReceiptDetailRequest d = details.get(i);
 			String prefix = "details[" + i + "].";
-			if (!repo.productActive(d.productId())) {
+			if (!activeSet.contains(d.productId())) {
 				throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Sản phẩm không tồn tại hoặc không Active",
 						Map.of(prefix + "productId", "Sản phẩm không hợp lệ"));
 			}
-			var unit = repo.findUnit(d.unitId(), d.productId())
-					.orElseThrow(() -> new BusinessException(ApiErrorCode.BAD_REQUEST, "unitId không thuộc productId",
-							Map.of(prefix + "unitId", "Đơn vị không thuộc sản phẩm")));
+			UnitRow unit = unitMap.get(d.unitId() + ":" + d.productId());
+			if (unit == null) {
+				throw new BusinessException(ApiErrorCode.BAD_REQUEST, "unitId không thuộc productId",
+						Map.of(prefix + "unitId", "Đơn vị không thuộc sản phẩm"));
+			}
 			if (requireBaseUnit && !unit.baseUnit()) {
 				throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Chỉ chấp nhận đơn vị cơ sở (is_base_unit)",
 						Map.of(prefix + "unitId", "Phải là đơn vị cơ sở"));
@@ -303,14 +378,6 @@ public class StockReceiptLifecycleService {
 			if (!batchKeys.add(ukey)) {
 				throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Trùng sản phẩm và số lô trong cùng phiếu");
 			}
-		}
-	}
-
-	private void insertAllDetails(long receiptId, List<StockReceiptDetailRequest> details) {
-		for (StockReceiptDetailRequest d : details) {
-			LocalDate exp = parseExpiryOrNull(d.expiryDate());
-			repo.insertDetail(receiptId, d.productId(), d.unitId(), d.quantity(), d.costPrice(), blankToNull(d.batchNumber()),
-					exp);
 		}
 	}
 

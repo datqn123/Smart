@@ -1,8 +1,10 @@
 package com.example.smart_erp.finance.ledger;
 
+import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.springframework.jdbc.core.RowMapper;
@@ -45,7 +47,7 @@ public class FinanceLedgerJdbcRepository {
 			String referenceType, String searchPattern, int limit, int offset) {
 		Filter f = buildWhere(effectiveFrom, effectiveTo, transactionType, referenceType, searchPattern);
 
-		String sql = """
+		String filteredCte = """
 				WITH filtered AS (
 				  SELECT
 				    fl.id,
@@ -58,49 +60,68 @@ public class FinanceLedgerJdbcRepository {
 				    so.order_code AS so_code
 				  """
 				+ BASE_FROM + f.where + """
-				),
-				with_bal AS (
-				  SELECT
-				    id,
-				    transaction_date,
-				    transaction_type,
-				    reference_type,
-				    reference_id,
-				    amount,
-				    description,
-				    CASE
-				      WHEN reference_type = 'SalesOrder' AND so_code IS NOT NULL THEN so_code
-				      ELSE 'FL-' || id::text
-				    END AS transaction_code,
-				    CASE
-				      WHEN amount < 0 THEN (amount * -1)
-				      ELSE 0
-				    END AS debit,
-				    CASE
-				      WHEN amount > 0 THEN amount
-				      ELSE 0
-				    END AS credit,
-				    SUM(amount) OVER (ORDER BY transaction_date ASC, id ASC) AS balance
-				  FROM filtered
 				)
+				""";
+
+		// Starting balance: sum of all amounts before the current page
+		String startingBalanceSql = filteredCte + """
+				SELECT COALESCE(SUM(amount), 0) AS start_balance FROM (
+				  SELECT amount FROM filtered ORDER BY transaction_date ASC, id ASC LIMIT :_offset
+				) t
+				""";
+		MapSqlParameterSource balanceParams = new MapSqlParameterSource();
+		balanceParams.addValues(f.source.getValues());
+		balanceParams.addValue("_offset", offset);
+		BigDecimal startBalance = namedJdbc.queryForObject(startingBalanceSql, balanceParams, BigDecimal.class);
+		if (startBalance == null) {
+			startBalance = BigDecimal.ZERO;
+		}
+
+		String pageSql = filteredCte + """
 				SELECT
 				  id,
 				  transaction_date,
-				  transaction_code,
+				  CASE
+				    WHEN reference_type = 'SalesOrder' AND so_code IS NOT NULL THEN so_code
+				    ELSE 'FL-' || id::text
+				  END AS transaction_code,
 				  description,
 				  transaction_type,
 				  reference_type,
 				  reference_id,
 				  amount,
-				  debit,
-				  credit,
-				  balance
-				FROM with_bal
+				  CASE
+				    WHEN amount < 0 THEN (amount * -1)
+				    ELSE 0
+				  END AS debit,
+				  CASE
+				    WHEN amount > 0 THEN amount
+				    ELSE 0
+				  END AS credit
+				FROM filtered
 				ORDER BY transaction_date ASC, id ASC
-				"""
-				+ "LIMIT " + limit + " OFFSET " + offset;
+				LIMIT :_limit OFFSET :_offset
+				""";
+		MapSqlParameterSource pageParams = new MapSqlParameterSource();
+		pageParams.addValues(f.source.getValues());
+		pageParams.addValue("_limit", limit);
+		pageParams.addValue("_offset", offset);
+		List<FinanceLedgerItemData> rows = namedJdbc.query(pageSql, pageParams, (rs, rn) -> {
+			return new FinanceLedgerItemData(rs.getLong("id"), rs.getObject("transaction_date", LocalDate.class),
+					rs.getString("transaction_code"), rs.getString("description"), rs.getString("transaction_type"),
+					rs.getString("reference_type"), (Integer) rs.getObject("reference_id", Integer.class),
+					rs.getBigDecimal("amount"), rs.getBigDecimal("debit"), rs.getBigDecimal("credit"), null);
+		});
 
-		return namedJdbc.query(sql, f.source, ROW);
+		BigDecimal running = startBalance;
+		List<FinanceLedgerItemData> result = new ArrayList<>(rows.size());
+		for (FinanceLedgerItemData row : rows) {
+			running = running.add(row.amount());
+			result.add(new FinanceLedgerItemData(row.id(), row.date(), row.transactionCode(), row.description(),
+					row.transactionType(), row.referenceType(), row.referenceId(), row.amount(), row.debit(),
+					row.credit(), running));
+		}
+		return result;
 	}
 
 	/** Dùng khi cần pattern ILIKE an toàn (trim + escape wildcard). */

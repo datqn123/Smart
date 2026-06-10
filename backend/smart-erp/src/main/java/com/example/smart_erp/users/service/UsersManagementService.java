@@ -64,7 +64,7 @@ public class UsersManagementService {
 			throw new BusinessException(ApiErrorCode.FORBIDDEN, "Bạn không có quyền xem nhân viên");
 		}
 
-		User u = userRepository.findWithRoleById(userId)
+		User u = isSelf ? actor : userRepository.findWithRoleById(userId)
 				.orElseThrow(() -> new BusinessException(ApiErrorCode.NOT_FOUND, "Không tìm thấy nhân viên"));
 		return toDetail(u);
 	}

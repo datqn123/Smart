@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.StringJoiner;
 
 import org.springframework.stereotype.Service;
@@ -99,13 +100,25 @@ public class DispatchLedgerPostingService {
 			if (agg.isEmpty()) {
 				return null;
 			}
+			List<Integer> productIds = agg.stream().map(RetailStockJdbcRepository.ProductOutboundBaseQtyRow::productId)
+					.toList();
+			Map<Integer, Integer> baseUnitIds = retailRepo.findBaseUnitIds(productIds);
+			List<RetailStockJdbcRepository.ProductUnitPair> costPairs = new ArrayList<>();
 			for (var row : agg) {
-				Integer baseUnitId = retailRepo.findBaseUnitId(row.productId()).orElse(null);
+				Integer baseUnitId = baseUnitIds.get(row.productId());
+				if (baseUnitId != null) {
+					costPairs.add(new RetailStockJdbcRepository.ProductUnitPair(row.productId(), baseUnitId));
+				}
+			}
+			Map<RetailStockJdbcRepository.ProductUnitPair, BigDecimal> costPrices = retailRepo
+					.findCurrentCostPrices(costPairs);
+			for (var row : agg) {
+				Integer baseUnitId = baseUnitIds.get(row.productId());
 				if (baseUnitId == null) {
 					missing.add("productId=" + row.productId());
 					continue;
 				}
-				BigDecimal unitCost = productRepo.findCurrentCostPrice(row.productId(), baseUnitId).orElse(null);
+				BigDecimal unitCost = costPrices.get(new RetailStockJdbcRepository.ProductUnitPair(row.productId(), baseUnitId));
 				if (unitCost == null || unitCost.signum() <= 0) {
 					missing.add("productId=" + row.productId());
 				} else {

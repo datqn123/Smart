@@ -15,7 +15,6 @@ from app.graph.progress import emit_progress
 from app.graph.state import AgentState
 from app.prompts.load import load_agent_prompt
 
-from collections.abc import Generator
 
 logger = logging.getLogger(__name__)
 

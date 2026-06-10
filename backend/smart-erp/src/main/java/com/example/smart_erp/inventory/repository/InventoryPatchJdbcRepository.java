@@ -73,7 +73,7 @@ public class InventoryPatchJdbcRepository {
 				FROM inventory
 				WHERE product_id = :_product_id
 				  AND location_id = :_location_id
-				  AND COALESCE(batch_number, '') = COALESCE(:_batch_key, '')
+				  AND batch_number IS NOT DISTINCT FROM :_batch_key
 				  AND id <> :_exclude_id
 				""";
 		var src = new MapSqlParameterSource("_product_id", productId)
@@ -136,6 +136,21 @@ public class InventoryPatchJdbcRepository {
 				.addValue("_title", title)
 				.addValue("_message", message)
 				.addValue("_ref_id", inventoryId);
+		namedJdbc.update(sql, src);
+	}
+
+	public void insertNotificationsForOwners(String title, String message, int refId, int excludeUserId) {
+		String sql = """
+				INSERT INTO notifications (user_id, notification_type, title, message, is_read, reference_type, reference_id)
+				SELECT u.id, 'SystemAlert', :_title, :_message, FALSE, 'Inventory', :_ref_id
+				FROM users u
+				INNER JOIN roles r ON r.id = u.role_id
+				WHERE r.name = 'Owner' AND u.status = 'Active' AND u.id <> :_exclude_id
+				""";
+		var src = new MapSqlParameterSource("_title", title)
+				.addValue("_message", message)
+				.addValue("_ref_id", refId)
+				.addValue("_exclude_id", excludeUserId);
 		namedJdbc.update(sql, src);
 	}
 

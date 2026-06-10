@@ -9,12 +9,7 @@ from langgraph.graph import END, START, StateGraph
 
 from app.graph.checkpointing import build_checkpointer
 from app.graph.deps import GraphDeps
-from app.graph.nodes.chart_report import (
-    make_agent_chart_node,
-    make_agent_idea_node,
-    make_agent_review_node,
-    make_chart_fail_message_node,
-)
+from app.graph.nodes.chart_report import make_agent_idea_node
 from app.graph.nodes.chat_normal import make_chat_normal_node
 from app.graph.nodes.context_compact import make_context_compact_node
 from app.graph.nodes.domain_guard import make_domain_guard_node, route_after_domain_guard
@@ -40,9 +35,6 @@ def build_main_graph(deps: GraphDeps):
     g.add_node("catalog_draft_branch", catalog_inner.compile())
     g.add_node("inventory_draft_branch", inventory_inner.compile())
     g.add_node("agent_idea", wrap("agent_idea", make_agent_idea_node(deps)))
-    g.add_node("agent_chart", wrap("agent_chart", make_agent_chart_node(deps)))
-    g.add_node("agent_review", wrap("agent_review", make_agent_review_node(deps)))
-    g.add_node("chart_fail_message", wrap("chart_fail_message", make_chart_fail_message_node(deps)))
 
     g.add_edge(START, "domain_guard")
     g.add_conditional_edges(
@@ -69,8 +61,6 @@ def build_main_graph(deps: GraphDeps):
     g.add_edge("catalog_draft_branch", END)
     g.add_edge("inventory_draft_branch", END)
     g.add_edge("agent_idea", "chat_normal")
-    g.add_edge("agent_review", END)
-    g.add_edge("chart_fail_message", END)
     logger.debug("graph_compile nodes=%s", list(g.nodes.keys()))
     return g
 

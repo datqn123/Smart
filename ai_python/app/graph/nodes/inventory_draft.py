@@ -329,21 +329,3 @@ def _preview_message(doc_type: str, lines: list, header: dict) -> str:
         return f"Phiếu nhập — {len(lines)} dòng, ~{total_qty} SP ({ncc})"
     return f"{doc_type} — {len(lines)} dòng"
 
-
-def _stub_receipt_lines(count: int, question: str) -> list[dict]:
-    n = max(1, min(count, 3))
-    lines: list[dict] = []
-    for i in range(n):
-        idx = i + 1
-        lines.append(
-            {
-                "lineId": f"l{idx}",
-                "values": {
-                    "skuCode": f"AI-{idx:03d}",
-                    "productName": f"Hàng AI {idx}",
-                    "quantity": 1,
-                    "costPrice": 0,
-                },
-            }
-        )
-    return enrich_receipt_lines(lines, user_prompt=question)

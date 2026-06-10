@@ -65,8 +65,9 @@ public class DashboardService {
 		DashboardKpiData kpis = null;
 		if (query.includes(Section.KPIS)) {
 			InventorySummaryData inventory = repository.loadInventorySummary();
-			long pendingOrders = repository.countOrdersByStatus("Pending");
-			long allOrdersTotal = repository.countOrdersByStatus(null);
+			var orderCounts = repository.countOrdersTotalAndPending();
+			long pendingOrders = orderCounts.get("pending");
+			long allOrdersTotal = orderCounts.get("total");
 			long pendingApprovals = repository.countPendingApprovals();
 			Map<String, Long> approvalByType = new LinkedHashMap<>();
 			approvalByType.put("Inbound", pendingApprovals);

@@ -177,9 +177,8 @@ public class InventoryPatchService {
 		String sku = StringUtils.hasText(data.skuCode()) ? data.skuCode() : "—";
 		String title = "Nhân viên cập nhật tồn kho";
 		String message = actorName + " vừa cập nhật meta tồn kho SKU " + sku + " (id=" + inventoryId + ").";
-		for (int ownerId : patchRepo.findActiveOwnerUserIds()) {
-			patchRepo.insertNotificationForOwner(ownerId, title, message, (int) inventoryId);
-		}
+		int userId = parseUserId(jwt);
+		patchRepo.insertNotificationsForOwners(title, message, (int) inventoryId, userId);
 	}
 
 	private void notifyOwnersBulkPatch(List<InventoryListItemData> updated, Jwt jwt, int rowCount) {
@@ -190,9 +189,8 @@ public class InventoryPatchService {
 		String title = "Nhân viên cập nhật tồn kho";
 		String message = actorName + " vừa cập nhật meta " + rowCount + " dòng tồn kho (hàng loạt).";
 		int refId = (int) updated.get(0).id();
-		for (int ownerId : patchRepo.findActiveOwnerUserIds()) {
-			patchRepo.insertNotificationForOwner(ownerId, title, message, refId);
-		}
+		int userId = parseUserId(jwt);
+		patchRepo.insertNotificationsForOwners(title, message, refId, userId);
 	}
 
 	private static boolean shouldNotifyOwners(Jwt jwt) {

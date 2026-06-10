@@ -155,8 +155,9 @@ public class InventoryListJdbcRepository {
 	public List<InventoryListRow> loadPage(InventoryListQuery q) {
 		Filter f = buildFilter(q);
 		int offset = (q.page() - 1) * q.limit();
-		// page/limit đã validate; ghép số an toàn hơn mở rộng tên tham số
-		String sql = SELECT_LIST_COLUMNS + BASE_FROM + f.where + " ORDER BY i.id ASC LIMIT " + q.limit() + " OFFSET " + offset;
+		String sql = SELECT_LIST_COLUMNS + BASE_FROM + f.where + " ORDER BY i.id ASC LIMIT :_lim OFFSET :_off";
+		f.source.addValue("_lim", q.limit());
+		f.source.addValue("_off", offset);
 		return namedJdbc.query(sql, f.source, ROW);
 	}
 

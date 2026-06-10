@@ -47,7 +47,7 @@ class LlmSettings(BaseSettings):
         default="",
         description=(
             "Optional second model for sql_gen plus structured JSON roles "
-            "(intent, sql_review, sql_table_pick, idea, chart, review). "
+            "(intent, idea, chart, review). "
             "Empty = use LLM_MODEL for all roles."
         ),
     )

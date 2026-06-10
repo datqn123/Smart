@@ -83,11 +83,8 @@ public class UserCreationService {
 		u.setRoleId(roleId);
 		u.setStatus(dbStatus);
 		User saved = userRepository.save(u);
-
-		User withRole = userRepository.findWithRoleById(Objects.requireNonNull(saved.getId(), "id"))
-				.orElse(saved);
-		String roleName = withRole.getRole() != null ? withRole.getRole().getName() : targetRole.getName();
-		return toResponse(withRole, roleName);
+		String roleName = targetRole.getName();
+		return toResponse(saved, roleName);
 	}
 
 	private void assertNotDuplicate(String username, String email) {

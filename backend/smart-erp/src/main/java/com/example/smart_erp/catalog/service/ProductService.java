@@ -517,16 +517,8 @@ public class ProductService {
 	}
 
 	private Optional<String> deleteBlockReason(int productId) {
-		if (productJdbcRepository.existsStockReceiptDetail(productId)) {
-			return Optional.of("HAS_STOCK_RECEIPT");
-		}
-		if (productJdbcRepository.existsOrderDetail(productId)) {
-			return Optional.of("HAS_ORDER_LINES");
-		}
-		if (productJdbcRepository.sumInventoryQuantity(productId) > 0L) {
-			return Optional.of("HAS_STOCK");
-		}
-		return Optional.empty();
+		Map<Integer, String> blocked = productJdbcRepository.findBulkDeleteBlockReasons(List.of(productId));
+		return Optional.ofNullable(blocked.get(productId));
 	}
 
 }

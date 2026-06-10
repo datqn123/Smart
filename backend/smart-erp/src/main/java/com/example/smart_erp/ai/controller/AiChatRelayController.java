@@ -64,7 +64,7 @@ public class AiChatRelayController {
 
 	private final ObjectMapper objectMapper;
 
-	private final ExecutorService sseIoExecutor = Executors.newCachedThreadPool();
+	private final ExecutorService sseIoExecutor = Executors.newFixedThreadPool(Math.max(4, Runtime.getRuntime().availableProcessors() * 2));
 
 	public AiChatRelayController(@Value("${app.ai.python.base-url}") String pythonBaseUrl, ObjectMapper objectMapper) {
 		this.pythonBaseUrl = normalizePythonBaseUrl(pythonBaseUrl);

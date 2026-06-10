@@ -1,6 +1,8 @@
 package com.example.smart_erp.inventory.receipts.lifecycle;
 
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 import com.example.smart_erp.notifications.repository.NotificationJdbcRepository;
 
@@ -14,6 +16,11 @@ public class StockReceiptNotifier {
 
 	public StockReceiptNotifier(NotificationJdbcRepository notificationRepo) {
 		this.notificationRepo = notificationRepo;
+	}
+
+	@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+	public void onStockReceiptPendingApproval(StockReceiptPendingApprovalEvent event) {
+		notifyPendingApproval(event.actorUserId(), event.receiptId(), event.receiptCode());
 	}
 
 	public void notifyPendingApproval(int actorUserId, long receiptId, String receiptCode) {

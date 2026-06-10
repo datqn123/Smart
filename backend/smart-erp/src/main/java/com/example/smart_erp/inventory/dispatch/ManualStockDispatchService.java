@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,16 +42,19 @@ public class ManualStockDispatchService {
 
 	private final SalesOrderJdbcRepository salesOrderJdbcRepository;
 
+	private final ApplicationEventPublisher eventPublisher;
+
 	public ManualStockDispatchService(StockDispatchJdbcRepository dispatchRepo, RetailStockJdbcRepository retailStockRepo,
 			StockDispatchNotifier dispatchNotifier, DispatchLedgerPostingService dispatchLedgerPostingService,
 			BusinessFinanceLedgerPostingService financeLedgerPostingService,
-			SalesOrderJdbcRepository salesOrderJdbcRepository) {
+			SalesOrderJdbcRepository salesOrderJdbcRepository, ApplicationEventPublisher eventPublisher) {
 		this.dispatchRepo = dispatchRepo;
 		this.retailStockRepo = retailStockRepo;
 		this.dispatchNotifier = dispatchNotifier;
 		this.dispatchLedgerPostingService = dispatchLedgerPostingService;
 		this.financeLedgerPostingService = financeLedgerPostingService;
 		this.salesOrderJdbcRepository = salesOrderJdbcRepository;
+		this.eventPublisher = eventPublisher;
 	}
 
 	@Transactional(readOnly = true)
@@ -101,16 +105,17 @@ public class ManualStockDispatchService {
 				.orElseThrow(() -> new BusinessException(ApiErrorCode.NOT_FOUND, "Không tìm thấy phiếu xuất."));
 		int uid = StockReceiptAccessPolicy.parseUserId(jwt);
 		boolean manual = header.orderId() == null;
-		boolean stockLinesFulfillment = dispatchRepo.dispatchHasPendingLines(dispatchId);
+		boolean hasPendingLines = dispatchRepo.dispatchHasPendingLines(dispatchId);
+		boolean stockLinesFulfillment = hasPendingLines;
 		boolean locked = DispatchMutationPolicy.isCompletedLockedForMutation(header.status());
 		boolean elevated = StockDispatchAccessPolicy.isElevatedDispatchManager(jwt);
 		boolean admin = StockDispatchAccessPolicy.isAdmin(jwt);
 		boolean creator = uid == header.userId();
-		boolean awaitingApproval = dispatchAwaitingApprovalDetail(dispatchId, header.status());
+		boolean awaitingApproval = dispatchAwaitingApprovalDetail(hasPendingLines, header.status());
 		boolean canEdit = !locked && (awaitingApproval ? (creator || admin) : (creator || elevated));
 		boolean canDelete = canEdit;
 		boolean shortage = dispatchRepo.detailHasShortage(dispatchId);
-		List<StockDispatchDetailLineData> lines = resolveDetailLines(dispatchId);
+		List<StockDispatchDetailLineData> lines = resolveDetailLines(dispatchId, hasPendingLines);
 		String deletedByName = StringUtils.hasText(header.deletedByDisplayName()) ? header.deletedByDisplayName() : null;
 		return new StockDispatchDetailData(header.id(), header.dispatchCode(), header.orderCode(),
 				header.customerName(), header.dispatchDate(), header.userId(), header.userName(), header.status(),
@@ -118,19 +123,19 @@ public class ManualStockDispatchService {
 				canDelete, header.deletedAt(), header.deletedByUserId(), deletedByName, header.deleteReason());
 	}
 
-	private List<StockDispatchDetailLineData> resolveDetailLines(long dispatchId) {
+	private List<StockDispatchDetailLineData> resolveDetailLines(long dispatchId, boolean hasPendingLines) {
 		List<StockDispatchDetailLineData> outbound = dispatchRepo.loadOutboundLinesForDispatchDetail(dispatchId);
 		if (!outbound.isEmpty()) {
 			return outbound;
 		}
-		if (dispatchRepo.dispatchHasPendingLines(dispatchId)) {
+		if (hasPendingLines) {
 			return dispatchRepo.loadManualDetailLines(dispatchId);
 		}
 		return List.of();
 	}
 
-	private boolean dispatchAwaitingApprovalDetail(long dispatchId, String status) {
-		if (!dispatchRepo.dispatchHasPendingLines(dispatchId)) {
+	private boolean dispatchAwaitingApprovalDetail(boolean hasPendingLines, String status) {
+		if (!hasPendingLines) {
 			return false;
 		}
 		return "Pending".equalsIgnoreCase(status) || "Partial".equalsIgnoreCase(status);
@@ -183,10 +188,10 @@ public class ManualStockDispatchService {
 			dispatchRepo.updateDispatchStatus(dispatchId, ManualDispatchStatuses.PARTIAL);
 		}
 		if (!shortageLines.isEmpty()) {
-			dispatchNotifier.notifyDispatchShortage(userId, dispatchId, finalCode, shortageLines);
+			eventPublisher.publishEvent(new StockDispatchShortageEvent(userId, dispatchId, finalCode, shortageLines));
 		}
 		else {
-			dispatchNotifier.notifyManualDispatchCreated(userId, dispatchId, finalCode, ref);
+			eventPublisher.publishEvent(new ManualDispatchCreatedEvent(userId, dispatchId, finalCode, ref));
 		}
 		return new StockDispatchCreatedData(dispatchId, finalCode, dispatchDate, createdStatus, ref);
 	}
@@ -205,7 +210,8 @@ public class ManualStockDispatchService {
 			throw new BusinessException(ApiErrorCode.BAD_REQUEST,
 					"Phiếu đã giao hoặc đã hoàn tất xuất — không được sửa.");
 		}
-		boolean awaitingApproval = dispatchAwaitingApprovalDetail(dispatchId, locked.status());
+		boolean hasPendingLines = dispatchRepo.dispatchHasPendingLines(dispatchId);
+		boolean awaitingApproval = dispatchAwaitingApprovalDetail(hasPendingLines, locked.status());
 		if (awaitingApproval) {
 			StockDispatchAccessPolicy.assertCreatorOrAdmin(locked.creatorUserId(), jwt);
 			return patchAwaitingOwnerDispatch(dispatchId, patch, locked, jwt);
@@ -213,13 +219,13 @@ public class ManualStockDispatchService {
 
 		StockDispatchAccessPolicy.assertCreatorOrElevatedForDispatchEdit(locked.creatorUserId(), jwt);
 
-		if (locked.orderId() != null && !supportsFullManualWorkflow(locked)) {
+		if (locked.orderId() != null && !supportsFullManualWorkflow(locked, hasPendingLines)) {
 			patchDispatchHeaderOnly(dispatchId, patch, locked.status(),
 					"Phiếu gắn đơn hàng: chỉ sửa được ngày xuất, ghi chú và nhãn tham chiếu (không đổi trạng thái hay dòng qua API này).");
 			return getDetail(dispatchId, jwt);
 		}
 
-		if (!supportsFullManualWorkflow(locked)) {
+		if (!supportsFullManualWorkflow(locked, hasPendingLines)) {
 			patchDispatchHeaderOnly(dispatchId, patch, locked.status(),
 					"Phiếu xuất thủ công (dạng cũ): chỉ sửa được ngày xuất, ghi chú và nhãn tham chiếu.");
 			return getDetail(dispatchId, jwt);
@@ -266,14 +272,14 @@ public class ManualStockDispatchService {
 		return getDetail(dispatchId, jwt);
 	}
 
-	private boolean supportsFullManualWorkflow(StockDispatchJdbcRepository.LockedManualDispatchRow locked) {
+	private boolean supportsFullManualWorkflow(StockDispatchJdbcRepository.LockedManualDispatchRow locked, boolean hasPendingLines) {
 		if (!ManualDispatchStatuses.isManualLifecycle(locked.status())) {
 			return false;
 		}
 		if (locked.orderId() == null) {
 			return true;
 		}
-		return dispatchRepo.dispatchHasPendingLines(locked.id());
+		return hasPendingLines;
 	}
 
 	private StockDispatchDetailData patchAwaitingOwnerDispatch(long dispatchId, StockDispatchPatchRequest patch,
@@ -303,8 +309,8 @@ public class ManualStockDispatchService {
 				String code = dispatchRepo.loadDispatchDetailHeader(dispatchId)
 						.map(h -> h.dispatchCode())
 						.orElse("PX");
-				dispatchNotifier.notifyDispatchShortage(StockReceiptAccessPolicy.parseUserId(jwt), dispatchId, code,
-						buildShortageLineMessages(dispatchId));
+				eventPublisher.publishEvent(new StockDispatchShortageEvent(StockReceiptAccessPolicy.parseUserId(jwt), dispatchId, code,
+						buildShortageLineMessages(dispatchId)));
 			}
 		}
 		return getDetail(dispatchId, jwt);
@@ -394,10 +400,18 @@ public class ManualStockDispatchService {
 		if (lines.isEmpty()) {
 			throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Phiếu không có dòng hàng để giao.");
 		}
+		List<Long> inventoryIds = lines.stream().map(StockDispatchJdbcRepository.ManualLineRow::inventoryId).toList();
+		Map<Long, StockDispatchJdbcRepository.LockedInventoryRow> lockedMap = dispatchRepo.lockInventoryRowsForUpdate(inventoryIds);
+
+		Map<Long, Integer> idToDeduct = new LinkedHashMap<>();
+		List<StockDispatchJdbcRepository.OutboundLogItem> logItems = new ArrayList<>();
+
 		for (var row : lines) {
-			var locked = dispatchRepo.lockInventoryRowForUpdate(row.inventoryId())
-					.orElseThrow(() -> new BusinessException(ApiErrorCode.NOT_FOUND,
-							"Không tìm thấy dòng tồn id=" + row.inventoryId()));
+			var locked = lockedMap.get(row.inventoryId());
+			if (locked == null) {
+				throw new BusinessException(ApiErrorCode.NOT_FOUND,
+						"Không tìm thấy dòng tồn id=" + row.inventoryId());
+			}
 			if (row.quantity() > locked.quantity()) {
 				throw new BusinessException(ApiErrorCode.CONFLICT, "Thiếu hàng tại thời điểm xác nhận đã giao: tồn "
 						+ locked.quantity() + ", cần " + row.quantity());
@@ -408,10 +422,14 @@ public class ManualStockDispatchService {
 				throw new BusinessException(ApiErrorCode.BAD_REQUEST,
 						"Số lượng quy đổi đơn vị cơ sở không hợp lệ cho inventory id=" + row.inventoryId());
 			}
-			dispatchRepo.deductInventoryQuantity(locked.id(), row.quantity());
+			idToDeduct.put(locked.id(), row.quantity());
 			String logNote = "MANUAL_DISPATCH_DELIVERED invId=" + locked.id();
-			retailStockRepo.insertInventoryLogOutbound(locked.productId(), baseQty, locked.baseUnitId(), userId,
-					dispatchId, locked.locationId(), logNote);
+			logItems.add(new StockDispatchJdbcRepository.OutboundLogItem(locked.productId(), baseQty, locked.baseUnitId(),
+					userId, dispatchId, locked.locationId(), logNote));
+		}
+		dispatchRepo.deductInventoryQuantitiesBatch(idToDeduct);
+		if (!logItems.isEmpty()) {
+			dispatchRepo.batchInsertInventoryLogsOutbound(logItems);
 		}
 		dispatchRepo.updateDispatchStatus(dispatchId, ManualDispatchStatuses.DELIVERED);
 		dispatchLedgerPostingService.postPrimaryCogsIfAbsent(dispatchId, userId);
@@ -450,7 +468,8 @@ public class ManualStockDispatchService {
 			throw new BusinessException(ApiErrorCode.BAD_REQUEST,
 					"Không xóa mềm phiếu đã giao hoặc đã hoàn tất xuất.");
 		}
-		boolean awaitingApproval = dispatchAwaitingApprovalDetail(dispatchId, locked.status());
+		boolean hasPendingLines = dispatchRepo.dispatchHasPendingLines(dispatchId);
+		boolean awaitingApproval = dispatchAwaitingApprovalDetail(hasPendingLines, locked.status());
 		if (awaitingApproval) {
 			StockDispatchAccessPolicy.assertCreatorOrAdmin(locked.creatorUserId(), jwt);
 		}

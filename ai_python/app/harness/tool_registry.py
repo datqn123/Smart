@@ -98,23 +98,6 @@ def can_silent_retry(side_effect_class: str) -> bool:
     return side_effect_class in ("read_only", "idempotent_write")
 
 
-# Fields injected into the planner prompt (FR-2.1). Everything not listed here is
-# governance-only (eval_cases, full output_schema, cache_policy, preconditions,
-# rbac_required, side_effect_class, version fields) and must NOT reach the prompt.
-_PLANNER_VISIBLE_FIELDS = (
-    "name",
-    "description",
-    "capability",
-    "args_schema",
-    "output_artifact_types",
-    "when_to_use",
-    "when_not_to_use",
-    "examples",
-    "produces",
-    "consumes",
-)
-
-
 class AsyncTool(Protocol):
     async def invoke(self, args: dict[str, Any], ctx: TurnContext) -> ToolResult:
         ...

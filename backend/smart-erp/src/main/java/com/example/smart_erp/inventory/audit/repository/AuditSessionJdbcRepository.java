@@ -5,7 +5,11 @@ import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.jdbc.core.RowMapper;
@@ -38,6 +42,9 @@ public class AuditSessionJdbcRepository {
 			Timestamp varianceAppliedAt) {
 	}
 
+	public record AuditLogItem(int productId, int quantityChange, int baseUnitId, int userId, String referenceNote) {
+	}
+
 	private final NamedParameterJdbcTemplate namedJdbc;
 
 	public AuditSessionJdbcRepository(NamedParameterJdbcTemplate namedJdbc) {
@@ -59,26 +66,21 @@ public class AuditSessionJdbcRepository {
 				  s.id, s.audit_code, s.title, s.audit_date, s.status, s.location_filter, s.category_filter,
 				  s.created_by, uc.full_name AS created_by_name, s.completed_at, uf.full_name AS completed_by_name,
 				  s.created_at, s.updated_at,
-				  (SELECT COUNT(*)::int FROM inventoryauditlines l WHERE l.session_id = s.id) AS total_lines,
-				  (SELECT COUNT(*)::int FROM inventoryauditlines l WHERE l.session_id = s.id AND l.is_counted) AS counted_lines,
-				  (SELECT COUNT(*)::int FROM inventoryauditlines l WHERE l.session_id = s.id AND l.is_counted
-				     AND l.actual_quantity IS NOT NULL
-				     AND (l.actual_quantity - l.system_quantity) <> 0) AS variance_lines
+				  line_agg.total_lines,
+				  line_agg.counted_lines,
+				  line_agg.variance_lines
 				FROM inventoryauditsessions s
 				INNER JOIN users uc ON uc.id = s.created_by
 				LEFT JOIN users uf ON uf.id = s.completed_by
+				LEFT JOIN LATERAL (
+				  SELECT COUNT(*)::int AS total_lines,
+				         COUNT(*) FILTER (WHERE l.is_counted)::int AS counted_lines,
+				         COUNT(*) FILTER (WHERE l.is_counted AND l.actual_quantity IS NOT NULL AND (l.actual_quantity - l.system_quantity) <> 0)::int AS variance_lines
+				  FROM inventoryauditlines l
+				  WHERE l.session_id = s.id
+				) line_agg ON true
 				""" + f.joins + f.where + " ORDER BY s.id ASC LIMIT " + q.limit() + " OFFSET " + offset;
 		return namedJdbc.query(sql, f.source, LIST_ROW);
-	}
-
-	public int nextAuditSequenceSuffix(int year) {
-		String sql = """
-				SELECT COALESCE(MAX(split_part(s.audit_code, '-', 3)::int), 0)
-				FROM inventoryauditsessions s
-				WHERE s.audit_code LIKE 'KK-' || CAST(:y AS text) || '-%'
-				""";
-		Integer n = namedJdbc.queryForObject(sql, new MapSqlParameterSource("y", year), Integer.class);
-		return n != null ? n : 0;
 	}
 
 	public int insertSession(String auditCode, String title, LocalDate auditDate, String status, String locationFilter,
@@ -353,6 +355,87 @@ public class AuditSessionJdbcRepository {
 	public void setVarianceAppliedAt(long lineId) {
 		namedJdbc.update("UPDATE inventoryauditlines SET variance_applied_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = :id",
 				new MapSqlParameterSource("id", lineId));
+	}
+
+	public int nextAuditSequenceSuffix(int year) {
+		String seqName = "inventoryauditsessions_seq_" + year;
+		namedJdbc.getJdbcTemplate().execute("CREATE SEQUENCE IF NOT EXISTS " + seqName);
+		Integer n = namedJdbc.queryForObject("SELECT nextval('" + seqName + "')", new MapSqlParameterSource(), Integer.class);
+		return n != null ? n : 0;
+	}
+
+	public Map<Integer, Integer> lockInventoryQuantities(List<Integer> inventoryIds) {
+		if (inventoryIds == null || inventoryIds.isEmpty()) {
+			return Map.of();
+		}
+		String sql = "SELECT id, quantity FROM inventory WHERE id IN (:ids) FOR UPDATE";
+		List<Map<String, Object>> rows = namedJdbc.queryForList(sql, new MapSqlParameterSource("ids", inventoryIds));
+		Map<Integer, Integer> map = new LinkedHashMap<>();
+		for (Map<String, Object> row : rows) {
+			map.put((Integer) row.get("id"), (Integer) row.get("quantity"));
+		}
+		return map;
+	}
+
+	public void updateInventoryQuantitiesBatch(Map<Integer, Integer> idToNewQty) {
+		if (idToNewQty == null || idToNewQty.isEmpty()) {
+			return;
+		}
+		StringBuilder sb = new StringBuilder("UPDATE inventory SET quantity = CASE id ");
+		var src = new MapSqlParameterSource();
+		int i = 0;
+		for (var entry : idToNewQty.entrySet()) {
+			String idParam = "id" + i;
+			String valParam = "v" + i;
+			sb.append("WHEN :").append(idParam).append(" THEN :").append(valParam).append(" ");
+			src.addValue(idParam, entry.getKey());
+			src.addValue(valParam, entry.getValue());
+			i++;
+		}
+		sb.append("END, updated_at = CURRENT_TIMESTAMP WHERE id IN (:ids)");
+		src.addValue("ids", new ArrayList<>(idToNewQty.keySet()));
+		namedJdbc.update(sb.toString(), src);
+	}
+
+	public Map<Integer, Integer> findBaseUnitIdsByProductIds(List<Integer> productIds) {
+		if (productIds == null || productIds.isEmpty()) {
+			return Map.of();
+		}
+		String sql = "SELECT id, product_id FROM productunits WHERE product_id IN (:pids) AND is_base_unit = TRUE";
+		List<Map<String, Object>> rows = namedJdbc.queryForList(sql, new MapSqlParameterSource("pids", productIds));
+		Map<Integer, Integer> map = new HashMap<>();
+		for (Map<String, Object> row : rows) {
+			map.put((Integer) row.get("product_id"), (Integer) row.get("id"));
+		}
+		return map;
+	}
+
+	public void batchInsertInventoryLogs(List<AuditLogItem> items) {
+		if (items == null || items.isEmpty()) {
+			return;
+		}
+		String sql = """
+				INSERT INTO inventorylogs (product_id, action_type, quantity_change, unit_id, user_id, dispatch_id, receipt_id, from_location_id, to_location_id, reference_note)
+				VALUES (:pid, 'ADJUSTMENT', :qchg, :unit_id, :user_id, NULL, NULL, NULL, NULL, :note)
+				""";
+		MapSqlParameterSource[] batch = new MapSqlParameterSource[items.size()];
+		for (int i = 0; i < items.size(); i++) {
+			AuditLogItem it = items.get(i);
+			batch[i] = new MapSqlParameterSource("pid", it.productId())
+					.addValue("qchg", it.quantityChange())
+					.addValue("unit_id", it.baseUnitId())
+					.addValue("user_id", it.userId(), Types.INTEGER)
+					.addValue("note", it.referenceNote(), Types.VARCHAR);
+		}
+		namedJdbc.batchUpdate(sql, batch);
+	}
+
+	public void setVarianceAppliedAtBatch(List<Long> lineIds) {
+		if (lineIds == null || lineIds.isEmpty()) {
+			return;
+		}
+		namedJdbc.update("UPDATE inventoryauditlines SET variance_applied_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id IN (:ids)",
+				new MapSqlParameterSource("ids", lineIds));
 	}
 
 	public Optional<Integer> findBaseUnitId(int productId) {
