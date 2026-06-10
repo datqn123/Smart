@@ -60,15 +60,18 @@ class SqlQueryTool:
                 build_schema_artifact_from_postgres, self._deps.settings, question
             )
             if err:
-                logger.warning("schema load failed: %s", err)
+                logger.warning("tool=sql_query schema_load_error=%s", err)
                 return ToolResult(
                     ok=False,
                     output={"generated_sql": ""},
                     observation_text=f"Schema load failed: {err}",
                     error_message=f"Schema load failed: {err}",
                 )
+            schema_tables = list(artifact.tables.keys()) if hasattr(artifact, "tables") else []
+            logger.info("tool=sql_query schema_loaded tables=%s table_names=%s",
+                        len(schema_tables), schema_tables[:8])
         except Exception as exc:
-            logger.exception("schema load exception")
+            logger.exception("tool=sql_query schema_load_exception")
             return ToolResult(
                 ok=False,
                 output={"generated_sql": ""},
@@ -77,15 +80,18 @@ class SqlQueryTool:
             )
 
         # 2. Build system prompt with gen_sql.md skill + schema block
-
         skill_prompt = load_agent_prompt("gen_sql")
         schema_block = format_schema_block(artifact, selected_tables=None, enriched=True)
         system_prompt = f"{skill_prompt}\n\n## SCHEMA\n{schema_block}"
+        logger.info("tool=sql_query prompt_built prompt_chars=%s schema_block_chars=%s",
+                    len(system_prompt), len(schema_block))
 
         # 3. Call LLM to generate SQL
         sql = ""
         try:
             client = self._deps.llm_registry.get("sql_gen")
+            llm_model = getattr(client, "_model", None) or getattr(client, "model", "?")
+            logger.info("tool=sql_query llm_start model=%s question_chars=%s", llm_model, len(question))
             llm_result = await asyncio.to_thread(
                 client.structured_predict,
                 [SystemMessage(content=system_prompt), HumanMessage(content=question)],
@@ -93,8 +99,10 @@ class SqlQueryTool:
             )
             sql = (llm_result.sql or "").strip()
             explanation = llm_result.explanation or ""
+            logger.info("tool=sql_query llm_done sql_preview=%s sql_len=%s explanation_preview=%s",
+                        sql[:120].replace("\n", " "), len(sql), explanation[:80].replace("\n", " "))
         except Exception as exc:
-            logger.exception("LLM generation failed")
+            logger.exception("tool=sql_query llm_error")
             return ToolResult(
                 ok=False,
                 output={"generated_sql": sql},
@@ -105,8 +113,9 @@ class SqlQueryTool:
         # 4. Safety check
         try:
             enforce_read_only_sql(sql)
+            logger.info("tool=sql_query safety_check passed")
         except SqlSafetyError as exc:
-            logger.warning("SQL safety check failed: %s", exc)
+            logger.warning("tool=sql_query safety_check blocked sql_preview=%s", sql[:80].replace("\n", " "))
             return ToolResult(
                 ok=False,
                 output={"generated_sql": sql},
@@ -116,6 +125,7 @@ class SqlQueryTool:
 
         # 5. Execute SQL
         try:
+            logger.info("tool=sql_query exec_start sql=%s", sql[:200].replace("\n", " "))
             result = await self._deps.sql_executor.aexecute(
                 sql.rstrip("; \t\n"),
                 tenant_id=ctx.tenant_id,
@@ -123,8 +133,9 @@ class SqlQueryTool:
                 bearer_token=ctx.bearer_token,
             )
             rows = result.get("rows", []) if isinstance(result, dict) else []
+            logger.info("tool=sql_query exec_done rows=%s", len(rows))
         except Exception as exc:
-            logger.exception("SQL execution failed")
+            logger.exception("tool=sql_query exec_error")
             return ToolResult(
                 ok=False,
                 output={"generated_sql": sql},
@@ -135,11 +146,18 @@ class SqlQueryTool:
         # 6. Mask sensitive columns for non-owner roles
         guard_on = bool(getattr(self._deps.settings, "agentic_capability_guard_enabled", False))
         if guard_on and rows:
+            before_count = len(rows[0]) if rows else 0
             rows = self._capability.mask_columns(ctx.role, rows)
+            after_count = len(rows[0]) if rows else 0
+            logger.info("tool=sql_query column_mask role=%s guard_on=True cols_before=%s cols_after=%s",
+                        ctx.role, before_count, after_count)
+        elif guard_on:
+            logger.info("tool=sql_query column_mask role=%s guard_on=True rows_empty=True", ctx.role)
 
         # 7. Return result
-        logger.info("tool_invoke_end tool=sql_query latency_ms=%.0f rows=%s", (time.monotonic() - _invoke_start) * 1000, len(rows))
-
+        total_ms = (time.monotonic() - _invoke_start) * 1000
+        logger.info("tool_invoke_end tool=sql_query ok=True latency_ms=%.0f rows=%s",
+                    total_ms, len(rows))
         observation = f"SQL trả về {len(rows)} dòng" if rows else "Không có dữ liệu (0 dòng)"
 
         return ToolResult(
