@@ -379,24 +379,24 @@ export function DashboardPage() {
       {canSeeFinancials && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Revenue trend chart */}
-          <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+          <div className="lg:col-span-2 bg-white rounded-xl border border-border shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h2 className="text-sm font-semibold text-slate-900">Xu hướng doanh thu</h2>
-                <p className="text-xs text-slate-400 mt-0.5">
+                <h2 className="text-sm font-semibold text-foreground">Xu hướng doanh thu</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
                   Tổng {formatCurrency(revenueTrend.reduce((s, p) => s + p.revenue, 0))} ·{" "}
                   {trendDays} ngày gần nhất
                 </p>
               </div>
-              <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
+              <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
                 {([7, 30] as const).map((d) => (
                   <button
                     key={d}
                     onClick={() => setTrendDays(d)}
-                    className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
                       trendDays === d
-                        ? "bg-white text-slate-900 shadow-sm"
-                        : "text-slate-500 hover:text-slate-700"
+                        ? "bg-white text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
                     {d} ngày
@@ -414,8 +414,9 @@ export function DashboardPage() {
                   <AreaChart data={revenueTrend} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
                     <defs>
                       <linearGradient id="dashRevenue" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.25} />
-                        <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0} />
+                        <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.5} />
+                        <stop offset="50%" stopColor="#0ea5e9" stopOpacity={0.2} />
+                        <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0.02} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -488,7 +489,11 @@ export function DashboardPage() {
                         </div>
                         <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                           <div
-                            className={`h-full ${ch.color} rounded-full transition-all`}
+                            className={`h-full rounded-full transition-all ${
+                              ch.label === "Bán lẻ"
+                                ? "bg-gradient-to-r from-blue-400 to-blue-600"
+                                : "bg-gradient-to-r from-emerald-400 to-emerald-600"
+                            }`}
                             style={{ width: `${pct}%` }}
                           />
                         </div>
@@ -499,8 +504,8 @@ export function DashboardPage() {
                     )
                   })}
                   <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-500">Tổng cộng</span>
-                    <span className="text-sm font-black text-slate-900 tabular-nums">
+                    <span className="text-sm font-semibold text-muted-foreground">Tổng cộng</span>
+                    <span className="text-base font-bold text-foreground tabular-nums">
                       {formatCurrency(channels.total)}
                     </span>
                   </div>
