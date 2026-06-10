@@ -1,5 +1,7 @@
 import logging
 
+import pytest
+
 from app.harness.eval_gate import EvalCase, evaluate_case, route_accuracy, v3_rollout_allowed
 from app.harness.history_store import InMemoryIntentHistoryStore, build_history_event
 from app.harness.memory_store import InMemoryConversationMemoryStore, MemoryTurnRecord
@@ -10,6 +12,10 @@ from app.harness.plan_template_store import (
     PlanTemplateRecord,
     plan_graph_hash,
 )
+from app.harness.observation import build_observation
+from app.harness.tool_registry import ToolRegistry, ToolManifest
+from app.harness.budget import TurnBudget, BudgetExceeded
+from app.harness.cache import InMemorySemanticCache
 
 
 def test_template_store_init_logs(caplog):
@@ -181,3 +187,55 @@ def test_template_demoted_logs(caplog):
         store.record_outcome("test intent", role_scope="owner", status="degraded")
     assert "template_demoted" in caplog.text
     assert "status=degraded" in caplog.text
+
+
+class MockToolResult:
+    def __init__(self, ok=True, output=None, error_message=""):
+        self.ok = ok
+        self.output = output or {}
+        self.error_message = error_message
+
+
+def test_observation_built_logs(caplog):
+    result = MockToolResult(ok=True, output={"rows": [{"id": 1}]})
+    with caplog.at_level(logging.INFO):
+        build_observation(tool_name="test", tool_result=result, ctx=None)
+    assert "observation_built" in caplog.text
+    assert "tool=test" in caplog.text
+
+
+def test_observation_error_logs(caplog):
+    result = MockToolResult(ok=False, error_message="permission denied")
+    with caplog.at_level(logging.WARNING):
+        build_observation(tool_name="test", tool_result=result, ctx=None)
+    assert "observation_error" in caplog.text
+    assert "kind=policy_blocked" in caplog.text
+
+
+def test_tool_registered_logs(caplog):
+    registry = ToolRegistry()
+    manifest = ToolManifest(name="test_tool", description="test", args_schema="{}")
+    with caplog.at_level(logging.INFO):
+        registry.register(manifest, None)
+    assert "tool_registered" in caplog.text
+    assert "name=test_tool" in caplog.text
+
+
+def test_budget_exceeded_logs(caplog):
+    budget = TurnBudget(max_steps=10, token_budget=100)
+    budget.start()
+    budget.add_usage(tokens=150, cost_usd=0.0)
+    with caplog.at_level(logging.WARNING):
+        with pytest.raises(BudgetExceeded):
+            budget.check(step=1)
+    assert "budget_exceeded" in caplog.text
+    assert "kind=token" in caplog.text
+
+
+def test_cache_hit_logs(caplog):
+    cache = InMemorySemanticCache()
+    cache.put("sql_query", {"q": "test"}, "t1", {"rows": []})
+    with caplog.at_level(logging.INFO):
+        cache.get("sql_query", {"q": "test"}, "t1")
+    assert "harness_cache" in caplog.text
+    assert "hit=True" in caplog.text

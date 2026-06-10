@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 
 class BudgetExceeded(Exception):
@@ -32,9 +35,13 @@ class TurnBudget:
     def check(self, step: int) -> None:
         _ = step
         if self.token_budget and self.used_tokens >= self.token_budget:
+            logger.warning("budget_exceeded kind=%s used=%s limit=%s step=%s", "token", self.used_tokens, self.token_budget, step)
             raise BudgetExceeded("token")
         if self.cost_budget_usd and self.used_cost_usd >= self.cost_budget_usd:
+            logger.warning("budget_exceeded kind=%s used=%s limit=%s step=%s", "cost", self.used_cost_usd, self.cost_budget_usd, step)
             raise BudgetExceeded("cost")
         if self.wallclock_timeout_s and self._started:
             if time.monotonic() - self._started >= self.wallclock_timeout_s:
+                elapsed = time.monotonic() - self._started
+                logger.warning("budget_exceeded kind=%s used=%s limit=%s step=%s", "wallclock", elapsed, self.wallclock_timeout_s, step)
                 raise BudgetExceeded("wallclock")

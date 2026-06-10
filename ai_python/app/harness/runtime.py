@@ -144,6 +144,7 @@ class AgentHarness:
         else:
             payload["error"] = error or "unknown error"
         self._audit(payload)
+        logger.info("harness_tool_call tool=%s latency_ms=%.0f ok=%s", ctx.tool_name, latency_ms or 0.0, ok)
 
     def _is_denied_tool(self, tool_name: str) -> bool:
         n = tool_name.lower().strip()

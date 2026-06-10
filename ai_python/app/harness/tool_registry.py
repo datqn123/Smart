@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from dataclasses import dataclass, field
 from collections.abc import Sequence
 from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -121,10 +124,13 @@ class ToolRegistry:
     def __init__(self) -> None:
         self._manifests: dict[str, ToolManifest] = {}
         self._impls: dict[str, AsyncTool] = {}
+        self._cached_version: str | None = None
 
     def register(self, manifest: ToolManifest, impl: AsyncTool) -> None:
         self._manifests[manifest.name] = manifest
         self._impls[manifest.name] = impl
+        self._cached_version = None
+        logger.info("tool_registered name=%s hitl=%s capability=%s side_effect=%s", manifest.name, manifest.has_hitl, manifest.capability, manifest.side_effect_class)
 
     def get_impl(self, name: str) -> AsyncTool:
         try:
@@ -146,6 +152,8 @@ class ToolRegistry:
         data-flow types, or HITL flag produces a new version so a pinned plan
         template can be invalidated.
         """
+        if self._cached_version is not None:
+            return self._cached_version
         payload = [
             {
                 "name": m.name,
@@ -163,7 +171,9 @@ class ToolRegistry:
             for m in (self._manifests[name],)
         ]
         raw = json.dumps(payload, ensure_ascii=False, sort_keys=True)
-        return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+        self._cached_version = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+        logger.info("tool_manifest_version hash=%s tool_count=%s", self._cached_version, len(self._manifests))
+        return self._cached_version
 
     def tools_manifest_text(self) -> str:
         """Planner-visible tool surface (FR-2.1) — governance fields excluded."""

@@ -9,10 +9,13 @@ provider errors must never reach the Planner prompt.
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 SAMPLE_LIMIT_DEFAULT = 20
 _MESSAGE_MAX_CHARS = 600
@@ -156,7 +159,7 @@ def build_observation(
 
     if not ok:
         kind = _classify_error(raw_error)
-        return ObservationEnvelope(
+        envelope = ObservationEnvelope(
             tool_name=tool_name,
             ok=False,
             error_kind=kind,
@@ -164,18 +167,21 @@ def build_observation(
             replan_required=True,
             failure_fingerprint=failure_fingerprint(tool_name, raw_error),
         )
+        logger.warning("observation_error tool=%s kind=%s fingerprint=%s", envelope.tool_name, envelope.error_kind, envelope.failure_fingerprint)
+        return envelope
 
     output = getattr(tool_result, "output", None) or {}
     rows = _extract_rows(output)
 
     if rows is None:
-        # Non-tabular result (e.g. answer text, guidance): no full data to hold.
-        return ObservationEnvelope(
+        envelope = ObservationEnvelope(
             tool_name=tool_name,
             ok=True,
             message=_truncate(str(getattr(tool_result, "observation_text", "") or "")),
             replan_required=not output_meets_expect,
         )
+        logger.info("observation_built tool=%s ok=%s rows=%s truncated=%s masked=%s ref=%s", envelope.tool_name, envelope.ok, envelope.row_count, envelope.truncated, envelope.masked, envelope.result_ref)
+        return envelope
 
     row_count = len(rows)
     sample = rows[:sample_limit]
@@ -188,7 +194,7 @@ def build_observation(
     if result_store is not None:
         result_ref = result_store.put(tool_name=tool_name, data={"rows": rows}, ctx=ctx)
 
-    return ObservationEnvelope(
+    envelope = ObservationEnvelope(
         tool_name=tool_name,
         ok=True,
         schema_fields=_infer_schema(rows),
@@ -200,3 +206,5 @@ def build_observation(
         message=_truncate(str(getattr(tool_result, "observation_text", "") or "")),
         replan_required=not output_meets_expect,
     )
+    logger.info("observation_built tool=%s ok=%s rows=%s truncated=%s masked=%s ref=%s", envelope.tool_name, envelope.ok, envelope.row_count, envelope.truncated, envelope.masked, envelope.result_ref)
+    return envelope

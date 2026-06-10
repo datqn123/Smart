@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from collections.abc import Callable
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 DETERMINISTIC_TOOLS = {"sql_query", "schema_explore"}
@@ -22,12 +25,15 @@ class InMemorySemanticCache:
     def get(self, tool_name: str, args: dict[str, Any], tenant_id: str | None) -> Any | None:
         if not self.is_cacheable(tool_name):
             self.last_event = "cache_miss"
+            logger.info("harness_cache hit=%s tool=%s key=%s", False, tool_name, "")
             return None
         key = self._key(tool_name, args, tenant_id)
         if key not in self._values:
             self.last_event = "cache_miss"
+            logger.info("harness_cache hit=%s tool=%s key=%s", False, tool_name, key[:16])
             return None
         self.last_event = "cache_hit"
+        logger.info("harness_cache hit=%s tool=%s key=%s", self.last_event == "cache_hit", tool_name, key[:16])
         return self._values[key]
 
     def put(self, tool_name: str, args: dict[str, Any], tenant_id: str | None, value: Any) -> None:
