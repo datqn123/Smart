@@ -33,7 +33,7 @@ class InMemorySemanticCache:
             logger.info("harness_cache hit=%s tool=%s key=%s", False, tool_name, key[:16])
             return None
         self.last_event = "cache_hit"
-        logger.info("harness_cache hit=%s tool=%s key=%s", self.last_event == "cache_hit", tool_name, key[:16])
+        logger.info("harness_cache hit=%s tool=%s key=%s", True, tool_name, key[:16])
         return self._values[key]
 
     def put(self, tool_name: str, args: dict[str, Any], tenant_id: str | None, value: Any) -> None:

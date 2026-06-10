@@ -41,7 +41,7 @@ class TurnBudget:
             logger.warning("budget_exceeded kind=%s used=%s limit=%s step=%s", "cost", self.used_cost_usd, self.cost_budget_usd, step)
             raise BudgetExceeded("cost")
         if self.wallclock_timeout_s and self._started:
-            if time.monotonic() - self._started >= self.wallclock_timeout_s:
-                elapsed = time.monotonic() - self._started
+            elapsed = time.monotonic() - self._started
+            if elapsed >= self.wallclock_timeout_s:
                 logger.warning("budget_exceeded kind=%s used=%s limit=%s step=%s", "wallclock", elapsed, self.wallclock_timeout_s, step)
                 raise BudgetExceeded("wallclock")
