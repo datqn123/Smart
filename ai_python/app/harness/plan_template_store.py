@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 import sqlite3
 from typing import Any, Protocol
@@ -25,6 +26,8 @@ from typing import Any, Protocol
 from pydantic import BaseModel, Field
 
 from app.harness.plan_graph import PlanGraph
+
+logger = logging.getLogger(__name__)
 
 PLANNER_GENERATED = "planner_generated"
 
@@ -139,14 +142,14 @@ class PlanTemplateStore(Protocol):
 class InMemoryPlanTemplateStore:
     def __init__(self) -> None:
         self._store: dict[str, PlanTemplateRecord] = {}
-        # Clean-success streaks for planner-generated plans not yet promoted.
         self._candidates: dict[str, PlanTemplateRecord] = {}
+        logger.info("template_store_init backend=%s", "memory")
 
     def promote(self, record: PlanTemplateRecord) -> bool:
-        # FR-11.7: provenance gate — reject anything not planner-generated.
         if record.source != PLANNER_GENERATED:
             return False
         self._store[_key(record.normalized_intent_key, record.role_scope)] = record
+        logger.info("template_promoted intent=%s plan_hash=%s role=%s after_successes=%s", record.normalized_intent_key, record.plan_graph_hash, record.role_scope, record.success_count)
         return True
 
     def get(
@@ -159,6 +162,10 @@ class InMemoryPlanTemplateStore:
         asset_versions: dict[str, str],
     ) -> PlanTemplateRecord | None:
         record = self._store.get(_key(normalize_intent_key(normalized_intent_key), role_scope))
+        if record is not None:
+            logger.info("template_lookup intent=%s found=%s demoted=%s versions_ok=%s", normalized_intent_key, True, record.demoted, record.versions_match(manifest_version=manifest_version, policy_version=policy_version, asset_versions=asset_versions))
+        else:
+            logger.info("template_lookup intent=%s found=%s demoted=%s versions_ok=%s", normalized_intent_key, False, False, False)
         if record is None:
             return None
         # FR-11.8: version pin — any drift invalidates the template.
@@ -183,6 +190,10 @@ class InMemoryPlanTemplateStore:
             record.degraded_count += 1
         else:
             record.failure_count += 1
+        if status != "success":
+            logger.warning("template_streak_broken intent=%s status=%s counts=(s=%s,d=%s,f=%s)", normalized_intent_key, status, record.success_count, record.degraded_count, record.failure_count)
+        if record.demoted:
+            logger.warning("template_demoted intent=%s status=%s counts=(s=%s,d=%s,f=%s)", normalized_intent_key, status, record.success_count, record.degraded_count, record.failure_count)
 
     def consider_promotion(self, candidate: PlanTemplateRecord, *, promote_after: int) -> bool:
         """Track a clean-success streak and promote when it reaches the threshold.
@@ -221,6 +232,7 @@ class InMemoryPlanTemplateStore:
             self.promote(cand.model_copy())
             self._candidates.pop(k, None)
             return True
+        logger.info("template_candidate_streak intent=%s plan_hash=%s success_count=%s/%s", candidate.normalized_intent_key, candidate.plan_graph_hash, cand.success_count, promote_after)
         return False
 
     def note_non_success(self, normalized_intent_key: str, *, role_scope: str) -> None:
@@ -253,6 +265,7 @@ class SqlitePlanTemplateStore:
         self._conn.execute(_CREATE_SQL)
         self._conn.execute(_CREATE_CANDIDATES_SQL)
         self._conn.commit()
+        logger.info("template_store_init backend=%s", "sqlite")
 
     def promote(self, record: PlanTemplateRecord) -> bool:
         if record.source != PLANNER_GENERATED:
@@ -264,6 +277,7 @@ class SqlitePlanTemplateStore:
             (key, record.normalized_intent_key, record.role_scope, record.model_dump_json()),
         )
         self._conn.commit()
+        logger.info("template_promoted intent=%s plan_hash=%s role=%s after_successes=%s", record.normalized_intent_key, record.plan_graph_hash, record.role_scope, record.success_count)
         return True
 
     def _load(self, normalized_intent_key: str, role_scope: str) -> PlanTemplateRecord | None:
@@ -284,6 +298,10 @@ class SqlitePlanTemplateStore:
         asset_versions: dict[str, str],
     ) -> PlanTemplateRecord | None:
         record = self._load(normalized_intent_key, role_scope)
+        if record is not None:
+            logger.info("template_lookup intent=%s found=%s demoted=%s versions_ok=%s", normalized_intent_key, True, record.demoted, record.versions_match(manifest_version=manifest_version, policy_version=policy_version, asset_versions=asset_versions))
+        else:
+            logger.info("template_lookup intent=%s found=%s demoted=%s versions_ok=%s", normalized_intent_key, False, False, False)
         if record is None:
             return None
         if not record.versions_match(
@@ -306,6 +324,10 @@ class SqlitePlanTemplateStore:
             record.degraded_count += 1
         else:
             record.failure_count += 1
+        if status != "success":
+            logger.warning("template_streak_broken intent=%s status=%s counts=(s=%s,d=%s,f=%s)", normalized_intent_key, status, record.success_count, record.degraded_count, record.failure_count)
+        if record.demoted:
+            logger.warning("template_demoted intent=%s status=%s counts=(s=%s,d=%s,f=%s)", normalized_intent_key, status, record.success_count, record.degraded_count, record.failure_count)
         key = _key(record.normalized_intent_key, record.role_scope)
         self._conn.execute(
             "UPDATE plan_templates SET record_json=? WHERE key=?", (record.model_dump_json(), key)
@@ -352,6 +374,7 @@ class SqlitePlanTemplateStore:
             self._conn.commit()
             return True
 
+        logger.info("template_candidate_streak intent=%s plan_hash=%s success_count=%s/%s", candidate.normalized_intent_key, candidate.plan_graph_hash, cand.success_count, promote_after)
         self._conn.execute(
             "INSERT OR REPLACE INTO plan_template_candidates(key, record_json) VALUES (?,?)",
             (key, cand.model_dump_json()),

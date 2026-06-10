@@ -11,12 +11,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import sqlite3
 import time
 import uuid
 from typing import Any, Protocol
 
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 # Distinct outcome statuses (FR-9.5).
 STATUS_SUCCESS = "success"
@@ -128,6 +131,7 @@ class InMemoryIntentHistoryStore:
 
     def append(self, event: IntentHistoryEvent) -> None:
         self._events.append(event)
+        logger.info("k15_event_append intent_hash=%s status=%s tools=%s replan=%s hitl=%s", event.intent.get("intent_key_hash"), event.outcome.get("status"), len(event.plan.get("tools", [])), event.plan.get("replan_count", 0), event.plan.get("hitl_count", 0))
 
     def all(self) -> list[IntentHistoryEvent]:
         return list(self._events)
@@ -135,7 +139,9 @@ class InMemoryIntentHistoryStore:
     def summary(self, intent_key: str) -> IntentHistorySummary:
         key_hash = _hash(intent_key)
         matching = [e for e in self._events if e.intent.get("intent_key_hash") == key_hash]
-        return _summarize(matching, key_hash)
+        s = _summarize(matching, key_hash)
+        logger.info("k15_summary intent=%s total=%s success=%s degraded=%s failure=%s hitl=%s clarify=%s", intent_key, s.total, s.success, s.degraded, s.failure, s.hitl_pending, s.clarify_pending)
+        return s
 
 
 _CREATE_SQL = """
@@ -166,6 +172,7 @@ class SqliteIntentHistoryStore:
             ),
         )
         self._conn.commit()
+        logger.info("k15_event_append intent_hash=%s status=%s tools=%s replan=%s hitl=%s", event.intent.get("intent_key_hash"), event.outcome.get("status"), len(event.plan.get("tools", [])), event.plan.get("replan_count", 0), event.plan.get("hitl_count", 0))
 
     def summary(self, intent_key: str) -> IntentHistorySummary:
         key_hash = _hash(intent_key)
@@ -173,7 +180,9 @@ class SqliteIntentHistoryStore:
             "SELECT event_json FROM intent_history WHERE intent_key_hash=?", (key_hash,)
         )
         events = [IntentHistoryEvent.model_validate_json(row[0]) for row in cur.fetchall()]
-        return _summarize(events, key_hash)
+        s = _summarize(events, key_hash)
+        logger.info("k15_summary intent=%s total=%s success=%s degraded=%s failure=%s hitl=%s clarify=%s", intent_key, s.total, s.success, s.degraded, s.failure, s.hitl_pending, s.clarify_pending)
+        return s
 
     def close(self) -> None:
         self._conn.close()

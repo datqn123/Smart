@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -48,26 +51,33 @@ class InMemoryConversationMemoryStore:
         if thread_id not in self._turns:
             self._turns[thread_id] = []
         self._turns[thread_id].append(turn)
+        logger.info("conv_memory_append thread=%s turn=%s intent=%s tools=%s", thread_id, turn.turn_index, turn.intent_type, len(turn.tool_names))
 
     def get_context(self, thread_id: str) -> ConversationContext:
         turns = self._turns.get(thread_id, [])
-        return ConversationContext(
+        context = ConversationContext(
             summary=self._summaries.get(thread_id, ""),
             recent_turns=list(turns),
         )
+        logger.info("conv_memory_retrieve thread=%s turns=%s has_summary=%s", thread_id, len(context.recent_turns), bool(context.summary))
+        return context
 
     def compact(self, thread_id: str, summary_text: str) -> None:
         turns = self._turns.get(thread_id, [])
         if not turns:
             return
+        all_turns_count = len(turns)
         keep_count = min(self._max_turns, len(turns))
         keep_count = max(keep_count, 1)
         self._turns[thread_id] = turns[-keep_count:]
         self._summaries[thread_id] = summary_text
+        logger.info("conv_memory_compact thread=%s deleted=%s kept=%s", thread_id, all_turns_count - keep_count, keep_count)
 
     def delete_thread(self, thread_id: str) -> None:
+        removed = len(self._turns.get(thread_id, []))
         self._turns.pop(thread_id, None)
         self._summaries.pop(thread_id, None)
+        logger.info("conv_memory_delete thread=%s turns_removed=%s", thread_id, removed)
 
 
 class SqliteConversationMemoryStore:
@@ -119,6 +129,7 @@ class SqliteConversationMemoryStore:
             (thread_id,),
         )
         self._conn.commit()
+        logger.info("conv_memory_append thread=%s turn=%s intent=%s tools=%s", thread_id, turn.turn_index, turn.intent_type, len(turn.tool_names))
 
     def get_context(self, thread_id: str) -> ConversationContext:
         cursor = self._conn.execute(
@@ -146,7 +157,9 @@ class SqliteConversationMemoryStore:
                 intent_type=row[4] or "",
                 timestamp=row[5],
             ))
-        return ConversationContext(summary=summary, recent_turns=turns)
+        ctx = ConversationContext(summary=summary, recent_turns=turns)
+        logger.info("conv_memory_retrieve thread=%s turns=%s has_summary=%s", thread_id, len(ctx.recent_turns), bool(ctx.summary))
+        return ctx
 
     def compact(self, thread_id: str, summary_text: str) -> None:
         cursor = self._conn.execute(
@@ -168,8 +181,14 @@ class SqliteConversationMemoryStore:
             (summary_text, thread_id),
         )
         self._conn.commit()
+        logger.info("conv_memory_compact thread=%s deleted=%s kept=%s", thread_id, len(all_turns) - keep_count, keep_count)
 
     def delete_thread(self, thread_id: str) -> None:
+        cursor = self._conn.execute(
+            "SELECT COUNT(*) FROM conversation_memory WHERE thread_id = ?",
+            (thread_id,),
+        )
+        removed = cursor.fetchone()[0]
         self._conn.execute(
             "DELETE FROM conversation_memory WHERE thread_id = ?",
             (thread_id,),
@@ -179,3 +198,4 @@ class SqliteConversationMemoryStore:
             (thread_id,),
         )
         self._conn.commit()
+        logger.info("conv_memory_delete thread=%s turns_removed=%s", thread_id, removed)
