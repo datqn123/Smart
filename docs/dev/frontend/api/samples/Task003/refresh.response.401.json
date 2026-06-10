@@ -1,5 +1,0 @@
-{
-  "success": false,
-  "error": "UNAUTHORIZED",
-  "message": "Refresh token không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại."
-}

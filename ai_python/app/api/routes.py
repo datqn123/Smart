@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Any
 
 import jwt
@@ -223,6 +224,9 @@ def _iter_chat_sse_events(
     bearer_token: str | None,
 ):
     """Sync generator — tránh block event loop (async gen + graph sync = buffer tới khi xong)."""
+    chunk_count = 0
+    start_time = time.monotonic()
+    first_delta_logged = False
     prev_answer = ""
     chart_sent = False
     draft_sent = False
@@ -246,6 +250,7 @@ def _iter_chat_sse_events(
                 if mode == "harness_control" and isinstance(payload, dict):
                     suppress_done = suppress_done or bool(payload.get("suppress_done"))
                     continue
+            chunk_count += 1
             custom_progress = _progress_from_custom_chunk(chunk)
             if custom_progress and custom_progress != progress_sent:
                 yield _sse_ui_event("progress", custom_progress)
@@ -313,6 +318,9 @@ def _iter_chat_sse_events(
                     if current.startswith(prev_answer) and len(current) > len(prev_answer):
                         delta = current[len(prev_answer) :]
                         if delta:
+                            if not first_delta_logged:
+                                logger.info("sse_first_delta ttfb_ms=%.0f", (time.monotonic() - start_time) * 1000)
+                                first_delta_logged = True
                             yield _sse_ui_event("delta", delta)
                             had_stream_payload = True
                         prev_answer = current
@@ -357,6 +365,8 @@ def _iter_chat_sse_events(
         yield _sse_ui_event("error", _sse_user_facing_error(final_error))
     if not suppress_done or final_error is not None:
         yield _sse_ui_event("done", "")
+    logger.info("sse_stream_end chunks=%s duration_ms=%.0f had_error=%s",
+                chunk_count, (time.monotonic() - start_time) * 1000, final_error is not None)
 
 
 async def _aiter_chat_sse_events(
@@ -367,6 +377,9 @@ async def _aiter_chat_sse_events(
     bearer_token: str | None,
 ):
     """Async SSE generator — uses native astream() to avoid private event-loop bridges."""
+    chunk_count = 0
+    start_time = time.monotonic()
+    first_delta_logged = False
     prev_answer = ""
     chart_sent = False
     draft_sent = False
@@ -390,6 +403,7 @@ async def _aiter_chat_sse_events(
                 if mode == "harness_control" and isinstance(payload, dict):
                     suppress_done = suppress_done or bool(payload.get("suppress_done"))
                     continue
+            chunk_count += 1
             custom_progress = _progress_from_custom_chunk(chunk)
             if custom_progress and custom_progress != progress_sent:
                 yield _sse_ui_event("progress", custom_progress)
@@ -501,6 +515,8 @@ async def _aiter_chat_sse_events(
         yield _sse_ui_event("error", _sse_user_facing_error(final_error))
     if not suppress_done or final_error is not None:
         yield _sse_ui_event("done", "")
+    logger.info("sse_stream_end chunks=%s duration_ms=%.0f had_error=%s",
+                chunk_count, (time.monotonic() - start_time) * 1000, final_error is not None)
 
 
 @router.post("/stream")
@@ -512,6 +528,8 @@ async def stream_chat(
     runtime: GraphRuntime = Depends(get_graph_runtime),
 ) -> StreamingResponse:
     _enforce_identity_context(request, claims, correlation_id=correlation_id)
+    logger.info("sse_stream_start correlation_id=%s thread_id=%s",
+                correlation_id, request.metadata.thread_id)
     bearer_token = _extract_bearer_token(authorization)
 
     # Use native async path when flag is on and runtime supports astream().

@@ -1,35 +1,48 @@
 # Project Documentation
 
-Central home for project documentation, task artifacts, plans, guides, and manual AI test cases.
-
 ## Structure
 
 ```
 docs/
-├── dev/                          # Phát triển tính năng MỚI
-│   ├── ai-python/                #   PRD, SRS, ADR, Tasks AI (Task001-006)
-│   ├── backend/                  #   SRS backend, task artifacts, Postman
-│   └── frontend/                 #   SRS, API contracts, ADR, database...
+├── reference/              # Active reference docs — agent sẽ đọc để hiểu hệ thống
+│   ├── ai-knowledge/       #   K1–K15 knowledge base cho AI agent
+│   ├── guides/             #   Hướng dẫn nghiệp vụ (GUID_ERP, Custom Builder)
+│   ├── api-contracts/      #   API contracts frontend ↔ backend (từ dev/frontend/api/)
+│   ├── use-cases/          #   UC specs & diagrams
+│   └── tables/             #   DB schema — auto-generated bởi scripts/db-docs.py
 │
-├── fix-bug/                      # SỬA LỖI
-│   ├── ai-python/                #   Progress bar fix plan
-│   ├── backend/                  #   Bug reports
-│   └── frontend/                 #   Bug reports, SRS fix, QA fix
+├── dev/                    # Dev reference (frontend ADR, database docs, project overview)
+│   └── frontend/
 │
-├── upgrade/                      # NÂNG CẤP TÍNH NĂNG (AI-Python)
-│   └── ai-python/                #   SQL factory upgrade (Task007)
+├── tests/                  # AI test suite (200+ test cases)
 │
-├── frontend/                     # Workflow chính (S/RS, Tech Lead, QA, Code Review)
-│
-├── guides/                       # Hướng dẫn nghiệp vụ (GUID_ERP.md)
-├── table-description/            # Schema database (30 tables)
-└── test-ai/                      # 200+ AI test cases (15 categories)
+└── archive/                # Docs cũ, task đã hoàn thành — agent KHÔNG đọc
+    ├── frontend/           #   SRS, tech_lead task001-028
+    ├── superpowers/        #   Superpowers plans & specs
+    ├── upgrade-ai-python/  #   SRS, tech_lead, QA, ADR upgrades
+    ├── fix-bug/            #   Bug reports & fix plans
+    ├── backend/            #   Backend SRS, task artifacts
+    ├── claude/             #   Docs Claude cũ
+    ├── dev-ai-python/      #   ADR, PRD, SRS AI Python tasks
+    ├── dev-backend/        #   Backend setup & task docs
+    ├── dev-common/         #   Custom builder overview
+    ├── dev-frontend/       #   Frontend analysis & old SRS
+    ├── dev-requires/       #   Requirement docs
+    ├── table-description/  #   Schema docs cũ (V1–V52)
+    └── sql/                #   Full schema doc cũ
 ```
 
-### Tiêu chí phân loại
+## Nguyên tắc
 
-| Category | Định nghĩa | Ví dụ |
-|----------|-----------|-------|
-| `dev/` | Xây dựng tính năng mới | Backend SRS, frontend API contracts, database docs |
-| `fix-bug/` | Sửa lỗi | Bug reports, SRS fix, QA fix |
-| `upgrade/` | Cải tiến / chuẩn hóa | AI-Python SQL factory upgrade |
+| Thư mục | Agent đọc? | Mục đích |
+|----------|-----------|----------|
+| `reference/` | ✅ **Có** | Tài liệu tham khảo active, cần thiết để hiểu codebase |
+| `dev/` | ✅ Có | Tài liệu kiến trúc, API contracts, project overview |
+| `tests/` | ❌ Không | Test cases, không cần đọc để hiểu logic |
+| `archive/` | ❌ **Không** | Docs đã hoàn thành, lưu giữ lịch sử |
+
+## Khi codebase thay đổi
+
+- **DB schema thay đổi** → chạy `python scripts/db-docs.py` để refresh `docs/reference/tables/`
+- **Business logic thay đổi** → cập nhật `docs/reference/guides/` tương ứng
+- **API thay đổi** → cập nhật `docs/reference/api-contracts/`

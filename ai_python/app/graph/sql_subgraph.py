@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import logging
+
 from langgraph.graph import END, START, StateGraph
+
+logger = logging.getLogger(__name__)
 
 from app.graph.deps import GraphDeps
 from app.graph.nodes.chart_readiness import (
@@ -31,7 +35,9 @@ from app.graph.analyze_empty_result import make_analyze_empty_result_node
 def _route_after_gen_sql(state: AgentState) -> str:
     err = state.get("error_payload")
     if err and err.get("error") in ("schema_load_failed", "schema_catalog_failed"):
+        logger.info("sql_route from=gen_sql to=fail_max_attempts reason=error_payload")
         return "fail_max_attempts"
+    logger.info("sql_route from=gen_sql to=verify_sql_intent reason=no_error")
     return "verify_sql_intent"
 
 
@@ -41,20 +47,27 @@ def _route_after_verify_sql_intent(state: AgentState) -> str:
         attempt = int(state.get("sql_attempt_count") or 0)
         max_attempts = int(state.get("sql_repair_max_attempts") or 3)
         if attempt >= max_attempts:
+            logger.info("sql_route from=verify_sql_intent to=fail_max_attempts reason=max_attempts attempt=%s/%s", attempt, max_attempts)
             return "fail_max_attempts"
+        logger.info("sql_route from=verify_sql_intent to=gen_sql reason=regen attempt=%s/%s", attempt, max_attempts)
         return "gen_sql"
     if action == "bypass_review":
+        logger.info("sql_route from=verify_sql_intent to=execute_sql reason=bypass_review")
         return "execute_sql"
+    logger.info("sql_route from=verify_sql_intent to=sql_review reason=proceed")
     return "sql_review"
 
 
 def _route_after_execute_sql(state: AgentState) -> str:
     qr = state.get("query_result")
     if qr is None:
+        logger.info("sql_route from=execute_sql to=validate_result reason=no_query_result")
         return "validate_result"
     rows = qr.get("rows") if isinstance(qr, dict) else None
     if isinstance(rows, list) and len(rows) == 0:
+        logger.info("sql_route from=execute_sql to=analyze_empty_result reason=empty_rows")
         return "analyze_empty_result"
+    logger.info("sql_route from=execute_sql to=validate_result reason=has_rows")
     return "validate_result"
 
 
@@ -64,8 +77,11 @@ def _route_after_analyze_empty(state: AgentState) -> str:
         attempt = int(state.get("sql_attempt_count") or 0)
         max_attempts = int(state.get("sql_repair_max_attempts") or 3)
         if attempt >= max_attempts:
+            logger.info("sql_route from=analyze_empty to=fail_max_attempts reason=wrong_maxed attempt=%s/%s", attempt, max_attempts)
             return "fail_max_attempts"
+        logger.info("sql_route from=analyze_empty to=gen_sql reason=wrong attempt=%s/%s", attempt, max_attempts)
         return "gen_sql"
+    logger.info("sql_empty_verdict verdict=%s reason=legitimate", verdict)
     return "validate_result"
 
 
@@ -170,4 +186,5 @@ def build_sql_subgraph(deps: GraphDeps):
         },
     )
     g.add_edge("fail_max_attempts", END)
+    logger.info("sql_subgraph_compile nodes=%s", list(g.nodes.keys()))
     return g

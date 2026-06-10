@@ -1,9 +1,0 @@
-{
-  "success": false,
-  "error": "BAD_REQUEST",
-  "message": "Dữ liệu không hợp lệ",
-  "details": {
-    "email": "Email là bắt buộc",
-    "password": "Mật khẩu phải có ít nhất 6 ký tự"
-  }
-}

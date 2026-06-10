@@ -1,8 +1,0 @@
-{
-  "success": false,
-  "error": "BAD_REQUEST",
-  "message": "Dữ liệu không hợp lệ",
-  "details": {
-    "refreshToken": "Refresh token là bắt buộc"
-  }
-}

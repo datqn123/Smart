@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from langgraph.graph import END, START, StateGraph
+
+logger = logging.getLogger(__name__)
 
 from app.graph.checkpointing import build_checkpointer
 from app.graph.deps import GraphDeps
@@ -92,6 +95,7 @@ def build_main_graph(deps: GraphDeps):
     g.add_edge("agent_review", END)
     g.add_edge("chart_fail_message", END)
     g.add_edge("summarize_answer", END)
+    logger.info("graph_compile nodes=%s", list(g.nodes.keys()))
     return g
 
 
@@ -103,6 +107,10 @@ def compile_agent_graph(
     """Compile main graph; attach Memory/Sqlite checkpointer when enabled."""
     main = build_main_graph(deps)
     if not use_checkpointer:
-        return main.compile()
+        compiled = main.compile()
+        logger.info("graph_compiled checkpointer=%s", use_checkpointer)
+        return compiled
     ck = build_checkpointer(deps.settings)
-    return main.compile(checkpointer=ck)
+    compiled = main.compile(checkpointer=ck)
+    logger.info("graph_compiled checkpointer=%s", use_checkpointer)
+    return compiled
