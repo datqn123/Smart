@@ -10,7 +10,6 @@ planner can down-weight them instead of treating any non-failure as good.
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
 import sqlite3
 import time
@@ -140,7 +139,7 @@ class InMemoryIntentHistoryStore:
         key_hash = _hash(intent_key)
         matching = [e for e in self._events if e.intent.get("intent_key_hash") == key_hash]
         s = _summarize(matching, key_hash)
-        logger.info("k15_summary intent=%s total=%s success=%s degraded=%s failure=%s hitl=%s clarify=%s", intent_key, s.total, s.success, s.degraded, s.failure, s.hitl_pending, s.clarify_pending)
+        logger.info("k15_summary intent=%s total=%s success=%s degraded=%s failure=%s hitl=%s clarify=%s", key_hash, s.total, s.success, s.degraded, s.failure, s.hitl_pending, s.clarify_pending)
         return s
 
 
@@ -181,7 +180,7 @@ class SqliteIntentHistoryStore:
         )
         events = [IntentHistoryEvent.model_validate_json(row[0]) for row in cur.fetchall()]
         s = _summarize(events, key_hash)
-        logger.info("k15_summary intent=%s total=%s success=%s degraded=%s failure=%s hitl=%s clarify=%s", intent_key, s.total, s.success, s.degraded, s.failure, s.hitl_pending, s.clarify_pending)
+        logger.info("k15_summary intent=%s total=%s success=%s degraded=%s failure=%s hitl=%s clarify=%s", key_hash, s.total, s.success, s.degraded, s.failure, s.hitl_pending, s.clarify_pending)
         return s
 
     def close(self) -> None:

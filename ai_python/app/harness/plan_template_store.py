@@ -163,17 +163,18 @@ class InMemoryPlanTemplateStore:
     ) -> PlanTemplateRecord | None:
         record = self._store.get(_key(normalize_intent_key(normalized_intent_key), role_scope))
         if record is not None:
-            logger.info("template_lookup intent=%s found=%s demoted=%s versions_ok=%s stored_versions=(m=%s,p=%s,a=%s)", normalized_intent_key, True, record.demoted, record.versions_match(manifest_version=manifest_version, policy_version=policy_version, asset_versions=asset_versions), record.manifest_version, record.policy_version, record.asset_versions)
+            versions_ok = record.versions_match(
+                manifest_version=manifest_version,
+                policy_version=policy_version,
+                asset_versions=asset_versions,
+            )
+            logger.info("template_lookup intent=%s found=%s demoted=%s versions_ok=%s stored_versions=(m=%s,p=%s,a=%s)", normalized_intent_key, True, record.demoted, versions_ok, record.manifest_version, record.policy_version, record.asset_versions)
         else:
             logger.info("template_lookup intent=%s found=%s demoted=%s versions_ok=%s stored_versions=(m=%s,p=%s,a=%s)", normalized_intent_key, False, False, False, "", "", {})
         if record is None:
             return None
         # FR-11.8: version pin — any drift invalidates the template.
-        if not record.versions_match(
-            manifest_version=manifest_version,
-            policy_version=policy_version,
-            asset_versions=asset_versions,
-        ):
+        if not versions_ok:
             return None
         # FR-11.3: demoted templates are not preferred.
         if record.demoted:
@@ -301,16 +302,17 @@ class SqlitePlanTemplateStore:
     ) -> PlanTemplateRecord | None:
         record = self._load(normalized_intent_key, role_scope)
         if record is not None:
-            logger.info("template_lookup intent=%s found=%s demoted=%s versions_ok=%s stored_versions=(m=%s,p=%s,a=%s)", normalized_intent_key, True, record.demoted, record.versions_match(manifest_version=manifest_version, policy_version=policy_version, asset_versions=asset_versions), record.manifest_version, record.policy_version, record.asset_versions)
+            versions_ok = record.versions_match(
+                manifest_version=manifest_version,
+                policy_version=policy_version,
+                asset_versions=asset_versions,
+            )
+            logger.info("template_lookup intent=%s found=%s demoted=%s versions_ok=%s stored_versions=(m=%s,p=%s,a=%s)", normalized_intent_key, True, record.demoted, versions_ok, record.manifest_version, record.policy_version, record.asset_versions)
         else:
             logger.info("template_lookup intent=%s found=%s demoted=%s versions_ok=%s stored_versions=(m=%s,p=%s,a=%s)", normalized_intent_key, False, False, False, "", "", {})
         if record is None:
             return None
-        if not record.versions_match(
-            manifest_version=manifest_version,
-            policy_version=policy_version,
-            asset_versions=asset_versions,
-        ):
+        if not versions_ok:
             return None
         if record.demoted:
             return None

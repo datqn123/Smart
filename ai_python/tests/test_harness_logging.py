@@ -1,7 +1,5 @@
 import logging
 
-import pytest
-
 from app.harness.eval_gate import EvalCase, evaluate_case, route_accuracy, v3_rollout_allowed
 from app.harness.history_store import InMemoryIntentHistoryStore, build_history_event
 from app.harness.memory_store import InMemoryConversationMemoryStore, MemoryTurnRecord
@@ -16,7 +14,7 @@ from app.harness.plan_template_store import (
 
 def test_template_store_init_logs(caplog):
     with caplog.at_level(logging.INFO):
-        store = InMemoryPlanTemplateStore()
+        InMemoryPlanTemplateStore()
     assert "template_store_init" in caplog.text
     assert "backend=memory" in caplog.text
 
@@ -95,7 +93,7 @@ def test_conv_memory_delete_logs(caplog):
 def test_eval_case_logs(caplog):
     case = EvalCase(case_id="c1", required_tools=("sql_query",))
     with caplog.at_level(logging.INFO):
-        result = evaluate_case(case, ["sql_query"])
+        evaluate_case(case, ["sql_query"])
     assert "eval_case" in caplog.text
     assert "passed=True" in caplog.text
 
@@ -104,14 +102,14 @@ def test_eval_accuracy_logs(caplog):
     case = EvalCase(case_id="c1", required_tools=("sql_query",))
     result = evaluate_case(case, ["sql_query"])
     with caplog.at_level(logging.INFO):
-        accuracy = route_accuracy([result])
+        route_accuracy([result])
     assert "eval_accuracy" in caplog.text
     assert "accuracy=1.00" in caplog.text
 
 
 def test_eval_rollout_logs(caplog):
     with caplog.at_level(logging.INFO):
-        allowed = v3_rollout_allowed(0.9, 0.8)
+        v3_rollout_allowed(0.9, 0.8)
     assert "eval_rollout" in caplog.text
     assert "allowed=True" in caplog.text
 
