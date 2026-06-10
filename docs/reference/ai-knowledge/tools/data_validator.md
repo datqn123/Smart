@@ -3,8 +3,8 @@
 > Source: `ai_python/app/graph/tools/data_validator.py`
 > Prompt: —
 
-## Overview
-Validates query result data against business rules before write operations. Checks for missing required columns and negative numeric values. Used as a pre-write validation gate.
+## Tổng quan
+Kiểm tra dữ liệu kết quả truy vấn theo quy tắc nghiệp vụ trước khi ghi. Kiểm tra cột bắt buộc bị thiếu và giá trị âm. Dùng làm cổng kiểm tra trước ghi (pre-write validation gate).
 
 ## Manifest (ToolRegistry)
 | Field | Value |
@@ -19,7 +19,7 @@ Validates query result data against business rules before write operations. Chec
 | result_ref_policy | — |
 | examples | — |
 
-## Input Schema
+## Schema đầu vào
 ```json
 {
   "rows": [{"col1": "val1", "col2": "val2"}],
@@ -27,10 +27,10 @@ Validates query result data against business rules before write operations. Chec
   "result_ref": "string"
 }
 ```
-Either `rows` or `result_ref` must be provided. `required_data` is a list of column names that must be present.
+Cần cung cấp `rows` hoặc `result_ref`. `required_data` là danh sách tên cột phải có mặt.
 
-## Output / Observation
-**Pass:**
+## Đầu ra / Quan sát
+**Đạt:**
 ```json
 {
   "ok": true,
@@ -38,9 +38,9 @@ Either `rows` or `result_ref` must be provided. `required_data` is a list of col
   "severity": "pass"
 }
 ```
-Observation: `"Dữ liệu đạt kiểm tra nghiệp vụ."`
+Quan sát: `"Dữ liệu đạt kiểm tra nghiệp vụ."`
 
-**Fail:**
+**Không đạt:**
 ```json
 {
   "ok": false,
@@ -48,26 +48,26 @@ Observation: `"Dữ liệu đạt kiểm tra nghiệp vụ."`
   "severity": "fail"
 }
 ```
-Observation: `"Dữ liệu không đạt kiểm tra nghiệp vụ: Missing column: price, Negative value in column: quantity"`
+Quan sát: `"Dữ liệu không đạt kiểm tra nghiệp vụ: Missing column: price, Negative value in column: quantity"`
 
-## Runtime Integration
+## Tích hợp Runtime
 
 ### Harness (v3.0)
-- Called by: `PlanExecutor` via `ToolRegistry`
-- Node type in PlanGraph: `tool`
-- Pre-write validation in plan execution
+- Gọi bởi: `PlanExecutor` qua `ToolRegistry`
+- Node type trong PlanGraph: `tool`
+- Kiểm tra trước ghi trong plan execution
 
 ### LangGraph (Legacy)
 - Node: `validate_result`
-- Validates data before persist operations
+- Kiểm tra dữ liệu trước khi persist
 
-## Error Handling
-- Checks missing columns from `required_data`
-- Checks negative numeric values in data columns
-- `severity="fail"` if any issues found, `severity="pass"` otherwise
+## Xử lý lỗi
+- Kiểm tra cột thiếu từ `required_data`
+- Kiểm tra giá trị âm trong cột số liệu
+- `severity="fail"` nếu có lỗi, `severity="pass"` nếu không
 
-## Example
-**Input:**
+## Ví dụ
+**Đầu vào:**
 ```json
 {
   "rows": [
@@ -77,7 +77,7 @@ Observation: `"Dữ liệu không đạt kiểm tra nghiệp vụ: Missing colum
   "required_data": ["product", "quantity", "price"]
 }
 ```
-**Output:**
+**Đầu ra:**
 ```json
 {
   "ok": false,
@@ -85,4 +85,4 @@ Observation: `"Dữ liệu không đạt kiểm tra nghiệp vụ: Missing colum
   "severity": "fail"
 }
 ```
-Observation: `"Dữ liệu không đạt kiểm tra nghiệp vụ: Negative value in column: quantity (row 2)"`
+Quan sát: `"Dữ liệu không đạt kiểm tra nghiệp vụ: Negative value in column: quantity (row 2)"`

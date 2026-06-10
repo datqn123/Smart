@@ -3,8 +3,8 @@
 > Source: `ai_python/app/graph/tools/inventory_draft.py`
 > Prompts: inventory_draft.md, inventory_draft_stock_receipt.md, inventory_draft_stock_dispatch.md, inventory_draft_slots.md, inventory_entity_pick.md
 
-## Overview
-Creates inventory document drafts (stock receipts, stock dispatches) with human-in-the-loop confirmation. Two-phase workflow: draft generation followed by human review and commit.
+## Tổng quan
+Tạo bản nháp chứng từ kho (phiếu nhập kho, phiếu xuất kho) với cơ chế xác nhận human-in-the-loop. Quy trình hai pha: tạo bản nháp → người dùng xem xét → commit.
 
 ## Manifest (ToolRegistry)
 | Field | Value |
@@ -21,15 +21,15 @@ Creates inventory document drafts (stock receipts, stock dispatches) with human-
 | rbac_required | `("draft_create",)` |
 | examples | — |
 
-## Input Schema
+## Schema đầu vào
 ```json
 {
   "request": "string"
 }
 ```
 
-## Output / Observation
-**Draft phase:**
+## Đầu ra / Quan sát
+**Pha tạo bản nháp:**
 ```json
 {
   "inventory_draft_sse": {
@@ -39,9 +39,9 @@ Creates inventory document drafts (stock receipts, stock dispatches) with human-
   }
 }
 ```
-Observation: `"Inventory draft ready; awaiting user confirmation."`
+Quan sát: `"Inventory draft ready; awaiting user confirmation."`
 
-**Commit phase (after HITL confirmation):**
+**Pha commit (sau khi HITL xác nhận):**
 ```json
 {
   "draft_id": "inv_abc123",
@@ -52,31 +52,31 @@ Observation: `"Inventory draft ready; awaiting user confirmation."`
 }
 ```
 
-## Runtime Integration
+## Tích hợp Runtime
 
 ### Harness (v3.0)
-- Called by: `PlanExecutor` via `ToolRegistry`
-- Node type in PlanGraph: `tool`
-- Two-phase HITL: draft generation → human confirmation
+- Gọi bởi: `PlanExecutor` qua `ToolRegistry`
+- Node type trong PlanGraph: `tool`
+- Hai pha HITL: tạo bản nháp → người dùng xác nhận
 - HitlSpec: `event_name="inventory_draft"`
-- Resume via `_confirm()` with `commit_inventory_draft`
+- Resume qua `_confirm()` với `commit_inventory_draft`
 
 ### LangGraph (Legacy)
 - Subgraph: `inventory_draft_subgraph`
 - Nodes: `classify_inventory_doc`, `resolve_inventory_draft`, `generate_inventory_draft`, `persist_inventory_draft`
 
-## Error Handling
-- **HITL_DRAFT_MISSING**: Raised if no draft found when attempting commit
-- **Commit failure**: Caught; uses `committed.get("ok", True)` to determine status
+## Xử lý lỗi
+- **HITL_DRAFT_MISSING**: Báo lỗi nếu không tìm thấy bản nháp khi cố gắng commit
+- **Commit thất bại**: Bắt lỗi; dùng `committed.get("ok", True)` để xác định trạng thái
 
-## Example
-**Input:**
+## Ví dụ
+**Đầu vào:**
 ```json
 {
   "request": "Create stock receipt for 50 units of 'Laptop Pro 15' from supplier ABC"
 }
 ```
-**Output (draft phase):**
+**Đầu ra (pha bản nháp):**
 ```json
 {
   "inventory_draft_sse": {
@@ -91,4 +91,4 @@ Observation: `"Inventory draft ready; awaiting user confirmation."`
   }
 }
 ```
-Observation: `"Inventory draft ready; awaiting user confirmation."`
+Quan sát: `"Inventory draft ready; awaiting user confirmation."`

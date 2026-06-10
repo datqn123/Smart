@@ -3,8 +3,8 @@
 > Source: `ai_python/app/graph/tools/catalog_draft.py`
 > Prompts: catalog_draft.md, catalog_draft_product.md, catalog_draft_category.md, catalog_draft_supplier.md, catalog_draft_customer.md, catalog_draft_slots.md, catalog_entity_pick.md
 
-## Overview
-Creates catalog entity drafts (products, categories, suppliers, customers) with human-in-the-loop confirmation. Two-phase workflow: draft generation followed by human review and commit.
+## Tổng quan
+Tạo bản nháp dữ liệu danh mục (sản phẩm, danh mục, nhà cung cấp, khách hàng) với cơ chế xác nhận human-in-the-loop. Quy trình hai pha: tạo bản nháp → người dùng xem xét → commit.
 
 ## Manifest (ToolRegistry)
 | Field | Value |
@@ -21,15 +21,15 @@ Creates catalog entity drafts (products, categories, suppliers, customers) with 
 | rbac_required | `("draft_create",)` |
 | examples | — |
 
-## Input Schema
+## Schema đầu vào
 ```json
 {
   "request": "string"
 }
 ```
 
-## Output / Observation
-**Draft phase:**
+## Đầu ra / Quan sát
+**Pha tạo bản nháp:**
 ```json
 {
   "catalog_draft_sse": {
@@ -39,9 +39,9 @@ Creates catalog entity drafts (products, categories, suppliers, customers) with 
   }
 }
 ```
-Observation: `"Catalog draft ready; awaiting user confirmation."`
+Quan sát: `"Catalog draft ready; awaiting user confirmation."`
 
-**Commit phase (after HITL confirmation):**
+**Pha commit (sau khi HITL xác nhận):**
 ```json
 {
   "draft_id": "abc123",
@@ -52,32 +52,32 @@ Observation: `"Catalog draft ready; awaiting user confirmation."`
 }
 ```
 
-## Runtime Integration
+## Tích hợp Runtime
 
 ### Harness (v3.0)
-- Called by: `PlanExecutor` via `ToolRegistry`
-- Node type in PlanGraph: `tool`
-- Two-phase HITL: draft generation → human confirmation
+- Gọi bởi: `PlanExecutor` qua `ToolRegistry`
+- Node type trong PlanGraph: `tool`
+- Hai pha HITL: tạo bản nháp → người dùng xác nhận
 - HitlSpec: `event_name="draft"`
-- Resume via `_confirm()` with `commit_catalog_draft`
+- Resume qua `_confirm()` với `commit_catalog_draft`
 
 ### LangGraph (Legacy)
 - Subgraph: `catalog_draft_subgraph`
 - Nodes: `classify_catalog_entity`, `resolve_catalog_draft`, `generate_catalog_draft`, `persist_catalog_draft`
 
-## Error Handling
-- **HITL_DRAFT_MISSING**: Raised if no draft found when attempting commit
-- **Commit failure**: Caught and reported in `commit_result`
-- **failedCount**: Determines ok status in HITL flow
+## Xử lý lỗi
+- **HITL_DRAFT_MISSING**: Báo lỗi nếu không tìm thấy bản nháp khi cố gắng commit
+- **Commit thất bại**: Bắt lỗi và báo cáo trong `commit_result`
+- **failedCount**: Quyết định trạng thái ok trong luồng HITL
 
-## Example
-**Input:**
+## Ví dụ
+**Đầu vào:**
 ```json
 {
   "request": "Create a new product 'Laptop Pro 15' with price 25000000 VND"
 }
 ```
-**Output (draft phase):**
+**Đầu ra (pha bản nháp):**
 ```json
 {
   "catalog_draft_sse": {
@@ -91,4 +91,4 @@ Observation: `"Catalog draft ready; awaiting user confirmation."`
   }
 }
 ```
-Observation: `"Catalog draft ready; awaiting user confirmation."`
+Quan sát: `"Catalog draft ready; awaiting user confirmation."`

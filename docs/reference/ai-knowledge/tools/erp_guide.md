@@ -3,8 +3,8 @@
 > Source: `ai_python/app/graph/tools/erp_guide.py`
 > Prompt: —
 
-## Overview
-Provides Vietnamese ERP guidance text based on topic keyword matching. Simple routing logic with no LLM call — returns pre-defined guidance for inventory, finance, or generic topics.
+## Tổng quan
+Cung cấp nội dung hướng dẫn ERP tiếng Việt dựa trên so khớp từ khóa chủ đề. Logic routing đơn giản, không gọi LLM — trả về hướng dẫn định sẵn cho chủ đề kho, tài chính, hoặc chung.
 
 ## Manifest (ToolRegistry)
 | Field | Value |
@@ -19,48 +19,48 @@ Provides Vietnamese ERP guidance text based on topic keyword matching. Simple ro
 | result_ref_policy | — |
 | examples | — |
 
-## Input Schema
+## Schema đầu vào
 ```json
 {
   "topic": "string"
 }
 ```
 
-## Output / Observation
+## Đầu ra / Quan sát
 ```json
 {
   "topic": "inventory",
   "guide": "Hướng dẫn quản lý kho: Nhập kho, xuất kho, kiểm kê..."
 }
 ```
-Observation: Vietnamese ERP guidance text (keyword-matched: inventory/kho, finance/doanh thu, or generic).
+Quan sát: Nội dung hướng dẫn ERP tiếng Việt (so khớp từ khóa: inventory/kho, finance/doanh thu, hoặc chung).
 
-## Runtime Integration
+## Tích hợp Runtime
 
 ### Harness (v3.0)
-- Called by: `PlanExecutor` via `ToolRegistry`
-- Node type in PlanGraph: `tool`
-- Knowledge retrieval for ERP guidance
+- Gọi bởi: `PlanExecutor` qua `ToolRegistry`
+- Node type trong PlanGraph: `tool`
+- Tra cứu kiến thức cho hướng dẫn ERP
 
 ### LangGraph (Legacy)
-- Not used in legacy graph
+- Không dùng trong legacy graph
 
-## Error Handling
-- Always returns `ok=True`
-- Simple keyword routing — no error scenarios
+## Xử lý lỗi
+- Luôn trả về `ok=True`
+- Routing từ khóa đơn giản — không có kịch bản lỗi
 
-## Example
-**Input:**
+## Ví dụ
+**Đầu vào:**
 ```json
 {
   "topic": "kho"
 }
 ```
-**Output:**
+**Đầu ra:**
 ```json
 {
   "topic": "inventory",
   "guide": "Hướng dẫn quản lý kho: Nhập kho, xuất kho, kiểm kê, điều chuyển kho. Các chứng từ cần thiết: phiếu nhập kho, phiếu xuất kho, biên bản kiểm kê."
 }
 ```
-Observation: `"Hướng dẫn quản lý kho: Nhập kho, xuất kho, kiểm kê..."`
+Quan sát: `"Hướng dẫn quản lý kho: Nhập kho, xuất kho, kiểm kê..."`

@@ -3,8 +3,8 @@
 > Source: `ai_python/app/graph/tools/sql_query.py`
 > Prompts: gen_sql.md, sql_review.md, verify_sql_intent.md, analyze_empty_result.md, schema_explore.md
 
-## Overview
-Executes SQL queries against the database with self-correction capabilities. Handles schema exploration, SQL generation, validation, execution, and result analysis with retry budgets.
+## Tổng quan
+Thực thi truy vấn SQL với cơ chế tự sửa lỗi. Xử lý toàn bộ pipeline: khám phá schema, sinh SQL, kiểm duyệt, thực thi, phân tích kết quả với retry budget.
 
 ## Manifest (ToolRegistry)
 | Field | Value |
@@ -19,14 +19,14 @@ Executes SQL queries against the database with self-correction capabilities. Han
 | result_ref_policy | `result_ref` |
 | examples | — |
 
-## Input Schema
+## Schema đầu vào
 ```json
 {
   "query": "string"
 }
 ```
 
-## Output / Observation
+## Đầu ra / Quan sát
 ```json
 {
   "query_result": {
@@ -37,35 +37,35 @@ Executes SQL queries against the database with self-correction capabilities. Han
   "generated_sql": "SELECT ..."
 }
 ```
-Observation: `"SQL rows: [first 5 rows JSON] ... N rows total"`
+Quan sát: `"SQL rows: [first 5 rows JSON] ... N rows total"`
 
-## Runtime Integration
+## Tích hợp Runtime
 
 ### Harness (v3.0)
-- Called by: `PlanExecutor` via `ToolRegistry`
-- Node type in PlanGraph: `tool`
-- Uses `SelfCorrectingSqlRunner` with retry budgets for automatic error correction
+- Gọi bởi: `PlanExecutor` qua `ToolRegistry`
+- Node type trong PlanGraph: `tool`
+- Dùng `SelfCorrectingSqlRunner` với retry budget để tự sửa lỗi
 
 ### LangGraph (Legacy)
 - Subgraph: `sql_subgraph`
 - Nodes: `schema_explore`, `gen_sql`, `verify_sql_intent`, `sql_review`, `validate_sql`, `execute_sql`, `analyze_empty_result`, `validate_result`, `chart_readiness`
-- Executes SQL with multi-stage validation and correction loop
+- Thực thi SQL qua multi-stage validation và correction loop
 
-## Error Handling
-- **Self-correction loop**: gen_sql → sql_review → execute_sql with retry budget
-- **Duplicate failure detection**: Prevents infinite loops on repeated errors
-- **Empty result analysis**: Triggers `analyze_empty_result` prompt when query returns no rows
-- **Role-based column masking**: Filters sensitive columns based on user role
-- **sanitize_user_data**: Escapes and validates user input to prevent SQL injection
+## Xử lý lỗi
+- **Self-correction loop**: gen_sql → sql_review → execute_sql với retry budget
+- **Phát hiện lỗi trùng lặp**: Ngăn vòng lặp vô hạn khi lỗi lặp lại
+- **Phân tích kết quả rỗng**: Kích hoạt prompt `analyze_empty_result` khi query không trả về dòng nào
+- **Che cột nhạy cảm theo role**: Lọc cột dữ liệu nhạy cảm dựa trên quyền user
+- **sanitize_user_data**: Thoát và kiểm tra dữ liệu đầu vào để ngăn SQL injection
 
-## Example
-**Input:**
+## Ví dụ
+**Đầu vào:**
 ```json
 {
   "query": "Show me top 10 products by revenue this month"
 }
 ```
-**Output:**
+**Đầu ra:**
 ```json
 {
   "query_result": {
@@ -77,4 +77,4 @@ Observation: `"SQL rows: [first 5 rows JSON] ... N rows total"`
   "generated_sql": "SELECT product_name, SUM(revenue) as revenue FROM sales WHERE month = CURRENT_MONTH GROUP BY product_name ORDER BY revenue DESC LIMIT 10"
 }
 ```
-Observation: `"SQL rows: [{\"product_name\": \"Product A\", \"revenue\": 1500000}, ...] ... 10 rows total"`
+Quan sát: `"SQL rows: [{\"product_name\": \"Product A\", \"revenue\": 1500000}, ...] ... 10 rows total"`

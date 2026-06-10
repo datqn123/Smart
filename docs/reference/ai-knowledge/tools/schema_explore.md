@@ -3,8 +3,8 @@
 > Source: `ai_python/app/graph/tools/schema_explore.py`
 > Prompt: schema_explore.md
 
-## Overview
-Discovers and retrieves database schema information for a given topic. Produces a schema plan or runtime schema artifact used by downstream SQL generation.
+## Tổng quan
+Khám phá và truy xuất thông tin schema database cho một chủ đề nhất định. Tạo ra schema plan hoặc runtime schema artifact dùng cho các bước sinh SQL phía sau.
 
 ## Manifest (ToolRegistry)
 | Field | Value |
@@ -19,14 +19,14 @@ Discovers and retrieves database schema information for a given topic. Produces 
 | result_ref_policy | — |
 | examples | — |
 
-## Input Schema
+## Schema đầu vào
 ```json
 {
   "topic": "string"
 }
 ```
 
-## Output / Observation
+## Đầu ra / Quan sát
 **Schema plan mode:**
 ```json
 {
@@ -36,7 +36,7 @@ Discovers and retrieves database schema information for a given topic. Produces 
   }
 }
 ```
-Observation: `"Schema plan: {JSON truncated to 800 chars}"`
+Quan sát: `"Schema plan: {JSON truncated to 800 chars}"`
 
 **Runtime artifact mode:**
 ```json
@@ -47,33 +47,33 @@ Observation: `"Schema plan: {JSON truncated to 800 chars}"`
   }
 }
 ```
-Observation: `"Schema artifact loaded."`
+Quan sát: `"Schema artifact loaded."`
 
-## Runtime Integration
+## Tích hợp Runtime
 
 ### Harness (v3.0)
-- Called by: `PlanExecutor` via `ToolRegistry`
-- Node type in PlanGraph: `tool`
-- Used for schema discovery before SQL generation
+- Gọi bởi: `PlanExecutor` qua `ToolRegistry`
+- Node type trong PlanGraph: `tool`
+- Dùng để khám phá schema trước khi sinh SQL
 
 ### LangGraph (Legacy)
 - Subgraph: `sql_subgraph`
 - Nodes: `schema_explore`
-- First node in the SQL pipeline, provides schema context
+- Node đầu tiên trong SQL pipeline, cung cấp context schema
 
-## Error Handling
-- Delegates to `make_schema_explore_node`
-- Success check: `ok = not bool(error_payload)`
-- Returns error payload if schema discovery fails
+## Xử lý lỗi
+- Ủy thác cho `make_schema_explore_node`
+- Kiểm tra thành công: `ok = not bool(error_payload)`
+- Trả về error payload nếu khám phá schema thất bại
 
-## Example
-**Input:**
+## Ví dụ
+**Đầu vào:**
 ```json
 {
   "topic": "customer orders"
 }
 ```
-**Output:**
+**Đầu ra:**
 ```json
 {
   "schema_plan": {
@@ -86,4 +86,4 @@ Observation: `"Schema artifact loaded."`
   }
 }
 ```
-Observation: `"Schema plan: {\"tables\": [\"customers\", \"orders\", \"order_items\"], ...}"`
+Quan sát: `"Schema plan: {\"tables\": [\"customers\", \"orders\", \"order_items\"], ...}"`

@@ -3,8 +3,8 @@
 > Source: `ai_python/app/graph/tools/build_chart.py`
 > Prompt: —
 
-## Overview
-Builds chart specifications from query result rows. Infers chart type (bar, line, pie, etc.) using heuristics and produces a chart spec for frontend rendering.
+## Tổng quan
+Xây dựng spec biểu đồ từ kết quả truy vấn. Suy luận loại biểu đồ (bar, line, pie, v.v.) bằng heuristic và tạo chart spec cho frontend render.
 
 ## Manifest (ToolRegistry)
 | Field | Value |
@@ -20,7 +20,7 @@ Builds chart specifications from query result rows. Infers chart type (bar, line
 | output_artifact_types | `("chart",)` |
 | examples | — |
 
-## Input Schema
+## Schema đầu vào
 ```json
 {
   "rows": [{"col1": "val1", "col2": "val2"}],
@@ -28,9 +28,9 @@ Builds chart specifications from query result rows. Infers chart type (bar, line
   "title": "string"
 }
 ```
-Either `rows` or `result_ref` must be provided. `title` is optional.
+Cần cung cấp `rows` hoặc `result_ref`. `title` không bắt buộc.
 
-## Output / Observation
+## Đầu ra / Quan sát
 ```json
 {
   "chartType": "bar",
@@ -39,25 +39,25 @@ Either `rows` or `result_ref` must be provided. `title` is optional.
   "config": {...}
 }
 ```
-Observation: `"Đã tạo biểu đồ {chartType}."`
+Quan sát: `"Đã tạo biểu đồ {chartType}."`
 
-## Runtime Integration
+## Tích hợp Runtime
 
 ### Harness (v3.0)
-- Called by: `PlanExecutor` via `ToolRegistry`
-- Node type in PlanGraph: `tool`
-- Used for visualization of query results
+- Gọi bởi: `PlanExecutor` qua `ToolRegistry`
+- Node type trong PlanGraph: `tool`
+- Dùng để trực quan hóa kết quả truy vấn
 
 ### LangGraph (Legacy)
 - Node: `agent_chart`
-- Produces chart spec from query results
+- Tạo chart spec từ kết quả truy vấn
 
-## Error Handling
-- `rows_from_args_or_ref()` returns error if no rows and no valid `result_ref`
-- Chart type inference via `_infer_chart()` heuristic based on data shape and column types
+## Xử lý lỗi
+- `rows_from_args_or_ref()` trả về lỗi nếu không có rows và không có `result_ref` hợp lệ
+- Suy luận loại biểu đồ qua `_infer_chart()` heuristic dựa trên hình dạng dữ liệu và kiểu cột
 
-## Example
-**Input:**
+## Ví dụ
+**Đầu vào:**
 ```json
 {
   "rows": [
@@ -68,7 +68,7 @@ Observation: `"Đã tạo biểu đồ {chartType}."`
   "title": "Doanh thu quý 1"
 }
 ```
-**Output:**
+**Đầu ra:**
 ```json
 {
   "chartType": "bar",
@@ -79,4 +79,4 @@ Observation: `"Đã tạo biểu đồ {chartType}."`
   }
 }
 ```
-Observation: `"Đã tạo biểu đồ bar."`
+Quan sát: `"Đã tạo biểu đồ bar."`

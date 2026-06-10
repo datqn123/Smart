@@ -3,8 +3,8 @@
 > Source: `ai_python/app/graph/tools/answer_composer.py`
 > Prompt: —
 
-## Overview
-Composes final Vietnamese markdown answers from observations and query results. Pure Python logic with no LLM call — formats rows, metrics, assumptions, and follow-up suggestions.
+## Tổng quan
+Soạn câu trả lời markdown tiếng Việt từ observations và kết quả truy vấn. Logic Python thuần, không gọi LLM — định dạng row, metrics, giả định, và câu hỏi gợi ý.
 
 ## Manifest (ToolRegistry)
 | Field | Value |
@@ -20,7 +20,7 @@ Composes final Vietnamese markdown answers from observations and query results. 
 | output_artifact_types | `("answer",)` |
 | examples | — |
 
-## Input Schema
+## Schema đầu vào
 ```json
 {
   "observations": "list",
@@ -28,7 +28,7 @@ Composes final Vietnamese markdown answers from observations and query results. 
 }
 ```
 
-## Output / Observation
+## Đầu ra / Quan sát
 ```json
 {
   "answer_markdown": "## Kết quả\n\n| # | Cột 1 | Cột 2 |\n|---|-------|-------|\n| 1 | val1  | val2  |\n\n**Giả định:** ...\n\n**Câu hỏi tiếp theo:** ...",
@@ -36,25 +36,25 @@ Composes final Vietnamese markdown answers from observations and query results. 
   "follow_ups": ["Câu hỏi gợi ý 1"]
 }
 ```
-Observation: Vietnamese markdown answer with numbered rows, metrics, assumptions, follow-ups.
+Quan sát: Câu trả lời markdown tiếng Việt với row đánh số, metrics, giả định, gợi ý.
 
-## Runtime Integration
+## Tích hợp Runtime
 
 ### Harness (v3.0)
-- Called by: `PlanExecutor` via `ToolRegistry`
-- Node type in PlanGraph: `tool`
-- Used by `_compose_plan_answer()` for final answer generation
+- Gọi bởi: `PlanExecutor` qua `ToolRegistry`
+- Node type trong PlanGraph: `tool`
+- Dùng bởi `_compose_plan_answer()` để tạo câu trả lời cuối cùng
 
 ### LangGraph (Legacy)
 - Node: `summarize_answer`
-- Final node in the answer pipeline
+- Node cuối cùng trong answer pipeline
 
-## Error Handling
-- Always returns `ok=True`
-- Empty rows → canned "no data" response
+## Xử lý lỗi
+- Luôn trả về `ok=True`
+- Rows rỗng → trả lời "không có dữ liệu"
 
-## Example
-**Input:**
+## Ví dụ
+**Đầu vào:**
 ```json
 {
   "observations": [
@@ -63,7 +63,7 @@ Observation: Vietnamese markdown answer with numbered rows, metrics, assumptions
   "assumptions": ["Doanh thu tính theo tháng hiện tại"]
 }
 ```
-**Output:**
+**Đầu ra:**
 ```json
 {
   "answer_markdown": "## Kết quả truy vấn\n\n| # | product | revenue |\n|---|---------|----------|\n| 1 | A       | 1,000    |\n| 2 | B       | 2,000    |\n\n**Giả định:** Doanh thu tính theo tháng hiện tại",

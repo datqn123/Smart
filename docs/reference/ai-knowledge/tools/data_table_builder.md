@@ -3,8 +3,8 @@
 > Source: `ai_python/app/graph/tools/data_table_builder.py`
 > Prompt: —
 
-## Overview
-Builds tabular data display from query result rows. Formats rows into a structured table with title and row count for frontend rendering.
+## Tổng quan
+Xây dựng hiển thị bảng dữ liệu từ kết quả truy vấn. Định dạng rows thành bảng có cấu trúc với tiêu đề và số lượng dòng cho frontend render.
 
 ## Manifest (ToolRegistry)
 | Field | Value |
@@ -20,7 +20,7 @@ Builds tabular data display from query result rows. Formats rows into a structur
 | output_artifact_types | `("data_table",)` |
 | examples | — |
 
-## Input Schema
+## Schema đầu vào
 ```json
 {
   "rows": [{"col1": "val1", "col2": "val2"}],
@@ -28,9 +28,9 @@ Builds tabular data display from query result rows. Formats rows into a structur
   "title": "string"
 }
 ```
-Either `rows` or `result_ref` must be provided. `title` is optional.
+Cần cung cấp `rows` hoặc `result_ref`. `title` không bắt buộc.
 
-## Output / Observation
+## Đầu ra / Quan sát
 ```json
 {
   "query_table_sse": {
@@ -43,24 +43,24 @@ Either `rows` or `result_ref` must be provided. `title` is optional.
   "row_count": 10
 }
 ```
-Observation: `"Đã tạo bảng dữ liệu với N dòng."`
+Quan sát: `"Đã tạo bảng dữ liệu với N dòng."`
 
-## Runtime Integration
+## Tích hợp Runtime
 
 ### Harness (v3.0)
-- Called by: `PlanExecutor` via `ToolRegistry`
-- Node type in PlanGraph: `tool`
-- Used for tabular display of query results
+- Gọi bởi: `PlanExecutor` qua `ToolRegistry`
+- Node type trong PlanGraph: `tool`
+- Dùng để hiển thị bảng kết quả truy vấn
 
 ### LangGraph (Legacy)
 - Node: `emit_query_table`
-- Emits structured table for frontend
+- Phát bảng có cấu trúc cho frontend
 
-## Error Handling
-- `rows_from_args_or_ref()` returns error if no rows and no valid `result_ref`
+## Xử lý lỗi
+- `rows_from_args_or_ref()` trả về lỗi nếu không có rows và không có `result_ref` hợp lệ
 
-## Example
-**Input:**
+## Ví dụ
+**Đầu vào:**
 ```json
 {
   "rows": [
@@ -70,7 +70,7 @@ Observation: `"Đã tạo bảng dữ liệu với N dòng."`
   "title": "Danh sách sản phẩm"
 }
 ```
-**Output:**
+**Đầu ra:**
 ```json
 {
   "query_table_sse": {
@@ -84,4 +84,4 @@ Observation: `"Đã tạo bảng dữ liệu với N dòng."`
   "row_count": 2
 }
 ```
-Observation: `"Đã tạo bảng dữ liệu với 2 dòng."`
+Quan sát: `"Đã tạo bảng dữ liệu với 2 dòng."`
