@@ -1,9 +1,0 @@
-{
-  "spring_base_url": "http://127.0.0.1:8080",
-  "python_base_url": "http://127.0.0.1:9000",
-  "login_email": "datmotnhit@gmail.com",
-  "login_password": "12345678",
-  "test_ai_dir": "D:\\do_an_tot_nghiep\\project\\docs\\test-ai",
-  "timeout_per_question_seconds": 120,
-  "save_response_to_file": true
-}

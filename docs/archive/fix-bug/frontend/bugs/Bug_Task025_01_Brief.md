@@ -1,4 +1,0 @@
-- Hãy nhìn vào folder BUG và BUG_TASk025_1.png
-- Hiện tại thanh header của table vẫn còn hiện khi ở đầu danh sách.
-- Hãy nhìn tiếp vào BUG_TASK025_2.png chỗ đã đánh dấu đỏ: Thanh header của table đã biến mất khi scroll. Hãy tìm hiểu và làm cố định thanh header.
-- Tiếp tục nhìn vào BUG_TASK025_3.png chỗ đã đánh dấu đỏ: Các nội dung hiển thị đã đánh dấu đỏ đang nằm sát mép bên trái của khung. Hãy chỉnh lại cho đẹp hơn.

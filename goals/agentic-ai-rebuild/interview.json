@@ -1,0 +1,105 @@
+{
+  "stage": "interview",
+  "title": "Agentic AI Rebuild (ai_python) — Harness + LangGraph tools",
+  "goalSlug": "agentic-ai-rebuild",
+  "questions": [
+    {
+      "id": "modules",
+      "prompt": "Cấu trúc module top-level của ai_python gồm những gì?",
+      "description": "Bạn đã nêu config (LLM + backend API) và tools. Tôi đề xuất thêm các module dưới đây cho rõ ràng. Bỏ chọn cái nào bạn không muốn, hoặc thêm module mới.",
+      "answerMode": "multi-custom",
+      "recommendedAnswer": "config, harness, registry, tools, memory, api",
+      "recommendedOptionIds": ["config", "harness", "registry", "tools", "memory", "api"],
+      "options": [
+        { "id": "config", "label": "config — kết nối LLM (Qwen API) + backend API" },
+        { "id": "harness", "label": "harness — auth, session, User_ID→Thread_ID, build môi trường" },
+        { "id": "registry", "label": "registry — đăng ký static danh sách tools + context mô tả" },
+        { "id": "tools", "label": "tools — mỗi tool gồm .py (execute) + .md (skill)" },
+        { "id": "memory", "label": "memory — module riêng cho conversation context" },
+        { "id": "api", "label": "api — endpoint nhận require + trả SSE" }
+      ],
+      "required": true
+    },
+    {
+      "id": "sql_path",
+      "prompt": "Tool sql_execute lấy data bằng cách nào?",
+      "description": "Backend đã có API gửi require user qua ai_python. Nhưng khi cần data, tool sql_execute sẽ truy vấn ra sao?",
+      "answerMode": "single-custom",
+      "recommendedAnswer": "Truy vấn DB trực tiếp (read-only connection), không qua Spring",
+      "recommendedOptionIds": ["direct"],
+      "options": [
+        { "id": "direct", "label": "Truy vấn DB trực tiếp (read-only) — ai_python tự kết nối database" },
+        { "id": "spring", "label": "Gọi REST API của Spring backend để lấy data" },
+        { "id": "hybrid", "label": "Hybrid — đọc trực tiếp, ghi/thao tác nhạy cảm qua Spring" }
+      ],
+      "required": true
+    },
+    {
+      "id": "memory_mech",
+      "prompt": "Module memory hội thoại hoạt động thế nào?",
+      "description": "Cần nhớ context xuyên các lượt chat như ChatGPT/Gemini, theo Thread_ID. Chọn cơ chế lưu + chiến lược khi context dài.",
+      "answerMode": "single-custom",
+      "recommendedAnswer": "Lưu SQLite theo thread_id; khi vượt ngưỡng token thì summarize các lượt cũ thành tóm tắt, giữ N lượt gần nhất raw",
+      "recommendedOptionIds": ["sqlite_summarize"],
+      "options": [
+        { "id": "sqlite_summarize", "label": "SQLite theo thread_id + summarize lượt cũ khi vượt token budget (giữ N lượt gần nhất raw)" },
+        { "id": "checkpointer", "label": "Dùng LangGraph checkpointer (AsyncSqliteSaver) theo thread_id, không summarize" },
+        { "id": "sliding", "label": "Sliding window đơn giản — chỉ giữ N lượt gần nhất, drop phần cũ" },
+        { "id": "vector", "label": "Vector store — embed các lượt cũ, retrieve theo relevance khi cần" }
+      ],
+      "required": true
+    },
+    {
+      "id": "validator_fail",
+      "prompt": "Khi data_validator phán data cuối KHÔNG phù hợp require thì làm gì?",
+      "description": "data_validator chạy bắt buộc trước answer_composer. Nếu nó fail, luồng đi tiếp ra sao?",
+      "answerMode": "single-custom",
+      "recommendedAnswer": "Trả kết quả validate về Session Manager; SM tự quyết replan / retry_tool / finish-with-error (không hardcode)",
+      "recommendedOptionIds": ["back_to_sm"],
+      "options": [
+        { "id": "back_to_sm", "label": "Trả về Session Manager — SM tự quyết replan / retry / báo lỗi" },
+        { "id": "auto_replan", "label": "Tự động trigger replan ngay, tối đa K lần rồi mới báo lỗi" },
+        { "id": "clarify", "label": "Hỏi lại user (HITL clarification) khi data không khớp require" },
+        { "id": "compose_anyway", "label": "Vẫn compose nhưng kèm cảnh báo độ tin cậy thấp" }
+      ],
+      "required": true
+    },
+    {
+      "id": "skill_md",
+      "prompt": "File skill .md của mỗi tool gồm những phần nào?",
+      "description": "Đây là phần cốt lõi — .md là 'nhiệm vụ LLM phải làm' trong tool. Chọn các section chuẩn để mọi tool nhất quán.",
+      "answerMode": "multi-custom",
+      "recommendedAnswer": "Role, Nhiệm vụ, Input contract, Constraints/Rules, Output schema, Few-shot examples",
+      "recommendedOptionIds": ["role", "task", "input", "constraints", "output", "examples"],
+      "options": [
+        { "id": "role", "label": "Role — LLM đóng vai gì trong tool này" },
+        { "id": "task", "label": "Nhiệm vụ — mô tả việc cần làm" },
+        { "id": "input", "label": "Input contract — nhận raw_require + upstream_data dạng gì" },
+        { "id": "constraints", "label": "Constraints/Rules — ràng buộc, điều cấm" },
+        { "id": "output", "label": "Output schema — định dạng kết quả trả về" },
+        { "id": "examples", "label": "Few-shot examples — ví dụ mẫu" }
+      ],
+      "required": true
+    },
+    {
+      "id": "scope",
+      "prompt": "Scope của lần build này — cái gì IN, cái gì để sau?",
+      "description": "Xác định ranh giới để plan tập trung. Chọn những gì PHẢI có trong vòng build này.",
+      "answerMode": "multi-custom",
+      "recommendedAnswer": "Pipeline end-to-end happy path (SM → sql_execute → data_validator → answer_composer) + skill loader + registry + memory module + SSE output. HITL clarification để sau.",
+      "recommendedOptionIds": ["pipeline", "skill_loader", "registry", "memory", "sse", "config_llm"],
+      "options": [
+        { "id": "pipeline", "label": "Pipeline end-to-end 4 tools (happy path chạy được)" },
+        { "id": "skill_loader", "label": "Skill loader node (.md đọc mỗi lần chạy + retry)" },
+        { "id": "registry", "label": "Static registry + dispatcher" },
+        { "id": "memory", "label": "Module conversation memory" },
+        { "id": "sse", "label": "SSE output tái dùng" },
+        { "id": "config_llm", "label": "config: kết nối Qwen API + backend API" },
+        { "id": "hitl", "label": "HITL clarification (hỏi lại user) — có thể để sau" },
+        { "id": "rbac", "label": "RBAC/permission check sâu — có thể để sau" },
+        { "id": "tests", "label": "Test suite (pytest, fake LLM, stub SQL)" }
+      ],
+      "required": true
+    }
+  ]
+}

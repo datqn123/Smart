@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
@@ -28,6 +28,8 @@ import { ApiRequestError } from "@/lib/api/http"
 import { postLogin, postPasswordResetRequest } from "@/features/auth/api/authApi"
 import { useAuthStore, type UserRole } from "@/features/auth/store/useAuthStore"
 
+const REMEMBER_EMAIL_KEY = "rememberEmail"
+
 const loginSchema = z.object({
   email: z
     .string()
@@ -55,15 +57,7 @@ export function LoginForm() {
   const [ownerResetSubmitting, setOwnerResetSubmitting] = useState(false)
   const [ownerResetSuccess, setOwnerResetSuccess] = useState(false)
   const [ownerResetError, setOwnerResetError] = useState<string | null>(null)
-  const [rememberMe, setRememberMe] = useState(false)
-
-  // Load remembered email on mount — set checkbox if email was remembered
-  useEffect(() => {
-    const remembered = localStorage.getItem("rememberEmail")
-    if (remembered) {
-      setRememberMe(true)
-    }
-  }, [])
+  const [rememberMe, setRememberMe] = useState(() => localStorage.getItem(REMEMBER_EMAIL_KEY) !== null)
 
   const navigate = useNavigate()
 
@@ -75,7 +69,7 @@ export function LoginForm() {
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      email: localStorage.getItem("rememberEmail") || "",
+      email: localStorage.getItem(REMEMBER_EMAIL_KEY) || "",
       password: "",
     },
   })
@@ -113,9 +107,9 @@ export function LoginForm() {
         result.accessToken,
       )
       if (rememberMe) {
-        localStorage.setItem("rememberEmail", data.email)
+        localStorage.setItem(REMEMBER_EMAIL_KEY, data.email)
       } else {
-        localStorage.removeItem("rememberEmail")
+        localStorage.removeItem(REMEMBER_EMAIL_KEY)
       }
       navigate("/dashboard")
     } catch (err) {

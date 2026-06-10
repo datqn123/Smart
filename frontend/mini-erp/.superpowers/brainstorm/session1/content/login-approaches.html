@@ -1,0 +1,163 @@
+<h2>Phương án thiết kế Login — Enterprise Classic</h2>
+<p class="subtitle">Chọn phong cách bạn thích nhất, tôi sẽ phân tích trade-offs sau</p>
+
+<div class="section">
+  <h3>Current State</h3>
+  <div class="mockup">
+    <div class="mockup-header">Login hiện tại</div>
+    <div class="mockup-body" style="padding:1.5rem;text-align:center;">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:0.5rem;margin-bottom:1.5rem;">
+        <div style="width:48px;height:48px;background:linear-gradient(135deg,#0f172a,#1e293b);border-radius:12px;display:flex;align-items:center;justify-content:center;">
+          <span style="color:white;font-weight:bold;font-size:24px;">M</span>
+        </div>
+        <h1 style="font-size:1.25rem;font-weight:600;">Mini ERP</h1>
+        <p style="font-size:0.75rem;color:#64748b;text-transform:uppercase;letter-spacing:0.1em;">Smart Management</p>
+      </div>
+      <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:1.5rem;">
+        <div style="text-align:left;margin-bottom:1rem;">
+          <label style="font-size:0.875rem;font-weight:500;">Email</label>
+          <div style="margin-top:0.25rem;height:40px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;"></div>
+        </div>
+        <div style="text-align:left;margin-bottom:1.5rem;">
+          <label style="font-size:0.875rem;font-weight:500;">Mật khẩu</label>
+          <div style="margin-top:0.25rem;height:40px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;"></div>
+        </div>
+        <div style="height:44px;background:linear-gradient(135deg,#0f172a,#1e293b);border-radius:8px;display:flex;align-items:center;justify-content:center;color:white;font-weight:500;">Đăng nhập</div>
+      </div>
+      <p style="margin-top:1rem;font-size:0.75rem;color:#64748b;">Quên mật khẩu? Yêu cầu reset</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Phương án A: Classic Corporate</h3>
+  <p class="subtitle">Tinh chỉnh nhẹ — giữ nguyên cấu trúc, nâng cấp visual</p>
+  <div class="mockup">
+    <div class="mockup-header">Preview A</div>
+    <div class="mockup-body" style="padding:1.5rem;text-align:center;">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:0.5rem;margin-bottom:1.5rem;">
+        <div style="width:56px;height:56px;background:linear-gradient(135deg,#0f172a,#1e293b);border-radius:14px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(15,23,42,0.15);">
+          <span style="color:white;font-weight:bold;font-size:28px;">M</span>
+        </div>
+        <h1 style="font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;">Mini ERP</h1>
+        <p style="font-size:0.8rem;color:#64748b;letter-spacing:0.05em;">Smart Management</p>
+      </div>
+      <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:1.75rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+        <div style="text-align:left;margin-bottom:1rem;">
+          <label style="font-size:0.8rem;font-weight:600;color:#0f172a;">Email</label>
+          <div style="margin-top:0.35rem;height:42px;background:#fff;border:1px solid #d1d5db;border-radius:8px;box-shadow:inset 0 1px 2px rgba(0,0,0,0.04);"></div>
+        </div>
+        <div style="text-align:left;margin-bottom:1.5rem;">
+          <label style="font-size:0.8rem;font-weight:600;color:#0f172a;">Mật khẩu</label>
+          <div style="margin-top:0.35rem;height:42px;background:#fff;border:1px solid #d1d5db;border-radius:8px;box-shadow:inset 0 1px 2px rgba(0,0,0,0.04);"></div>
+        </div>
+        <button style="width:100%;height:44px;background:#0f172a;border:none;border-radius:8px;color:white;font-weight:600;font-size:0.9rem;cursor:pointer;">Đăng nhập</button>
+        <div style="display:flex;justify-content:space-between;margin-top:1rem;font-size:0.75rem;">
+          <span style="color:#64748b;"><input type="checkbox" style="margin-right:0.35rem;">Ghi nhớ đăng nhập</span>
+          <span style="color:#0f172a;font-weight:500;cursor:pointer;">Quên mật khẩu?</span>
+        </div>
+      </div>
+      <p style="margin-top:1.5rem;font-size:0.7rem;color:#94a3b8;">© 2024 Mini ERP. All rights reserved.</p>
+    </div>
+  </div>
+  <div class="pros-cons">
+    <div class="pros"><h4>Pros</h4><ul>
+      <li>Ít thay đổi code, dễ triển khai</li>
+      <li>Giữ nguyên UX flow hiện tại</li>
+      <li>Form trắng sạch, dễ đọc</li>
+    </ul></div>
+    <div class="cons"><h4>Cons</h4><ul>
+      <li>Ít điểm nhấn, khá giống login thường</li>
+      <li>Chưa tận dụng tối đa visual</li>
+    </ul></div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Phương án B: Dual-panel với sidebar branding</h3>
+  <p class="subtitle">Layout 2 cột — bên trái brand lớn, bên phải form login</p>
+  <div class="mockup">
+    <div class="mockup-header">Preview B</div>
+    <div style="display:flex;min-height:380px;">
+      <div style="flex:1;background:linear-gradient(160deg,#0f172a 0%,#1e293b 50%,#334155 100%);padding:2.5rem;display:flex;flex-direction:column;justify-content:center;align-items:center;color:white;">
+        <div style="width:64px;height:64px;background:rgba(255,255,255,0.1);border-radius:16px;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);margin-bottom:1rem;">
+          <span style="font-weight:bold;font-size:32px;">M</span>
+        </div>
+        <h2 style="font-size:1.75rem;font-weight:700;margin-bottom:0.25rem;">Mini ERP</h2>
+        <p style="font-size:0.85rem;opacity:0.7;margin-bottom:2rem;">Smart Management System</p>
+        <div style="display:flex;gap:0.75rem;">
+          <div style="width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,0.3);"></div>
+          <div style="width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,0.3);"></div>
+          <div style="width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,0.3);"></div>
+        </div>
+      </div>
+      <div style="flex:1;padding:2.5rem;display:flex;flex-direction:column;justify-content:center;background:#fff;">
+        <h3 style="font-size:1.25rem;font-weight:600;margin-bottom:0.25rem;color:#0f172a;">Đăng nhập</h3>
+        <p style="font-size:0.8rem;color:#64748b;margin-bottom:1.5rem;">Nhập thông tin tài khoản của bạn</p>
+        <div style="text-align:left;margin-bottom:1rem;">
+          <label style="font-size:0.8rem;font-weight:600;color:#0f172a;">Email</label>
+          <div style="margin-top:0.35rem;height:42px;background:#fff;border:1px solid #d1d5db;border-radius:8px;"></div>
+        </div>
+        <div style="text-align:left;margin-bottom:1.5rem;">
+          <label style="font-size:0.8rem;font-weight:600;color:#0f172a;">Mật khẩu</label>
+          <div style="margin-top:0.35rem;height:42px;background:#fff;border:1px solid #d1d5db;border-radius:8px;"></div>
+        </div>
+        <button style="width:100%;height:44px;background:#0f172a;border:none;border-radius:8px;color:white;font-weight:600;cursor:pointer;">Đăng nhập</button>
+      </div>
+    </div>
+  </div>
+  <div class="pros-cons">
+    <div class="pros"><h4>Pros</h4><ul>
+      <li>Ấn tượng, chuyên nghiệp, khác biệt</li>
+      <li>Brand được highlight mạnh</li>
+      <li>Form gọn, focus vào input</li>
+    </ul></div>
+    <div class="cons"><h4>Cons</h4><ul>
+      <li>Thay đổi layout lớn, cần responsive cẩn thận</li>
+      <li>Không lý tưởng trên mobile</li>
+    </ul></div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Phương án C: Center Card Premium</h3>
+  <p class="subtitle">Card centered với hiệu ứng tinh tế, glassmorphism nhẹ</p>
+  <div class="mockup">
+    <div class="mockup-header">Preview C</div>
+    <div style="min-height:380px;background:linear-gradient(180deg,#f1f5f9 0%,#f8fafc 100%);padding:2.5rem;display:flex;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:1px solid rgba(226,232,240,0.8);border-radius:16px;padding:2rem;width:100%;max-width:360px;box-shadow:0 4px 24px rgba(0,0,0,0.06),0 1px 3px rgba(0,0,0,0.04);">
+        <div style="display:flex;flex-direction:column;align-items:center;margin-bottom:1.5rem;">
+          <div style="width:48px;height:48px;background:linear-gradient(135deg,#0f172a,#1e293b);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:0.75rem;">
+            <span style="color:white;font-weight:bold;font-size:24px;">M</span>
+          </div>
+          <h1 style="font-size:1.25rem;font-weight:700;color:#0f172a;">Mini ERP</h1>
+          <p style="font-size:0.75rem;color:#94a3b8;">Đăng nhập để tiếp tục</p>
+        </div>
+        <div style="text-align:left;margin-bottom:0.75rem;">
+          <label style="font-size:0.75rem;font-weight:600;color:#475569;">Email</label>
+          <div style="margin-top:0.3rem;height:40px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;transition:border-color 0.15s;"></div>
+        </div>
+        <div style="text-align:left;margin-bottom:1rem;">
+          <label style="font-size:0.75rem;font-weight:600;color:#475569;">Mật khẩu</label>
+          <div style="margin-top:0.3rem;height:40px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;"></div>
+        </div>
+        <button style="width:100%;height:42px;background:#0f172a;border:none;border-radius:8px;color:white;font-weight:600;font-size:0.85rem;cursor:pointer;transition:background 0.15s;">Đăng nhập</button>
+        <div style="margin-top:1rem;text-align:center;">
+          <span style="font-size:0.75rem;color:#0f172a;font-weight:500;cursor:pointer;">Quên mật khẩu?</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="pros-cons">
+    <div class="pros"><h4>Pros</h4><ul>
+      <li>Giữ layout hiện tại, dễ migrate</li>
+      <li>Premium feel với shadow & spacing</li>
+      <li>Responsive tốt, mobile-friendly</li>
+      <li>Dễ maintain, ít breaking change</li>
+    </ul></div>
+    <div class="cons"><h4>Cons</h4><ul>
+      <li>Ít độc đáo hơn phương án B</li>
+      <li>Background đơn giản</li>
+    </ul></div>
+  </div>
+</div>
