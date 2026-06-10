@@ -1,0 +1,3423 @@
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/ai/controller/AiChatRelayController.java b/backend/smart-erp/src/main/java/com/example/smart_erp/ai/controller/AiChatRelayController.java
+index 179dbaf9..655be191 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/ai/controller/AiChatRelayController.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/ai/controller/AiChatRelayController.java
+@@ -62,11 +62,11 @@ public class AiChatRelayController {
+ 
+ 	private final HttpClient httpClient;
+ 
+ 	private final ObjectMapper objectMapper;
+ 
+-	private final ExecutorService sseIoExecutor = Executors.newCachedThreadPool();
++	private final ExecutorService sseIoExecutor = Executors.newFixedThreadPool(Math.max(4, Runtime.getRuntime().availableProcessors() * 2));
+ 
+ 	public AiChatRelayController(@Value("${app.ai.python.base-url}") String pythonBaseUrl, ObjectMapper objectMapper) {
+ 		this.pythonBaseUrl = normalizePythonBaseUrl(pythonBaseUrl);
+ 		this.httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+ 		this.objectMapper = objectMapper;
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/auth/service/AuthService.java b/backend/smart-erp/src/main/java/com/example/smart_erp/auth/service/AuthService.java
+index 17864609..a87273ce 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/auth/service/AuthService.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/auth/service/AuthService.java
+@@ -59,23 +59,19 @@ public class AuthService {
+ 
+ 	@Transactional
+ 	public LoginResult login(String email, String password, String clientSessionId) {
+ 		String emailNorm = email.strip();
+ 
+-		userRepository.findByEmailIgnoreCase(emailNorm).ifPresent(u -> {
+-			if ("Locked".equalsIgnoreCase(u.getStatus())) {
+-				throw new BusinessException(ApiErrorCode.FORBIDDEN, ACCOUNT_LOCKED_LOGIN);
+-			}
+-		});
+-
+-		if (userRepository.countActiveByEmailIgnoreCase(emailNorm) == 0) {
++		User user = userRepository.findByEmailIgnoreCase(emailNorm)
++				.orElseThrow(() -> new BusinessException(ApiErrorCode.UNAUTHORIZED, UNAUTHORIZED_LOGIN));
++		if ("Locked".equalsIgnoreCase(user.getStatus())) {
++			throw new BusinessException(ApiErrorCode.FORBIDDEN, ACCOUNT_LOCKED_LOGIN);
++		}
++		if (!"Active".equalsIgnoreCase(user.getStatus())) {
+ 			throw new BusinessException(ApiErrorCode.UNAUTHORIZED, UNAUTHORIZED_LOGIN);
+ 		}
+ 
+-		User user = userRepository.findActiveByEmailIgnoreCase(emailNorm)
+-				.orElseThrow(() -> new BusinessException(ApiErrorCode.UNAUTHORIZED, UNAUTHORIZED_LOGIN));
+-
+ 		if (!passwordEncoder.matches(password, user.getPasswordHash())) {
+ 			loginBruteForceProtection.onFailure(user.getId(), userRepository);
+ 			throw new BusinessException(ApiErrorCode.UNAUTHORIZED, UNAUTHORIZED_LOGIN);
+ 		}
+ 
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/auth/session/LoginBruteForceProtection.java b/backend/smart-erp/src/main/java/com/example/smart_erp/auth/session/LoginBruteForceProtection.java
+index a469a071..b9afcb29 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/auth/session/LoginBruteForceProtection.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/auth/session/LoginBruteForceProtection.java
+@@ -1,35 +1,39 @@
+ package com.example.smart_erp.auth.session;
+ 
+-import java.util.Map;
+-import java.util.concurrent.ConcurrentHashMap;
++import java.util.concurrent.TimeUnit;
+ import java.util.concurrent.atomic.AtomicInteger;
+ 
+ import org.springframework.stereotype.Component;
+ import org.springframework.transaction.annotation.Propagation;
+ import org.springframework.transaction.annotation.Transactional;
+ 
+ import com.example.smart_erp.auth.repository.UserRepository;
++import com.github.benmanes.caffeine.cache.Cache;
++import com.github.benmanes.caffeine.cache.Caffeine;
+ 
+ /**
+  * Sau {@value #MAX_FAILURES} lần mật khẩu sai liên tiếp cho cùng một user Active → {@code status = Locked}.
+  */
+ @Component
+ public class LoginBruteForceProtection {
+ 
+ 	static final int MAX_FAILURES = 5;
+ 
+-	private final Map<Integer, AtomicInteger> failuresByUserId = new ConcurrentHashMap<>();
++	private final Cache<Integer, AtomicInteger> failuresByUserId = Caffeine.newBuilder()
++			.expireAfterWrite(30, TimeUnit.MINUTES)
++			.build();
+ 
+ 	public void onSuccess(Integer userId) {
+-		failuresByUserId.remove(userId);
++		failuresByUserId.invalidate(userId);
+ 	}
+ 
+ 	@Transactional(propagation = Propagation.REQUIRES_NEW)
+ 	public void onFailure(Integer userId, UserRepository userRepository) {
+-		int n = failuresByUserId.computeIfAbsent(userId, k -> new AtomicInteger(0)).incrementAndGet();
++		AtomicInteger counter = failuresByUserId.get(userId, k -> new AtomicInteger(0));
++		int n = counter.incrementAndGet();
+ 		if (n >= MAX_FAILURES) {
+ 			userRepository.lockActiveUserById(userId);
+-			failuresByUserId.remove(userId);
++			failuresByUserId.invalidate(userId);
+ 		}
+ 	}
+ }
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/catalog/repository/CategoryJdbcRepository.java b/backend/smart-erp/src/main/java/com/example/smart_erp/catalog/repository/CategoryJdbcRepository.java
+index f9d320a4..cc7bdaa2 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/catalog/repository/CategoryJdbcRepository.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/catalog/repository/CategoryJdbcRepository.java
+@@ -37,21 +37,65 @@ public class CategoryJdbcRepository {
+ 		StringBuilder sql = new StringBuilder("""
+ 				SELECT c.id, c.category_code, c.name, c.description, c.parent_id, c.sort_order, c.status,
+ 				       c.created_at, c.updated_at,
+ 				       COALESCE(pc.cnt, 0)::bigint AS product_count
+ 				FROM categories c
+-				LEFT JOIN (
+-				  SELECT category_id, COUNT(*)::bigint AS cnt FROM products GROUP BY category_id
+-				) pc ON pc.category_id = c.id
++				LEFT JOIN LATERAL (
++				  SELECT COUNT(*)::bigint AS cnt FROM products WHERE category_id = c.id
++				) pc ON true
++				WHERE c.deleted_at IS NULL
++				""");
++		MapSqlParameterSource p = new MapSqlParameterSource();
++		appendStatus(sql, statusFilter);
++		sql.append(" ORDER BY c.sort_order, c.name");
++		return namedJdbc.query(sql.toString(), p, FLAT_ROW_MAPPER);
++	}
++
++	public List<CategoryFlatRow> loadAllActive(String statusFilter, String search) {
++		if (search == null || search.isBlank()) {
++			return loadAllActive(statusFilter);
++		}
++		StringBuilder sql = new StringBuilder("""
++				SELECT c.id, c.category_code, c.name, c.description, c.parent_id, c.sort_order, c.status,
++				       c.created_at, c.updated_at,
++				       COALESCE(pc.cnt, 0)::bigint AS product_count
++				FROM categories c
++				LEFT JOIN LATERAL (
++				  SELECT COUNT(*)::bigint AS cnt FROM products WHERE category_id = c.id
++				) pc ON true
+ 				WHERE c.deleted_at IS NULL
+ 				""");
+ 		MapSqlParameterSource p = new MapSqlParameterSource();
+ 		appendStatus(sql, statusFilter);
++		sql.append(" AND (c.name ILIKE :search OR c.category_code ILIKE :search)");
++		p.addValue("search", "%" + search.trim() + "%");
+ 		sql.append(" ORDER BY c.sort_order, c.name");
+ 		return namedJdbc.query(sql.toString(), p, FLAT_ROW_MAPPER);
+ 	}
+ 
++	public List<CategoryFlatRow> loadAllActiveFlat(String statusFilter, String search, int limit, int offset) {
++		StringBuilder sql = new StringBuilder("""
++				SELECT c.id, c.category_code, c.name, c.description, c.parent_id, c.sort_order, c.status,
++				       c.created_at, c.updated_at,
++				       COALESCE(pc.cnt, 0)::bigint AS product_count
++				FROM categories c
++				LEFT JOIN LATERAL (
++				  SELECT COUNT(*)::bigint AS cnt FROM products WHERE category_id = c.id
++				) pc ON true
++				WHERE c.deleted_at IS NULL
++				""");
++		MapSqlParameterSource p = new MapSqlParameterSource();
++		appendStatus(sql, statusFilter);
++		if (search != null && !search.isBlank()) {
++			sql.append(" AND (c.name ILIKE :search OR c.category_code ILIKE :search)");
++			p.addValue("search", "%" + search.trim() + "%");
++		}
++		sql.append(" ORDER BY c.sort_order, c.name LIMIT :limit OFFSET :offset");
++		p.addValue("limit", limit).addValue("offset", offset);
++		return namedJdbc.query(sql.toString(), p, FLAT_ROW_MAPPER);
++	}
++
+ 	/** Exact name match (case-insensitive); empty if none or ambiguous. */
+ 	public Optional<Long> findActiveIdByExactNameIgnoreCase(String name) {
+ 		if (name == null || name.isBlank()) {
+ 			return Optional.empty();
+ 		}
+@@ -172,22 +216,22 @@ public class CategoryJdbcRepository {
+ 		CategoryFlatRow c = row.get();
+ 		String parentName = null;
+ 		if (c.parentId() != null) {
+ 			parentName = findActiveName(c.parentId()).orElse(null);
+ 		}
+-		List<CategoryBreadcrumbItemData> trail = new ArrayList<>();
+-		Long cur = id;
+-		int guard = 0;
+-		while (cur != null && guard++ < 256) {
+-			Optional<CategoryFlatRow> step = findActiveById(cur);
+-			if (step.isEmpty()) {
+-				break;
+-			}
+-			CategoryFlatRow s = step.get();
+-			trail.addFirst(new CategoryBreadcrumbItemData(s.id(), s.name(), s.categoryCode()));
+-			cur = s.parentId();
+-		}
++		String sql = """
++				WITH RECURSIVE ancestors AS (
++				  SELECT id, parent_id, name, category_code, 1 AS depth FROM categories WHERE id = :id AND deleted_at IS NULL
++				  UNION ALL
++				  SELECT c.id, c.parent_id, c.name, c.category_code, a.depth + 1
++				  FROM categories c INNER JOIN ancestors a ON c.id = a.parent_id
++				  WHERE c.deleted_at IS NULL AND a.depth < 100
++				)
++				SELECT id, name, category_code FROM ancestors ORDER BY depth DESC
++				""";
++		List<CategoryBreadcrumbItemData> trail = namedJdbc.query(sql, Map.of("id", id), (rs, rn) ->
++				new CategoryBreadcrumbItemData(rs.getLong("id"), rs.getString("name"), rs.getString("category_code")));
+ 		return Optional.of(new CategoryDetailData(c.id(), c.categoryCode(), c.name(), c.description(), c.parentId(),
+ 				parentName, c.sortOrder(), c.status(), c.productCount(), c.createdAt(), c.updatedAt(), trail));
+ 	}
+ 
+ 	public long insert(String categoryCode, String name, String description, Long parentId, int sortOrder,
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/catalog/repository/CustomerJdbcRepository.java b/backend/smart-erp/src/main/java/com/example/smart_erp/catalog/repository/CustomerJdbcRepository.java
+index bc495c35..6a951e93 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/catalog/repository/CustomerJdbcRepository.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/catalog/repository/CustomerJdbcRepository.java
+@@ -5,14 +5,16 @@ import java.sql.ResultSet;
+ import java.sql.SQLException;
+ import java.sql.Timestamp;
+ import java.time.Instant;
+ import java.util.ArrayList;
+ import java.util.Collections;
++import java.util.HashMap;
+ import java.util.HashSet;
+ import java.util.List;
+ import java.util.Map;
+ import java.util.Optional;
++import java.util.Set;
+ 
+ import org.springframework.jdbc.core.RowMapper;
+ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+ import org.springframework.jdbc.support.GeneratedKeyHolder;
+@@ -249,13 +251,73 @@ public class CustomerJdbcRepository {
+ 
+ 	public int deleteCustomersHard(List<Integer> ids) {
+ 		return namedJdbc.update("DELETE FROM customers WHERE id IN (:ids)", Map.of("ids", ids));
+ 	}
+ 
++	public Set<Integer> findExistingCustomerIds(List<Integer> ids) {
++		if (ids == null || ids.isEmpty()) {
++			return Collections.emptySet();
++		}
++		List<Integer> rows = namedJdbc.query(
++				"SELECT id FROM customers WHERE id IN (:ids) AND deleted_at IS NULL",
++				Map.of("ids", ids), (rs, rn) -> rs.getInt("id"));
++		return new HashSet<>(rows);
++	}
++
++	public Map<Integer, String> findBulkDeleteBlockReasons(List<Integer> ids) {
++		if (ids == null || ids.isEmpty()) {
++			return Collections.emptyMap();
++		}
++		String sql = """
++				SELECT c.id,
++				  CASE
++				    WHEN EXISTS (SELECT 1 FROM salesorders WHERE customer_id = c.id) THEN 'HAS_SALES_ORDERS'
++				    WHEN EXISTS (SELECT 1 FROM partnerdebts WHERE customer_id = c.id) THEN 'HAS_PARTNER_DEBTS'
++				    ELSE NULL
++				  END AS block_reason
++				FROM unnest(:ids) AS c(id)
++				""";
++		Integer[] idArray = ids.toArray(new Integer[0]);
++		List<BlockedRow> rows = namedJdbc.query(sql, Map.of("ids", idArray), (rs, rn) -> {
++			int id = rs.getInt("id");
++			String reason = rs.getString("block_reason");
++			return new BlockedRow(id, reason);
++		});
++		Map<Integer, String> result = new HashMap<>();
++		for (BlockedRow r : rows) {
++			if (r.reason() != null) {
++				result.put(r.id(), r.reason());
++			}
++		}
++		return result;
++	}
++
++	private record BlockedRow(int id, String reason) {
++	}
++
+ 	public void lockCustomersForUpdate(List<Integer> ids) {
+ 		List<Integer> sorted = new ArrayList<>(new HashSet<>(ids));
+ 		Collections.sort(sorted);
+-		for (int cid : sorted) {
+-			lockCustomerForUpdate(cid).orElseThrow(() -> new IllegalStateException("customer missing id=" + cid));
++		if (sorted.isEmpty()) {
++			return;
++		}
++		String sql = """
++				SELECT id, customer_code, name, phone, email, address, loyalty_points, status
++				FROM customers WHERE id IN (:ids) AND deleted_at IS NULL ORDER BY id FOR UPDATE
++				""";
++		List<CustomerLockRow> rows = namedJdbc.query(sql, Map.of("ids", sorted),
++				(rs, rn) -> new CustomerLockRow(rs.getInt("id"), rs.getString("customer_code"), rs.getString("name"),
++						rs.getString("phone"), rs.getString("email"), rs.getString("address"), rs.getInt("loyalty_points"),
++						rs.getString("status")));
++		if (rows.size() < sorted.size()) {
++			Set<Integer> locked = new HashSet<>();
++			for (CustomerLockRow r : rows) {
++				locked.add(r.id());
++			}
++			for (Integer id : sorted) {
++				if (!locked.contains(id)) {
++					throw new IllegalStateException("customer missing id=" + id);
++				}
++			}
+ 		}
+ 	}
+ }
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/catalog/repository/SupplierJdbcRepository.java b/backend/smart-erp/src/main/java/com/example/smart_erp/catalog/repository/SupplierJdbcRepository.java
+index f8a5fe05..6683310b 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/catalog/repository/SupplierJdbcRepository.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/catalog/repository/SupplierJdbcRepository.java
+@@ -4,14 +4,16 @@ import java.sql.ResultSet;
+ import java.sql.SQLException;
+ import java.sql.Timestamp;
+ import java.time.Instant;
+ import java.util.ArrayList;
+ import java.util.Collections;
++import java.util.HashMap;
+ import java.util.HashSet;
+ import java.util.List;
+ import java.util.Map;
+ import java.util.Optional;
++import java.util.Set;
+ 
+ import org.springframework.jdbc.core.RowMapper;
+ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+ import org.springframework.jdbc.support.GeneratedKeyHolder;
+@@ -225,14 +227,74 @@ public class SupplierJdbcRepository {
+ 
+ 	public int deleteSuppliers(List<Integer> ids) {
+ 		return namedJdbc.update("DELETE FROM suppliers WHERE id IN (:ids)", Map.of("ids", ids));
+ 	}
+ 
++	public Set<Integer> findExistingSupplierIds(List<Integer> ids) {
++		if (ids == null || ids.isEmpty()) {
++			return Collections.emptySet();
++		}
++		List<Integer> rows = namedJdbc.query(
++				"SELECT id FROM suppliers WHERE id IN (:ids)",
++				Map.of("ids", ids), (rs, rn) -> rs.getInt("id"));
++		return new HashSet<>(rows);
++	}
++
++	public Map<Integer, String> findBulkDeleteBlockReasons(List<Integer> ids) {
++		if (ids == null || ids.isEmpty()) {
++			return Collections.emptyMap();
++		}
++		String sql = """
++				SELECT s.id,
++				  CASE
++				    WHEN EXISTS (SELECT 1 FROM stockreceipts WHERE supplier_id = s.id) THEN 'HAS_RECEIPTS'
++				    WHEN EXISTS (SELECT 1 FROM partnerdebts WHERE supplier_id = s.id) THEN 'HAS_PARTNER_DEBTS'
++				    ELSE NULL
++				  END AS block_reason
++				FROM unnest(:ids) AS s(id)
++				""";
++		Integer[] idArray = ids.toArray(new Integer[0]);
++		List<BlockedRow> rows = namedJdbc.query(sql, Map.of("ids", idArray), (rs, rn) -> {
++			int id = rs.getInt("id");
++			String reason = rs.getString("block_reason");
++			return new BlockedRow(id, reason);
++		});
++		Map<Integer, String> result = new HashMap<>();
++		for (BlockedRow r : rows) {
++			if (r.reason() != null) {
++				result.put(r.id(), r.reason());
++			}
++		}
++		return result;
++	}
++
++	private record BlockedRow(int id, String reason) {
++	}
++
+ 	public void lockSuppliersForUpdate(List<Integer> ids) {
+ 		List<Integer> sorted = new ArrayList<>(new HashSet<>(ids));
+ 		Collections.sort(sorted);
+-		for (int sid : sorted) {
+-			lockSupplierForUpdate(sid).orElseThrow(() -> new IllegalStateException("supplier missing id=" + sid));
++		if (sorted.isEmpty()) {
++			return;
++		}
++		String sql = """
++				SELECT id, supplier_code, name, contact_person, phone, email, address, tax_code, status
++				FROM suppliers WHERE id IN (:ids) ORDER BY id FOR UPDATE
++				""";
++		List<SupplierLockRow> rows = namedJdbc.query(sql, Map.of("ids", sorted),
++				(rs, rn) -> new SupplierLockRow(rs.getInt("id"), rs.getString("supplier_code"), rs.getString("name"),
++						rs.getString("contact_person"), rs.getString("phone"), rs.getString("email"),
++						rs.getString("address"), rs.getString("tax_code"), rs.getString("status")));
++		if (rows.size() < sorted.size()) {
++			Set<Integer> locked = new HashSet<>();
++			for (SupplierLockRow r : rows) {
++				locked.add(r.id());
++			}
++			for (Integer id : sorted) {
++				if (!locked.contains(id)) {
++					throw new IllegalStateException("supplier missing id=" + id);
++				}
++			}
+ 		}
+ 	}
+ 
+ }
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/catalog/service/CategoryService.java b/backend/smart-erp/src/main/java/com/example/smart_erp/catalog/service/CategoryService.java
+index 32d6a33d..271878c2 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/catalog/service/CategoryService.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/catalog/service/CategoryService.java
+@@ -39,36 +39,41 @@ public class CategoryService {
+ 		this.categoryJdbcRepository = categoryJdbcRepository;
+ 	}
+ 
+ 	@Transactional(readOnly = true)
+ 	public CategoryListPageData list(String formatRaw, String searchRaw, String statusRaw) {
++		return list(formatRaw, searchRaw, statusRaw, 1, Integer.MAX_VALUE);
++	}
++
++	@Transactional(readOnly = true)
++	public CategoryListPageData list(String formatRaw, String searchRaw, String statusRaw, int page, int limit) {
++		if (page < 1 || limit < 1 || limit > 1000) {
++			throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Tham số phân trang không hợp lệ",
++					Map.of("page", "page >= 1", "limit", "1–1000"));
++		}
+ 		String format = formatRaw == null || formatRaw.isBlank() ? "tree" : formatRaw.trim().toLowerCase(Locale.ROOT);
+ 		if (!"tree".equals(format) && !"flat".equals(format)) {
+ 			throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Tham số truy vấn không hợp lệ",
+ 					Map.of("format", "Chỉ chấp nhận tree hoặc flat"));
+ 		}
+ 		String statusFilter = normalizeListStatus(statusRaw);
+-		List<CategoryFlatRow> rows = categoryJdbcRepository.loadAllActive(statusFilter);
+-		List<CategoryFlatRow> filtered = applySearchFilter(rows, searchRaw);
+-		Set<Long> allowed = new HashSet<>();
+-		for (CategoryFlatRow r : filtered) {
+-			allowed.add(r.id());
+-		}
++		String search = searchRaw != null && !searchRaw.isBlank() ? searchRaw.trim() : null;
+ 		if ("flat".equals(format)) {
+-			filtered.sort((a, b) -> {
+-				int c = Integer.compare(a.sortOrder(), b.sortOrder());
+-				if (c != 0) {
+-					return c;
+-				}
+-				return a.name().compareToIgnoreCase(b.name());
+-			});
++			int offset = (page - 1) * limit;
++			List<CategoryFlatRow> rows = categoryJdbcRepository.loadAllActiveFlat(statusFilter, search, limit, offset);
+ 			List<CategoryNodeResponse> items = new ArrayList<>();
+-			for (CategoryFlatRow r : filtered) {
++			for (CategoryFlatRow r : rows) {
+ 				items.add(categoryJdbcRepository.toNodeResponseFlat(r));
+ 			}
+ 			return new CategoryListPageData(items);
+ 		}
++		List<CategoryFlatRow> rows = categoryJdbcRepository.loadAllActive(statusFilter, search);
++		List<CategoryFlatRow> filtered = applySearchFilter(rows, searchRaw);
++		Set<Long> allowed = new HashSet<>();
++		for (CategoryFlatRow r : filtered) {
++			allowed.add(r.id());
++		}
+ 		Map<Long, CategoryFlatRow> byId = new HashMap<>();
+ 		for (CategoryFlatRow r : filtered) {
+ 			byId.put(r.id(), r);
+ 		}
+ 		Map<Long, List<Long>> childrenIndex = categoryJdbcRepository.buildChildrenIndex(filtered);
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/catalog/service/CustomerService.java b/backend/smart-erp/src/main/java/com/example/smart_erp/catalog/service/CustomerService.java
+index 78bb53d9..81cb7994 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/catalog/service/CustomerService.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/catalog/service/CustomerService.java
+@@ -247,19 +247,26 @@ public class CustomerService {
+ 		}
+ 		if (ids.size() > 50) {
+ 			throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Danh sách id không hợp lệ",
+ 					Map.of("ids", "Cần từ 1 đến 50 id khác nhau (trùng trong mảng sẽ được gộp)"));
+ 		}
+-		for (int cid : ids) {
+-			if (!customerJdbcRepository.existsCustomerId(cid)) {
+-				throw new BusinessException(ApiErrorCode.CONFLICT,
+-						"Không thể xóa toàn bộ: ít nhất một khách hàng không đủ điều kiện",
+-						Map.of("failedId", String.valueOf(cid), "reason", "NOT_FOUND"));
++		Set<Integer> existing = customerJdbcRepository.findExistingCustomerIds(ids);
++		if (existing.size() != ids.size()) {
++			for (int cid : ids) {
++				if (!existing.contains(cid)) {
++					throw new BusinessException(ApiErrorCode.CONFLICT,
++							"Không thể xóa toàn bộ: ít nhất một khách hàng không đủ điều kiện",
++							Map.of("failedId", String.valueOf(cid), "reason", "NOT_FOUND"));
++				}
+ 			}
+ 		}
+-		for (int cid : ids) {
+-			assertBulkCustomerDeletableOrThrow(cid);
++		Map<Integer, String> blocked = customerJdbcRepository.findBulkDeleteBlockReasons(ids);
++		for (Map.Entry<Integer, String> entry : blocked.entrySet()) {
++			String r = entry.getValue();
++			throw new BusinessException(ApiErrorCode.CONFLICT,
++					"Không thể xóa toàn bộ: ít nhất một khách hàng không đủ điều kiện",
++					Map.of("failedId", String.valueOf(entry.getKey()), "reason", r));
+ 		}
+ 		customerJdbcRepository.lockCustomersForUpdate(ids);
+ 		int deleted = customerJdbcRepository.deleteCustomersHard(ids);
+ 		if (deleted != ids.size()) {
+ 			throw new BusinessException(ApiErrorCode.INTERNAL_SERVER_ERROR, "Xóa bulk không khớp số dòng");
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/catalog/service/ProductImageService.java b/backend/smart-erp/src/main/java/com/example/smart_erp/catalog/service/ProductImageService.java
+index c24f2a94..0fb5e1d5 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/catalog/service/ProductImageService.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/catalog/service/ProductImageService.java
+@@ -73,19 +73,24 @@ public class ProductImageService {
+ 		}
+ 		if (primaryIndex < 0 || primaryIndex >= urls.size()) {
+ 			throw new BusinessException(ApiErrorCode.BAD_REQUEST, "primaryImageIndex không hợp lệ",
+ 					Map.of("primaryImageIndex", "Nằm trong [0, số file - 1]"));
+ 		}
++		String primaryUrl = urls.get(primaryIndex);
++		productImageJdbcRepository.clearPrimaryForProduct(productId);
++		productImageJdbcRepository.updateProductMainImageUrl(productId, primaryUrl);
+ 		List<ProductImageData> out = new ArrayList<>();
+ 		for (int i = 0; i < urls.size(); i++) {
+ 			String url = urls.get(i);
+ 			if (url.length() > 500) {
+ 				throw new BusinessException(ApiErrorCode.BAD_REQUEST, "URL quá dài",
+ 						Map.of("file", "Tối đa 500 ký tự"));
+ 			}
+ 			boolean isPrimary = (i == primaryIndex);
+-			out.add(persistAfterOptionalPrimaryReset(productId, url, i, isPrimary, fileSizes.get(i), mimeTypes.get(i)));
++			int id = productImageJdbcRepository.insertImage(productId, url, isPrimary, i, fileSizes.get(i),
++					mimeTypes.get(i));
++			out.add(new ProductImageData(id, productId, url, i, isPrimary));
+ 		}
+ 		return out;
+ 	}
+ 
+ 	private ProductImageData persistAfterOptionalPrimaryReset(int productId, String url, int sortOrder, boolean isPrimary,
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/catalog/service/ProductService.java b/backend/smart-erp/src/main/java/com/example/smart_erp/catalog/service/ProductService.java
+index 30956b0a..b89318fe 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/catalog/service/ProductService.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/catalog/service/ProductService.java
+@@ -515,18 +515,10 @@ public class ProductService {
+ 			default -> "Sản phẩm không đủ điều kiện xóa.";
+ 		};
+ 	}
+ 
+ 	private Optional<String> deleteBlockReason(int productId) {
+-		if (productJdbcRepository.existsStockReceiptDetail(productId)) {
+-			return Optional.of("HAS_STOCK_RECEIPT");
+-		}
+-		if (productJdbcRepository.existsOrderDetail(productId)) {
+-			return Optional.of("HAS_ORDER_LINES");
+-		}
+-		if (productJdbcRepository.sumInventoryQuantity(productId) > 0L) {
+-			return Optional.of("HAS_STOCK");
+-		}
+-		return Optional.empty();
++		Map<Integer, String> blocked = productJdbcRepository.findBulkDeleteBlockReasons(List.of(productId));
++		return Optional.ofNullable(blocked.get(productId));
+ 	}
+ 
+ }
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/catalog/service/SupplierService.java b/backend/smart-erp/src/main/java/com/example/smart_erp/catalog/service/SupplierService.java
+index db941d60..f2e3c979 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/catalog/service/SupplierService.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/catalog/service/SupplierService.java
+@@ -221,30 +221,26 @@ public class SupplierService {
+ 		List<Integer> ids = req.ids();
+ 		Set<Integer> uniq = new HashSet<>(ids);
+ 		if (uniq.size() != ids.size()) {
+ 			throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Danh sách ids không được trùng lặp");
+ 		}
+-		for (int sid : ids) {
+-			if (!supplierJdbcRepository.existsSupplierId(sid)) {
+-				throw new BusinessException(ApiErrorCode.CONFLICT,
+-						"Không thể xóa toàn bộ: ít nhất một nhà cung cấp không tồn tại",
+-						Map.of("failedId", String.valueOf(sid), "reason", "NOT_FOUND"));
+-			}
+-		}
+-		for (int sid : ids) {
+-			if (supplierJdbcRepository.existsStockReceiptForSupplier(sid)) {
+-				throw new BusinessException(ApiErrorCode.CONFLICT,
+-						"Không thể xóa toàn bộ: ít nhất một nhà cung cấp không đủ điều kiện",
+-						Map.of("failedId", String.valueOf(sid), "reason", "HAS_RECEIPTS"));
++		Set<Integer> existing = supplierJdbcRepository.findExistingSupplierIds(ids);
++		if (existing.size() != ids.size()) {
++			for (int sid : ids) {
++				if (!existing.contains(sid)) {
++					throw new BusinessException(ApiErrorCode.CONFLICT,
++							"Không thể xóa toàn bộ: ít nhất một nhà cung cấp không tồn tại",
++							Map.of("failedId", String.valueOf(sid), "reason", "NOT_FOUND"));
++				}
+ 			}
+ 		}
+-		for (int sid : ids) {
+-			if (supplierJdbcRepository.existsPartnerDebtForSupplier(sid)) {
+-				throw new BusinessException(ApiErrorCode.CONFLICT,
+-						"Không thể xóa toàn bộ: ít nhất một nhà cung cấp không đủ điều kiện",
+-						Map.of("failedId", String.valueOf(sid), "reason", "HAS_PARTNER_DEBTS"));
+-			}
++		Map<Integer, String> blocked = supplierJdbcRepository.findBulkDeleteBlockReasons(ids);
++		for (Map.Entry<Integer, String> entry : blocked.entrySet()) {
++			String r = entry.getValue();
++			throw new BusinessException(ApiErrorCode.CONFLICT,
++					"Không thể xóa toàn bộ: ít nhất một nhà cung cấp không đủ điều kiện",
++					Map.of("failedId", String.valueOf(entry.getKey()), "reason", r));
+ 		}
+ 		supplierJdbcRepository.lockSuppliersForUpdate(ids);
+ 		int deleted = supplierJdbcRepository.deleteSuppliers(ids);
+ 		if (deleted != ids.size()) {
+ 			throw new BusinessException(ApiErrorCode.INTERNAL_SERVER_ERROR, "Xóa bulk không khớp số dòng");
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/custominterface/repository/CustomInterfaceJdbcRepository.java b/backend/smart-erp/src/main/java/com/example/smart_erp/custominterface/repository/CustomInterfaceJdbcRepository.java
+index 5f5013b6..91bb6dc6 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/custominterface/repository/CustomInterfaceJdbcRepository.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/custominterface/repository/CustomInterfaceJdbcRepository.java
+@@ -21,43 +21,56 @@ public class CustomInterfaceJdbcRepository {
+ 		this.jdbcTemplate = jdbcTemplate;
+ 	}
+ 
+ 	public List<FolderRow> findActiveFolders() {
+ 		return jdbcTemplate.query("""
+-				SELECT * FROM custom_menu_folders
++				SELECT id, folder_key, label, icon, description, status, sort_order, visibility_roles,
++				       draft_version, published_version, etag, updated_at, published_at
++				FROM custom_menu_folders
+ 				WHERE archived_at IS NULL
+ 				ORDER BY sort_order ASC, id ASC
+ 				""", folderMapper());
+ 	}
+ 
+ 	public List<PageRow> findActivePages() {
+ 		return jdbcTemplate.query("""
+-				SELECT * FROM custom_menu_pages
++				SELECT id, page_key, parent_folder_key, label, icon, description, route_path, entity_key, page_type,
++				       status, sort_order, visibility_roles, entity_permission, data_permission,
++				       draft_version, published_version, etag, updated_at, published_at
++				FROM custom_menu_pages
+ 				WHERE archived_at IS NULL
+ 				ORDER BY parent_folder_key ASC, sort_order ASC, id ASC
+ 				""", pageMapper());
+ 	}
+ 
+ 	public Optional<FolderRow> findFolder(String key) {
+ 		List<FolderRow> rows = jdbcTemplate.query("""
+-				SELECT * FROM custom_menu_folders
++				SELECT id, folder_key, label, icon, description, status, sort_order, visibility_roles,
++				       draft_version, published_version, etag, updated_at, published_at
++				FROM custom_menu_folders
+ 				WHERE folder_key = ? AND archived_at IS NULL
+ 				""", folderMapper(), key);
+ 		return rows.stream().findFirst();
+ 	}
+ 
+ 	public Optional<PageRow> findPage(String key) {
+ 		List<PageRow> rows = jdbcTemplate.query("""
+-				SELECT * FROM custom_menu_pages
++				SELECT id, page_key, parent_folder_key, label, icon, description, route_path, entity_key, page_type,
++				       status, sort_order, visibility_roles, entity_permission, data_permission,
++				       draft_version, published_version, etag, updated_at, published_at
++				FROM custom_menu_pages
+ 				WHERE page_key = ? AND archived_at IS NULL
+ 				""", pageMapper(), key);
+ 		return rows.stream().findFirst();
+ 	}
+ 
+ 	public Optional<PageRow> findPublishedPage(String key) {
+ 		List<PageRow> rows = jdbcTemplate.query("""
+-				SELECT * FROM custom_menu_pages
++				SELECT id, page_key, parent_folder_key, label, icon, description, route_path, entity_key, page_type,
++				       status, sort_order, visibility_roles, entity_permission, data_permission,
++				       draft_version, published_version, etag, updated_at, published_at
++				FROM custom_menu_pages
+ 				WHERE page_key = ? AND status = 'Published' AND archived_at IS NULL
+ 				""", pageMapper(), key);
+ 		return rows.stream().findFirst();
+ 	}
+ 
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/custominterface/service/CustomInterfaceService.java b/backend/smart-erp/src/main/java/com/example/smart_erp/custominterface/service/CustomInterfaceService.java
+index 7a664273..5d56c349 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/custominterface/service/CustomInterfaceService.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/custominterface/service/CustomInterfaceService.java
+@@ -68,14 +68,14 @@ public class CustomInterfaceService {
+ 		String key = requireKey(req.key(), "key");
+ 		String label = requireText(req.label(), "label", "Tên danh mục không được để trống.");
+ 		if (repository.folderKeyExists(key, null) || repository.pageKeyExists(key, null)) {
+ 			throw new BusinessException(ApiErrorCode.CONFLICT, CONFLICT, Map.of("key", "Mã danh mục đã tồn tại."));
+ 		}
+-		repository.insertFolder(key, label, clean(req.icon()), clean(req.description()), rolesJson(req.visibilityRoles()),
+-				req.sortOrder() == null ? repository.findActiveFolders().size() : req.sortOrder(), userId);
++		FolderRow folder = repository.insertFolder(key, label, clean(req.icon()), clean(req.description()),
++				rolesJson(req.visibilityRoles()), req.sortOrder() == null ? repository.findActiveFolders().size() : req.sortOrder(), userId);
+ 		repository.event("folder", key, "create", userId);
+-		return menuTree();
++		return simpleTree(folder, List.of());
+ 	}
+ 
+ 	@Transactional
+ 	public CustomMenuTreeData updateFolder(String folderKey, CustomFolderRequest req, Jwt jwt) {
+ 		if (req == null) {
+@@ -88,14 +88,14 @@ public class CustomInterfaceService {
+ 		String key = requireKey(req.key(), "key");
+ 		String label = requireText(req.label(), "label", "Tên danh mục không được để trống.");
+ 		if (repository.folderKeyExists(key, current.id()) || repository.pageKeyExists(key, null)) {
+ 			throw new BusinessException(ApiErrorCode.CONFLICT, CONFLICT, Map.of("key", "Mã danh mục đã tồn tại."));
+ 		}
+-		repository.updateFolder(current, key, label, clean(req.icon()), clean(req.description()),
++		FolderRow updated = repository.updateFolder(current, key, label, clean(req.icon()), clean(req.description()),
+ 				rolesJson(req.visibilityRoles()), req.sortOrder() == null ? current.sortOrder() : req.sortOrder(), userId);
+ 		repository.event("folder", key, "update", userId);
+-		return menuTree();
++		return simpleTree(updated, List.of());
+ 	}
+ 
+ 	@Transactional
+ 	public CustomMenuTreeData createPage(CustomPageRequest req, Jwt jwt) {
+ 		if (req == null) {
+@@ -108,19 +108,19 @@ public class CustomInterfaceService {
+ 						Map.of("parentKey", "Danh mục menu cha không tồn tại.")));
+ 		String key = requireKey(req.key(), "key");
+ 		String routePath = requireRoute(req.routePath());
+ 		validatePageUniqueness(key, routePath, null);
+ 		String pageType = requirePageType(req.pageType());
+-		repository.insertPage(parent.key(), key, requireText(req.label(), "label", "Tên giao diện không được để trống."),
++		PageRow page = repository.insertPage(parent.key(), key, requireText(req.label(), "label", "Tên giao diện không được để trống."),
+ 				clean(req.icon()), clean(req.description()), routePath, requireText(req.entityKey(), "entityKey",
+ 						"Entity liên kết không được để trống."),
+ 				pageType, rolesJson(req.visibilityRoles()), clean(req.entityPermission()), clean(req.dataPermission()),
+ 				req.sortOrder() == null ? repository.findActivePages().stream()
+ 						.filter(p -> parent.key().equals(p.parentKey())).toList().size() : req.sortOrder(),
+ 				userId);
+ 		repository.event("page", key, "create", userId);
+-		return menuTree();
++		return simpleTree(parent, List.of(page));
+ 	}
+ 
+ 	@Transactional
+ 	public CustomMenuTreeData updatePage(String pageKey, CustomPageRequest req, Jwt jwt) {
+ 		if (req == null) {
+@@ -135,18 +135,18 @@ public class CustomInterfaceService {
+ 				.orElseThrow(() -> new BusinessException(ApiErrorCode.BAD_REQUEST, BAD_REQUEST,
+ 						Map.of("parentKey", "Danh mục menu cha không tồn tại.")));
+ 		String key = requireKey(req.key(), "key");
+ 		String routePath = requireRoute(req.routePath());
+ 		validatePageUniqueness(key, routePath, current.id());
+-		repository.updatePage(current, parent.key(), key,
++		PageRow updated = repository.updatePage(current, parent.key(), key,
+ 				requireText(req.label(), "label", "Tên giao diện không được để trống."),
+ 				clean(req.icon()), clean(req.description()), routePath,
+ 				requireText(req.entityKey(), "entityKey", "Entity liên kết không được để trống."),
+ 				requirePageType(req.pageType()), rolesJson(req.visibilityRoles()), clean(req.entityPermission()),
+ 				clean(req.dataPermission()), req.sortOrder() == null ? current.sortOrder() : req.sortOrder(), userId);
+ 		repository.event("page", key, "update", userId);
+-		return menuTree();
++		return simpleTree(parent, List.of(updated));
+ 	}
+ 
+ 	@Transactional
+ 	public CustomMenuTreeData reorder(CustomReorderRequest req, Jwt jwt) {
+ 		int userId = StockReceiptAccessPolicy.parseUserId(jwt);
+@@ -171,11 +171,11 @@ public class CustomInterfaceService {
+ 					repository.updatePageOrder(pageKey, page.sortOrder() == null ? 0 : page.sortOrder(), userId);
+ 				}
+ 			}
+ 		}
+ 		repository.event("menu", "tree", "reorder", userId);
+-		return menuTree();
++		return new CustomMenuTreeData("reorder-" + req.etag(), List.of());
+ 	}
+ 
+ 	@Transactional(readOnly = true)
+ 	public ValidationSummaryData validatePublish() {
+ 		List<ValidationSummaryData.Item> errors = new ArrayList<>();
+@@ -200,11 +200,11 @@ public class CustomInterfaceService {
+ 					Map.of("validation", "failed"));
+ 		}
+ 		int userId = StockReceiptAccessPolicy.parseUserId(jwt);
+ 		repository.publishAll(userId);
+ 		repository.event("menu", "tree", "publish", userId);
+-		return menuTree();
++		return new CustomMenuTreeData("publish", List.of());
+ 	}
+ 
+ 	@Transactional
+ 	public CustomMenuTreeData archiveFolder(String folderKey, Jwt jwt) {
+ 		FolderRow folder = repository.findFolder(folderKey)
+@@ -214,21 +214,21 @@ public class CustomInterfaceService {
+ 					"Không thể ẩn danh mục vì vẫn còn giao diện đã publish bên trong.");
+ 		}
+ 		int userId = StockReceiptAccessPolicy.parseUserId(jwt);
+ 		repository.archiveFolder(folder.key(), userId);
+ 		repository.event("folder", folder.key(), "archive", userId);
+-		return menuTree();
++		return new CustomMenuTreeData("archive-folder-" + folderKey, List.of());
+ 	}
+ 
+ 	@Transactional
+ 	public CustomMenuTreeData archivePage(String pageKey, Jwt jwt) {
+ 		PageRow page = repository.findPage(pageKey)
+ 				.orElseThrow(() -> new BusinessException(ApiErrorCode.NOT_FOUND, "Không tìm thấy giao diện tùy chỉnh."));
+ 		int userId = StockReceiptAccessPolicy.parseUserId(jwt);
+ 		repository.archivePage(page.key(), userId);
+ 		repository.event("page", page.key(), "archive", userId);
+-		return menuTree();
++		return new CustomMenuTreeData("archive-page-" + pageKey, List.of());
+ 	}
+ 
+ 	@Transactional(readOnly = true)
+ 	public CustomMenuTreeData runtimeMenu(Authentication authentication, Jwt jwt) {
+ 		if (!hasAuthority(authentication, "can_use_custom_entities")
+@@ -268,10 +268,16 @@ public class CustomInterfaceService {
+ 		}
+ 		CustomMenuFolderData folderData = toFolderData(folder, List.of(pageData));
+ 		return new CustomMenuTreeData("runtime-page-" + page.key(), List.of(folderData));
+ 	}
+ 
++	private CustomMenuTreeData simpleTree(FolderRow folder, List<PageRow> pages) {
++		List<CustomMenuPageData> pageData = pages.stream().map(this::toPageData).toList();
++		CustomMenuFolderData folderData = toFolderData(folder, pageData);
++		return new CustomMenuTreeData("simple-" + folder.key(), List.of(folderData));
++	}
++
+ 	private CustomMenuTreeData tree(List<FolderRow> folders, List<PageRow> pages) {
+ 		Map<String, List<CustomMenuPageData>> pagesByParent = new LinkedHashMap<>();
+ 		for (PageRow page : pages) {
+ 			pagesByParent.computeIfAbsent(page.parentKey(), ignored -> new ArrayList<>()).add(toPageData(page));
+ 		}
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/dashboard/repository/DashboardJdbcRepository.java b/backend/smart-erp/src/main/java/com/example/smart_erp/dashboard/repository/DashboardJdbcRepository.java
+index da5385dd..72d083d1 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/dashboard/repository/DashboardJdbcRepository.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/dashboard/repository/DashboardJdbcRepository.java
+@@ -1,14 +1,14 @@
+ package com.example.smart_erp.dashboard.repository;
+ 
+ import java.math.BigDecimal;
+-import java.sql.Date;
+ import java.sql.ResultSet;
+ import java.sql.SQLException;
+ import java.sql.Timestamp;
+ import java.time.Instant;
+ import java.time.LocalDate;
++import java.time.ZoneId;
+ import java.util.List;
+ import java.util.Map;
+ 
+ import org.springframework.jdbc.core.RowMapper;
+ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+@@ -33,21 +33,24 @@ public class DashboardJdbcRepository {
+ 	public DashboardJdbcRepository(NamedParameterJdbcTemplate namedJdbc) {
+ 		this.namedJdbc = namedJdbc;
+ 	}
+ 
+ 	public DashboardFinancialData loadFinancial(LocalDate today, LocalDate yesterday) {
++		ZoneId zone = ZoneId.systemDefault();
+ 		MapSqlParameterSource src = new MapSqlParameterSource()
+-				.addValue("today", Date.valueOf(today))
+-				.addValue("yesterday", Date.valueOf(yesterday));
++				.addValue("todayStart", Timestamp.from(today.atStartOfDay(zone).toInstant()))
++				.addValue("todayEnd", Timestamp.from(today.plusDays(1).atStartOfDay(zone).toInstant()))
++				.addValue("yesterdayStart", Timestamp.from(yesterday.atStartOfDay(zone).toInstant()))
++				.addValue("yesterdayEnd", Timestamp.from(today.atStartOfDay(zone).toInstant()));
+ 		return namedJdbc.queryForObject("""
+ 				SELECT
+-				  COALESCE(SUM(CASE WHEN created_at::date = :today THEN final_amount ELSE 0 END), 0) AS today_revenue,
+-				  COALESCE(SUM(CASE WHEN created_at::date = :yesterday THEN final_amount ELSE 0 END), 0) AS yesterday_revenue,
+-				  COUNT(CASE WHEN created_at::date = :today THEN 1 END)::bigint AS today_orders
++				  COALESCE(SUM(CASE WHEN created_at >= :todayStart AND created_at < :todayEnd THEN final_amount ELSE 0 END), 0) AS today_revenue,
++				  COALESCE(SUM(CASE WHEN created_at >= :yesterdayStart AND created_at < :yesterdayEnd THEN final_amount ELSE 0 END), 0) AS yesterday_revenue,
++				  COUNT(CASE WHEN created_at >= :todayStart AND created_at < :todayEnd THEN 1 END)::bigint AS today_orders
+ 				FROM salesorders
+ 				WHERE status <> 'Cancelled'
+-				  AND created_at::date IN (:today, :yesterday)
++				  AND created_at >= :yesterdayStart AND created_at < :todayEnd
+ 				""", src, (rs, rowNum) -> {
+ 			BigDecimal todayRevenue = money(rs, "today_revenue");
+ 			BigDecimal yesterdayRevenue = money(rs, "yesterday_revenue");
+ 			long todayOrders = rs.getLong("today_orders");
+ 			BigDecimal pctChange = BigDecimal.ZERO.compareTo(yesterdayRevenue) == 0
+@@ -61,21 +64,24 @@ public class DashboardJdbcRepository {
+ 			return new DashboardFinancialData(todayRevenue, yesterdayRevenue, todayOrders, pctChange, avgOrderValue);
+ 		});
+ 	}
+ 
+ 	public List<DashboardRevenueTrendPointData> loadRevenueTrend(LocalDate from, LocalDate to) {
++		ZoneId zone = ZoneId.systemDefault();
+ 		MapSqlParameterSource src = new MapSqlParameterSource()
+-				.addValue("from", Date.valueOf(from))
+-				.addValue("to", Date.valueOf(to));
++				.addValue("from", java.sql.Date.valueOf(from))
++				.addValue("to", java.sql.Date.valueOf(to))
++				.addValue("fromStart", Timestamp.from(from.atStartOfDay(zone).toInstant()))
++				.addValue("toEnd", Timestamp.from(to.plusDays(1).atStartOfDay(zone).toInstant()));
+ 		return namedJdbc.query("""
+ 				WITH days AS (
+ 				  SELECT generate_series(CAST(:from AS date), CAST(:to AS date), interval '1 day')::date AS day
+ 				),
+ 				orders AS (
+ 				  SELECT created_at::date AS day, COALESCE(SUM(final_amount), 0) AS revenue, COUNT(*)::bigint AS orders
+ 				  FROM salesorders
+-				  WHERE created_at::date BETWEEN :from AND :to AND status <> 'Cancelled'
++				  WHERE created_at >= :fromStart AND created_at < :toEnd AND status <> 'Cancelled'
+ 				  GROUP BY created_at::date
+ 				)
+ 				SELECT d.day, COALESCE(o.revenue, 0) AS revenue, COALESCE(o.orders, 0) AS orders
+ 				FROM days d
+ 				LEFT JOIN orders o ON o.day = d.day
+@@ -86,19 +92,20 @@ public class DashboardJdbcRepository {
+ 					rs.getLong("orders"));
+ 		});
+ 	}
+ 
+ 	public DashboardChannelBreakdownData loadChannelBreakdown(LocalDate from, LocalDate to) {
++		ZoneId zone = ZoneId.systemDefault();
+ 		MapSqlParameterSource src = new MapSqlParameterSource()
+-				.addValue("from", Date.valueOf(from))
+-				.addValue("to", Date.valueOf(to));
++				.addValue("fromStart", Timestamp.from(from.atStartOfDay(zone).toInstant()))
++				.addValue("toEnd", Timestamp.from(to.plusDays(1).atStartOfDay(zone).toInstant()));
+ 		return namedJdbc.queryForObject("""
+ 				SELECT
+ 				  COALESCE(SUM(CASE WHEN order_channel = 'Retail' THEN final_amount ELSE 0 END), 0) AS retail,
+ 				  COALESCE(SUM(CASE WHEN order_channel = 'Wholesale' THEN final_amount ELSE 0 END), 0) AS wholesale
+ 				FROM salesorders
+-				WHERE created_at::date BETWEEN :from AND :to
++				WHERE created_at >= :fromStart AND created_at < :toEnd
+ 				  AND status <> 'Cancelled'
+ 				""", src, (rs, rowNum) -> {
+ 			BigDecimal retail = money(rs, "retail");
+ 			BigDecimal wholesale = money(rs, "wholesale");
+ 			return new DashboardChannelBreakdownData(retail, wholesale, retail.add(wholesale));
+@@ -136,10 +143,19 @@ public class DashboardJdbcRepository {
+ 		}
+ 		Long value = namedJdbc.queryForObject("SELECT COUNT(*)::bigint FROM salesorders" + filter, src, Long.class);
+ 		return value == null ? 0L : value;
+ 	}
+ 
++	public java.util.Map<String, Long> countOrdersTotalAndPending() {
++		MapSqlParameterSource src = new MapSqlParameterSource();
++		return namedJdbc.queryForObject("""
++				SELECT COUNT(*)::bigint AS total,
++				       COUNT(*) FILTER (WHERE status = 'Pending')::bigint AS pending
++				FROM salesorders
++				""", src, (rs, rowNum) -> java.util.Map.of("total", rs.getLong("total"), "pending", rs.getLong("pending")));
++	}
++
+ 	public long countPendingApprovals() {
+ 		Long value = namedJdbc.queryForObject("SELECT COUNT(*)::bigint FROM stockreceipts WHERE status = 'Pending'",
+ 				Map.of(), Long.class);
+ 		return value == null ? 0L : value;
+ 	}
+@@ -182,12 +198,12 @@ public class DashboardJdbcRepository {
+ 				rs.getInt("id"), rs.getString("name"), rs.getLong("order_count"), money(rs, "total_spent")));
+ 	}
+ 
+ 	public DashboardCashflowData loadCashflow(LocalDate from, LocalDate to) {
+ 		MapSqlParameterSource src = new MapSqlParameterSource()
+-				.addValue("from", Date.valueOf(from))
+-				.addValue("to", Date.valueOf(to));
++				.addValue("from", java.sql.Date.valueOf(from))
++				.addValue("to", java.sql.Date.valueOf(to));
+ 		return namedJdbc.queryForObject("""
+ 				SELECT
+ 				  COALESCE(SUM(CASE WHEN direction = 'Income' THEN amount ELSE 0 END), 0) AS income,
+ 				  COALESCE(SUM(CASE WHEN direction = 'Expense' THEN amount ELSE 0 END), 0) AS expense
+ 				FROM cashtransactions
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/dashboard/service/DashboardService.java b/backend/smart-erp/src/main/java/com/example/smart_erp/dashboard/service/DashboardService.java
+index fbc60d9f..c3c4fd1c 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/dashboard/service/DashboardService.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/dashboard/service/DashboardService.java
+@@ -63,12 +63,13 @@ public class DashboardService {
+ 		}
+ 
+ 		DashboardKpiData kpis = null;
+ 		if (query.includes(Section.KPIS)) {
+ 			InventorySummaryData inventory = repository.loadInventorySummary();
+-			long pendingOrders = repository.countOrdersByStatus("Pending");
+-			long allOrdersTotal = repository.countOrdersByStatus(null);
++			var orderCounts = repository.countOrdersTotalAndPending();
++			long pendingOrders = orderCounts.get("pending");
++			long allOrdersTotal = orderCounts.get("total");
+ 			long pendingApprovals = repository.countPendingApprovals();
+ 			Map<String, Long> approvalByType = new LinkedHashMap<>();
+ 			approvalByType.put("Inbound", pendingApprovals);
+ 			approvalByType.put("Outbound", 0L);
+ 			approvalByType.put("Return", 0L);
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/finance/cashflow/CashflowMovementJdbcRepository.java b/backend/smart-erp/src/main/java/com/example/smart_erp/finance/cashflow/CashflowMovementJdbcRepository.java
+index cc45c7eb..934d3929 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/finance/cashflow/CashflowMovementJdbcRepository.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/finance/cashflow/CashflowMovementJdbcRepository.java
+@@ -33,11 +33,11 @@ public class CashflowMovementJdbcRepository {
+ 		String fundCash = fundId == null ? "" : " AND ct.fund_id = :fundId ";
+ 		String searchLedger = searchPattern == null ? "" : " AND fl.description ILIKE :sp ";
+ 		String searchCash = searchPattern == null ? ""
+ 				: " AND (ct.transaction_code ILIKE :sp OR ct.category ILIKE :sp OR ct.description ILIKE :sp) ";
+ 		return """
+-				movements AS (
++				movements AS NOT MATERIALIZED (
+ 				  SELECT
+ 				    'ledger:' || fl.id::text AS line_id,
+ 				    'Ledger' AS source_kind,
+ 				    fl.transaction_date AS transaction_date,
+ 				    fl.amount AS signed_amount,
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/finance/cashtx/CashTransactionJdbcRepository.java b/backend/smart-erp/src/main/java/com/example/smart_erp/finance/cashtx/CashTransactionJdbcRepository.java
+index a8425d37..f70d1e2f 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/finance/cashtx/CashTransactionJdbcRepository.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/finance/cashtx/CashTransactionJdbcRepository.java
+@@ -81,30 +81,29 @@ public class CashTransactionJdbcRepository {
+ 
+ 	public long countList(String direction, String status, LocalDate dateFrom, LocalDate dateTo, Integer fundId,
+ 			String searchPattern) {
+ 		StringBuilder where = new StringBuilder(" WHERE 1=1 ");
+ 		var src = new MapSqlParameterSource();
+-		appendFilters(where, src, direction, status, dateFrom, dateTo, fundId, searchPattern);
+-		String sql = "SELECT COUNT(*) FROM cashtransactions ct LEFT JOIN users uc ON uc.id = ct.created_by "
+-				+ "LEFT JOIN users up ON up.id = ct.performed_by " + where;
++		appendFilters(where, src, direction, status, dateFrom, dateTo, fundId, searchPattern, false);
++		String sql = "SELECT COUNT(*) FROM cashtransactions ct" + where;
+ 		Long c = namedJdbc.queryForObject(sql, src, Long.class);
+ 		return c != null ? c : 0L;
+ 	}
+ 
+ 	public List<CashTransactionItemData> loadPage(String direction, String status, LocalDate dateFrom, LocalDate dateTo,
+ 			Integer fundId, String searchPattern, int limit, int offset, boolean sortByCreatedAt) {
+ 		StringBuilder where = new StringBuilder(" WHERE 1=1 ");
+ 		var src = new MapSqlParameterSource();
+-		appendFilters(where, src, direction, status, dateFrom, dateTo, fundId, searchPattern);
++		appendFilters(where, src, direction, status, dateFrom, dateTo, fundId, searchPattern, true);
+ 		String orderBy = sortByCreatedAt ? "ct.created_at DESC, ct.id DESC" : "ct.transaction_date DESC, ct.id DESC";
+ 		String sql = ITEM_SELECT + where + " ORDER BY " + orderBy + " LIMIT :lim OFFSET :off";
+ 		src.addValue("lim", limit).addValue("off", offset);
+ 		return namedJdbc.query(sql, src, ITEM_ROW);
+ 	}
+ 
+ 	private static void appendFilters(StringBuilder where, MapSqlParameterSource src, String direction, String status,
+-			LocalDate dateFrom, LocalDate dateTo, Integer fundId, String searchPattern) {
++			LocalDate dateFrom, LocalDate dateTo, Integer fundId, String searchPattern, boolean includeUserSearch) {
+ 		if (direction != null && !direction.isBlank()) {
+ 			where.append(" AND ct.direction = :dir ");
+ 			src.addValue("dir", direction.trim());
+ 		}
+ 		if (status != null && !status.isBlank()) {
+@@ -121,12 +120,18 @@ public class CashTransactionJdbcRepository {
+ 		if (fundId != null) {
+ 			where.append(" AND ct.fund_id = :fundId ");
+ 			src.addValue("fundId", fundId);
+ 		}
+ 		if (searchPattern != null) {
+-			where.append(
+-					" AND (ct.transaction_code ILIKE :sp OR ct.category ILIKE :sp OR ct.description ILIKE :sp OR uc.full_name ILIKE :sp OR up.full_name ILIKE :sp) ");
++			if (includeUserSearch) {
++				where.append(
++						" AND (ct.transaction_code ILIKE :sp OR ct.category ILIKE :sp OR ct.description ILIKE :sp OR uc.full_name ILIKE :sp OR up.full_name ILIKE :sp) ");
++			}
++			else {
++				where.append(
++						" AND (ct.transaction_code ILIKE :sp OR ct.category ILIKE :sp OR ct.description ILIKE :sp) ");
++			}
+ 			src.addValue("sp", searchPattern);
+ 		}
+ 	}
+ 
+ 	public int nextCodeSequenceSuffix(int year, String prefix) {
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/finance/ledger/FinanceLedgerJdbcRepository.java b/backend/smart-erp/src/main/java/com/example/smart_erp/finance/ledger/FinanceLedgerJdbcRepository.java
+index 1b08c768..0208c378 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/finance/ledger/FinanceLedgerJdbcRepository.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/finance/ledger/FinanceLedgerJdbcRepository.java
+@@ -1,10 +1,12 @@
+ package com.example.smart_erp.finance.ledger;
+ 
++import java.math.BigDecimal;
+ import java.sql.ResultSet;
+ import java.sql.SQLException;
+ import java.time.LocalDate;
++import java.util.ArrayList;
+ import java.util.List;
+ 
+ import org.springframework.jdbc.core.RowMapper;
+ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+@@ -43,11 +45,11 @@ public class FinanceLedgerJdbcRepository {
+ 
+ 	public List<FinanceLedgerItemData> loadPage(LocalDate effectiveFrom, LocalDate effectiveTo, String transactionType,
+ 			String referenceType, String searchPattern, int limit, int offset) {
+ 		Filter f = buildWhere(effectiveFrom, effectiveTo, transactionType, referenceType, searchPattern);
+ 
+-		String sql = """
++		String filteredCte = """
+ 				WITH filtered AS (
+ 				  SELECT
+ 				    fl.id,
+ 				    fl.transaction_date,
+ 				    fl.transaction_type,
+@@ -56,53 +58,72 @@ public class FinanceLedgerJdbcRepository {
+ 				    fl.amount,
+ 				    fl.description,
+ 				    so.order_code AS so_code
+ 				  """
+ 				+ BASE_FROM + f.where + """
+-				),
+-				with_bal AS (
+-				  SELECT
+-				    id,
+-				    transaction_date,
+-				    transaction_type,
+-				    reference_type,
+-				    reference_id,
+-				    amount,
+-				    description,
+-				    CASE
+-				      WHEN reference_type = 'SalesOrder' AND so_code IS NOT NULL THEN so_code
+-				      ELSE 'FL-' || id::text
+-				    END AS transaction_code,
+-				    CASE
+-				      WHEN amount < 0 THEN (amount * -1)
+-				      ELSE 0
+-				    END AS debit,
+-				    CASE
+-				      WHEN amount > 0 THEN amount
+-				      ELSE 0
+-				    END AS credit,
+-				    SUM(amount) OVER (ORDER BY transaction_date ASC, id ASC) AS balance
+-				  FROM filtered
+ 				)
++				""";
++
++		// Starting balance: sum of all amounts before the current page
++		String startingBalanceSql = filteredCte + """
++				SELECT COALESCE(SUM(amount), 0) AS start_balance FROM (
++				  SELECT amount FROM filtered ORDER BY transaction_date ASC, id ASC LIMIT :_offset
++				) t
++				""";
++		MapSqlParameterSource balanceParams = new MapSqlParameterSource();
++		balanceParams.addValues(f.source.getValues());
++		balanceParams.addValue("_offset", offset);
++		BigDecimal startBalance = namedJdbc.queryForObject(startingBalanceSql, balanceParams, BigDecimal.class);
++		if (startBalance == null) {
++			startBalance = BigDecimal.ZERO;
++		}
++
++		String pageSql = filteredCte + """
+ 				SELECT
+ 				  id,
+ 				  transaction_date,
+-				  transaction_code,
++				  CASE
++				    WHEN reference_type = 'SalesOrder' AND so_code IS NOT NULL THEN so_code
++				    ELSE 'FL-' || id::text
++				  END AS transaction_code,
+ 				  description,
+ 				  transaction_type,
+ 				  reference_type,
+ 				  reference_id,
+ 				  amount,
+-				  debit,
+-				  credit,
+-				  balance
+-				FROM with_bal
++				  CASE
++				    WHEN amount < 0 THEN (amount * -1)
++				    ELSE 0
++				  END AS debit,
++				  CASE
++				    WHEN amount > 0 THEN amount
++				    ELSE 0
++				  END AS credit
++				FROM filtered
+ 				ORDER BY transaction_date ASC, id ASC
+-				"""
+-				+ "LIMIT " + limit + " OFFSET " + offset;
+-
+-		return namedJdbc.query(sql, f.source, ROW);
++				LIMIT :_limit OFFSET :_offset
++				""";
++		MapSqlParameterSource pageParams = new MapSqlParameterSource();
++		pageParams.addValues(f.source.getValues());
++		pageParams.addValue("_limit", limit);
++		pageParams.addValue("_offset", offset);
++		List<FinanceLedgerItemData> rows = namedJdbc.query(pageSql, pageParams, (rs, rn) -> {
++			return new FinanceLedgerItemData(rs.getLong("id"), rs.getObject("transaction_date", LocalDate.class),
++					rs.getString("transaction_code"), rs.getString("description"), rs.getString("transaction_type"),
++					rs.getString("reference_type"), (Integer) rs.getObject("reference_id", Integer.class),
++					rs.getBigDecimal("amount"), rs.getBigDecimal("debit"), rs.getBigDecimal("credit"), null);
++		});
++
++		BigDecimal running = startBalance;
++		List<FinanceLedgerItemData> result = new ArrayList<>(rows.size());
++		for (FinanceLedgerItemData row : rows) {
++			running = running.add(row.amount());
++			result.add(new FinanceLedgerItemData(row.id(), row.date(), row.transactionCode(), row.description(),
++					row.transactionType(), row.referenceType(), row.referenceId(), row.amount(), row.debit(),
++					row.credit(), running));
++		}
++		return result;
+ 	}
+ 
+ 	/** Dùng khi cần pattern ILIKE an toàn (trim + escape wildcard). */
+ 	public static String toSearchPatternOrNull(String raw) {
+ 		if (raw == null || raw.isBlank()) {
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/finance/ledger/dispatch/DispatchLedgerPostingService.java b/backend/smart-erp/src/main/java/com/example/smart_erp/finance/ledger/dispatch/DispatchLedgerPostingService.java
+index 95ce6e5a..572a5b8b 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/finance/ledger/dispatch/DispatchLedgerPostingService.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/finance/ledger/dispatch/DispatchLedgerPostingService.java
+@@ -2,10 +2,11 @@ package com.example.smart_erp.finance.ledger.dispatch;
+ 
+ import java.math.BigDecimal;
+ import java.math.RoundingMode;
+ import java.util.ArrayList;
+ import java.util.List;
++import java.util.Map;
+ import java.util.StringJoiner;
+ 
+ import org.springframework.stereotype.Service;
+ 
+ import com.example.smart_erp.catalog.repository.ProductJdbcRepository;
+@@ -97,17 +98,29 @@ public class DispatchLedgerPostingService {
+ 		} else {
+ 			List<RetailStockJdbcRepository.ProductOutboundBaseQtyRow> agg = retailRepo.sumOutboundBaseQtyByProduct(dispatchId);
+ 			if (agg.isEmpty()) {
+ 				return null;
+ 			}
++			List<Integer> productIds = agg.stream().map(RetailStockJdbcRepository.ProductOutboundBaseQtyRow::productId)
++					.toList();
++			Map<Integer, Integer> baseUnitIds = retailRepo.findBaseUnitIds(productIds);
++			List<RetailStockJdbcRepository.ProductUnitPair> costPairs = new ArrayList<>();
+ 			for (var row : agg) {
+-				Integer baseUnitId = retailRepo.findBaseUnitId(row.productId()).orElse(null);
++				Integer baseUnitId = baseUnitIds.get(row.productId());
++				if (baseUnitId != null) {
++					costPairs.add(new RetailStockJdbcRepository.ProductUnitPair(row.productId(), baseUnitId));
++				}
++			}
++			Map<RetailStockJdbcRepository.ProductUnitPair, BigDecimal> costPrices = retailRepo
++					.findCurrentCostPrices(costPairs);
++			for (var row : agg) {
++				Integer baseUnitId = baseUnitIds.get(row.productId());
+ 				if (baseUnitId == null) {
+ 					missing.add("productId=" + row.productId());
+ 					continue;
+ 				}
+-				BigDecimal unitCost = productRepo.findCurrentCostPrice(row.productId(), baseUnitId).orElse(null);
++				BigDecimal unitCost = costPrices.get(new RetailStockJdbcRepository.ProductUnitPair(row.productId(), baseUnitId));
+ 				if (unitCost == null || unitCost.signum() <= 0) {
+ 					missing.add("productId=" + row.productId());
+ 				} else {
+ 					sumKnown = sumKnown.add(unitCost.multiply(BigDecimal.valueOf(row.baseQty())));
+ 				}
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/approvals/ApprovalsJdbcRepository.java b/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/approvals/ApprovalsJdbcRepository.java
+index 1bc7a755..b8f6882e 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/approvals/ApprovalsJdbcRepository.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/approvals/ApprovalsJdbcRepository.java
+@@ -49,10 +49,11 @@ public class ApprovalsJdbcRepository {
+ 	}
+ 
+ 	public List<ApprovalsPendingItemData> loadPendingPage(String searchPattern, LocalDate fromDate, LocalDate toDate,
+ 			int limit, int offset) {
+ 		Filter f = buildPendingWhere(searchPattern, fromDate, toDate);
++		// Note: composite index (status, created_at) recommended for pending list ordering
+ 		String sql = """
+ 				SELECT
+ 				  sr.id,
+ 				  sr.receipt_code,
+ 				  u.full_name AS creator_name,
+@@ -126,15 +127,15 @@ public class ApprovalsJdbcRepository {
+ 			sb.append(
+ 					" AND (sr.receipt_code ILIKE :_sp OR u_creator.full_name ILIKE :_sp OR u_rev.full_name ILIKE :_sp)");
+ 			src.addValue("_sp", searchPattern);
+ 		}
+ 		if (fromDate != null) {
+-			sb.append(" AND sr.reviewed_at::date >= :_from");
++			sb.append(" AND sr.reviewed_at >= :_from::timestamptz");
+ 			src.addValue("_from", fromDate);
+ 		}
+ 		if (toDate != null) {
+-			sb.append(" AND sr.reviewed_at::date <= :_to");
++			sb.append(" AND sr.reviewed_at < (:_to::timestamptz + interval '1 day')");
+ 			src.addValue("_to", toDate);
+ 		}
+ 		return new Filter(sb.toString(), src);
+ 	}
+ 
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/audit/repository/AuditSessionJdbcRepository.java b/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/audit/repository/AuditSessionJdbcRepository.java
+index 5aa7db40..0776feef 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/audit/repository/AuditSessionJdbcRepository.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/audit/repository/AuditSessionJdbcRepository.java
+@@ -3,11 +3,15 @@ package com.example.smart_erp.inventory.audit.repository;
+ import java.math.BigDecimal;
+ import java.sql.Timestamp;
+ import java.sql.Types;
+ import java.time.Instant;
+ import java.time.LocalDate;
++import java.util.ArrayList;
++import java.util.HashMap;
++import java.util.LinkedHashMap;
+ import java.util.List;
++import java.util.Map;
+ import java.util.Optional;
+ 
+ import org.springframework.jdbc.core.RowMapper;
+ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+@@ -36,10 +40,13 @@ public class AuditSessionJdbcRepository {
+ 
+ 	public record LineApplyRow(long lineId, long inventoryId, int productId, BigDecimal systemQty, BigDecimal actualQty,
+ 			Timestamp varianceAppliedAt) {
+ 	}
+ 
++	public record AuditLogItem(int productId, int quantityChange, int baseUnitId, int userId, String referenceNote) {
++	}
++
+ 	private final NamedParameterJdbcTemplate namedJdbc;
+ 
+ 	public AuditSessionJdbcRepository(NamedParameterJdbcTemplate namedJdbc) {
+ 		this.namedJdbc = namedJdbc;
+ 	}
+@@ -57,32 +64,27 @@ public class AuditSessionJdbcRepository {
+ 		String sql = """
+ 				SELECT
+ 				  s.id, s.audit_code, s.title, s.audit_date, s.status, s.location_filter, s.category_filter,
+ 				  s.created_by, uc.full_name AS created_by_name, s.completed_at, uf.full_name AS completed_by_name,
+ 				  s.created_at, s.updated_at,
+-				  (SELECT COUNT(*)::int FROM inventoryauditlines l WHERE l.session_id = s.id) AS total_lines,
+-				  (SELECT COUNT(*)::int FROM inventoryauditlines l WHERE l.session_id = s.id AND l.is_counted) AS counted_lines,
+-				  (SELECT COUNT(*)::int FROM inventoryauditlines l WHERE l.session_id = s.id AND l.is_counted
+-				     AND l.actual_quantity IS NOT NULL
+-				     AND (l.actual_quantity - l.system_quantity) <> 0) AS variance_lines
++				  line_agg.total_lines,
++				  line_agg.counted_lines,
++				  line_agg.variance_lines
+ 				FROM inventoryauditsessions s
+ 				INNER JOIN users uc ON uc.id = s.created_by
+ 				LEFT JOIN users uf ON uf.id = s.completed_by
++				LEFT JOIN LATERAL (
++				  SELECT COUNT(*)::int AS total_lines,
++				         COUNT(*) FILTER (WHERE l.is_counted)::int AS counted_lines,
++				         COUNT(*) FILTER (WHERE l.is_counted AND l.actual_quantity IS NOT NULL AND (l.actual_quantity - l.system_quantity) <> 0)::int AS variance_lines
++				  FROM inventoryauditlines l
++				  WHERE l.session_id = s.id
++				) line_agg ON true
+ 				""" + f.joins + f.where + " ORDER BY s.id ASC LIMIT " + q.limit() + " OFFSET " + offset;
+ 		return namedJdbc.query(sql, f.source, LIST_ROW);
+ 	}
+ 
+-	public int nextAuditSequenceSuffix(int year) {
+-		String sql = """
+-				SELECT COALESCE(MAX(split_part(s.audit_code, '-', 3)::int), 0)
+-				FROM inventoryauditsessions s
+-				WHERE s.audit_code LIKE 'KK-' || CAST(:y AS text) || '-%'
+-				""";
+-		Integer n = namedJdbc.queryForObject(sql, new MapSqlParameterSource("y", year), Integer.class);
+-		return n != null ? n : 0;
+-	}
+-
+ 	public int insertSession(String auditCode, String title, LocalDate auditDate, String status, String locationFilter,
+ 			String categoryFilter, String notes, int createdBy) {
+ 		String sql = """
+ 				INSERT INTO inventoryauditsessions (audit_code, title, audit_date, status, location_filter, category_filter, notes, created_by)
+ 				VALUES (:audit_code, :title, :audit_date, :status, :location_filter, :category_filter, :notes, :created_by)
+@@ -353,10 +355,91 @@ public class AuditSessionJdbcRepository {
+ 	public void setVarianceAppliedAt(long lineId) {
+ 		namedJdbc.update("UPDATE inventoryauditlines SET variance_applied_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = :id",
+ 				new MapSqlParameterSource("id", lineId));
+ 	}
+ 
++	public int nextAuditSequenceSuffix(int year) {
++		String seqName = "inventoryauditsessions_seq_" + year;
++		namedJdbc.getJdbcTemplate().execute("CREATE SEQUENCE IF NOT EXISTS " + seqName);
++		Integer n = namedJdbc.queryForObject("SELECT nextval('" + seqName + "')", new MapSqlParameterSource(), Integer.class);
++		return n != null ? n : 0;
++	}
++
++	public Map<Integer, Integer> lockInventoryQuantities(List<Integer> inventoryIds) {
++		if (inventoryIds == null || inventoryIds.isEmpty()) {
++			return Map.of();
++		}
++		String sql = "SELECT id, quantity FROM inventory WHERE id IN (:ids) FOR UPDATE";
++		List<Map<String, Object>> rows = namedJdbc.queryForList(sql, new MapSqlParameterSource("ids", inventoryIds));
++		Map<Integer, Integer> map = new LinkedHashMap<>();
++		for (Map<String, Object> row : rows) {
++			map.put((Integer) row.get("id"), (Integer) row.get("quantity"));
++		}
++		return map;
++	}
++
++	public void updateInventoryQuantitiesBatch(Map<Integer, Integer> idToNewQty) {
++		if (idToNewQty == null || idToNewQty.isEmpty()) {
++			return;
++		}
++		StringBuilder sb = new StringBuilder("UPDATE inventory SET quantity = CASE id ");
++		var src = new MapSqlParameterSource();
++		int i = 0;
++		for (var entry : idToNewQty.entrySet()) {
++			String idParam = "id" + i;
++			String valParam = "v" + i;
++			sb.append("WHEN :").append(idParam).append(" THEN :").append(valParam).append(" ");
++			src.addValue(idParam, entry.getKey());
++			src.addValue(valParam, entry.getValue());
++			i++;
++		}
++		sb.append("END, updated_at = CURRENT_TIMESTAMP WHERE id IN (:ids)");
++		src.addValue("ids", new ArrayList<>(idToNewQty.keySet()));
++		namedJdbc.update(sb.toString(), src);
++	}
++
++	public Map<Integer, Integer> findBaseUnitIdsByProductIds(List<Integer> productIds) {
++		if (productIds == null || productIds.isEmpty()) {
++			return Map.of();
++		}
++		String sql = "SELECT id, product_id FROM productunits WHERE product_id IN (:pids) AND is_base_unit = TRUE";
++		List<Map<String, Object>> rows = namedJdbc.queryForList(sql, new MapSqlParameterSource("pids", productIds));
++		Map<Integer, Integer> map = new HashMap<>();
++		for (Map<String, Object> row : rows) {
++			map.put((Integer) row.get("product_id"), (Integer) row.get("id"));
++		}
++		return map;
++	}
++
++	public void batchInsertInventoryLogs(List<AuditLogItem> items) {
++		if (items == null || items.isEmpty()) {
++			return;
++		}
++		String sql = """
++				INSERT INTO inventorylogs (product_id, action_type, quantity_change, unit_id, user_id, dispatch_id, receipt_id, from_location_id, to_location_id, reference_note)
++				VALUES (:pid, 'ADJUSTMENT', :qchg, :unit_id, :user_id, NULL, NULL, NULL, NULL, :note)
++				""";
++		MapSqlParameterSource[] batch = new MapSqlParameterSource[items.size()];
++		for (int i = 0; i < items.size(); i++) {
++			AuditLogItem it = items.get(i);
++			batch[i] = new MapSqlParameterSource("pid", it.productId())
++					.addValue("qchg", it.quantityChange())
++					.addValue("unit_id", it.baseUnitId())
++					.addValue("user_id", it.userId(), Types.INTEGER)
++					.addValue("note", it.referenceNote(), Types.VARCHAR);
++		}
++		namedJdbc.batchUpdate(sql, batch);
++	}
++
++	public void setVarianceAppliedAtBatch(List<Long> lineIds) {
++		if (lineIds == null || lineIds.isEmpty()) {
++			return;
++		}
++		namedJdbc.update("UPDATE inventoryauditlines SET variance_applied_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id IN (:ids)",
++				new MapSqlParameterSource("ids", lineIds));
++	}
++
+ 	public Optional<Integer> findBaseUnitId(int productId) {
+ 		List<Integer> ids = namedJdbc.query(
+ 				"SELECT id FROM productunits WHERE product_id = :pid AND is_base_unit = TRUE LIMIT 1",
+ 				new MapSqlParameterSource("pid", productId), (rs, i) -> rs.getInt("id"));
+ 		return ids.isEmpty() ? Optional.empty() : Optional.of(ids.getFirst());
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/audit/service/AuditSessionService.java b/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/audit/service/AuditSessionService.java
+index 686c731b..991d708b 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/audit/service/AuditSessionService.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/audit/service/AuditSessionService.java
+@@ -2,16 +2,16 @@ package com.example.smart_erp.inventory.audit.service;
+ 
+ import java.math.BigDecimal;
+ import java.math.RoundingMode;
+ import java.time.LocalDate;
+ import java.util.ArrayList;
++import java.util.HashMap;
+ import java.util.HashSet;
+ import java.util.List;
+ import java.util.Map;
+ import java.util.Objects;
+ 
+-import org.springframework.dao.DuplicateKeyException;
+ import org.springframework.security.oauth2.jwt.Jwt;
+ import org.springframework.stereotype.Service;
+ import org.springframework.transaction.annotation.Transactional;
+ import org.springframework.util.StringUtils;
+ 
+@@ -26,10 +26,11 @@ import com.example.smart_erp.inventory.audit.AuditSessionCompleteRequest;
+ import com.example.smart_erp.inventory.audit.AuditSessionCreateRequest;
+ import com.example.smart_erp.inventory.audit.AuditSessionPatchRequest;
+ import com.example.smart_erp.inventory.audit.AuditSessionRejectRequest;
+ import com.example.smart_erp.inventory.audit.query.AuditSessionListQuery;
+ import com.example.smart_erp.inventory.audit.repository.AuditSessionJdbcRepository;
++import com.example.smart_erp.inventory.audit.repository.AuditSessionJdbcRepository.AuditLogItem;
+ import com.example.smart_erp.inventory.audit.repository.AuditSessionJdbcRepository.InventorySnapRow;
+ import com.example.smart_erp.inventory.audit.repository.AuditSessionJdbcRepository.LineApplyRow;
+ import com.example.smart_erp.inventory.audit.repository.AuditSessionJdbcRepository.SessionLockRow;
+ import com.example.smart_erp.inventory.audit.response.AuditApplyVarianceData;
+ import com.example.smart_erp.inventory.audit.response.AuditApplyVarianceLineResult;
+@@ -95,31 +96,23 @@ public class AuditSessionService {
+ 			case "by_inventory_ids" -> {
+ 			}
+ 			default -> throw new BusinessException(ApiErrorCode.BAD_REQUEST, "scope.mode không hợp lệ");
+ 		}
+ 		int year = auditDate.getYear();
+-		int maxSuffix = repo.nextAuditSequenceSuffix(year);
+-		int sessionId = insertSessionWithCodeRetry(year, maxSuffix, req.title(), auditDate, locFilter, catFilter, req.notes(), userId);
++		int sessionId = insertSessionWithCode(year, req.title(), auditDate, locFilter, catFilter, req.notes(), userId);
+ 		for (InventorySnapRow row : snaps) {
+ 			repo.insertLine(sessionId, row.inventoryId(), new BigDecimal(row.quantity()));
+ 		}
+ 		return repo.loadDetail(sessionId)
+ 				.orElseThrow(() -> new BusinessException(ApiErrorCode.INTERNAL_SERVER_ERROR, "Không đọc lại đợt kiểm kê sau khi tạo"));
+ 	}
+ 
+-	private int insertSessionWithCodeRetry(int year, int maxSuffix, String title, LocalDate auditDate, String locFilter,
++	private int insertSessionWithCode(int year, String title, LocalDate auditDate, String locFilter,
+ 			String catFilter, String notes, int userId) {
+-		for (int bump = 1; bump <= 20; bump++) {
+-			String code = String.format("KK-%d-%04d", year, maxSuffix + bump);
+-			try {
+-				return repo.insertSession(code, title, auditDate, ST_PENDING, locFilter, catFilter, notes, userId);
+-			}
+-			catch (DuplicateKeyException ignored) {
+-				// thử mã tiếp theo
+-			}
+-		}
+-		throw new BusinessException(ApiErrorCode.CONFLICT, "Không thể sinh mã đợt kiểm kê duy nhất, vui lòng thử lại");
++		int suffix = repo.nextAuditSequenceSuffix(year);
++		String code = String.format("KK-%d-%04d", year, suffix);
++		return repo.insertSession(code, title, auditDate, ST_PENDING, locFilter, catFilter, notes, userId);
+ 	}
+ 
+ 	private List<InventorySnapRow> resolveScope(AuditScopeBody scope) {
+ 		String mode = scope.mode();
+ 		if (!StringUtils.hasText(mode)) {
+@@ -389,33 +382,57 @@ public class AuditSessionService {
+ 		}
+ 		List<LineApplyRow> pending = withVar.stream().filter(r -> r.varianceAppliedAt() == null).toList();
+ 		if (pending.isEmpty()) {
+ 			throw new BusinessException(ApiErrorCode.CONFLICT, "Đã áp chênh lệch cho đợt này");
+ 		}
++
++		List<Integer> invIds = pending.stream().map(r -> Math.toIntExact(r.inventoryId())).toList();
++		Map<Integer, Integer> qtyMap = repo.lockInventoryQuantities(invIds);
++		List<Integer> productIds = pending.stream().map(LineApplyRow::productId).toList();
++		Map<Integer, Integer> baseUnitMap = repo.findBaseUnitIdsByProductIds(productIds);
++
++		Map<Integer, Integer> idToNewQty = new HashMap<>();
++		List<AuditLogItem> logItems = new ArrayList<>();
++		List<Long> appliedLineIds = new ArrayList<>();
+ 		List<AuditApplyVarianceLineResult> results = new ArrayList<>();
++
+ 		for (LineApplyRow row : pending) {
+ 			int invId = Math.toIntExact(row.inventoryId());
+-			int oldQty = repo.lockInventoryQuantity(invId)
+-					.orElseThrow(() -> new BusinessException(ApiErrorCode.CONFLICT, "Không khóa được dòng tồn kho"));
++			Integer oldQty = qtyMap.get(invId);
++			if (oldQty == null) {
++				throw new BusinessException(ApiErrorCode.CONFLICT, "Không khóa được dòng tồn kho");
++			}
+ 			int newQty = computeNewQuantity(oldQty, row, mode);
+ 			if (newQty < 0) {
+ 				throw new BusinessException(ApiErrorCode.CONFLICT, "Số lượng tồn sau điều chỉnh không được âm");
+ 			}
+ 			int delta = newQty - oldQty;
+ 			if (delta == 0) {
+-				repo.setVarianceAppliedAt(row.lineId());
++				appliedLineIds.add(row.lineId());
+ 				results.add(new AuditApplyVarianceLineResult(row.lineId(), row.inventoryId(), 0, oldQty));
+ 				continue;
+ 			}
+-			repo.updateInventoryQuantity(invId, newQty);
+-			int baseUnitId = repo.findBaseUnitId(row.productId())
+-					.orElseThrow(() -> new BusinessException(ApiErrorCode.INTERNAL_SERVER_ERROR, "Thiếu đơn vị cơ sở cho sản phẩm"));
++			idToNewQty.put(invId, newQty);
++			Integer baseUnitId = baseUnitMap.get(row.productId());
++			if (baseUnitId == null) {
++				throw new BusinessException(ApiErrorCode.INTERNAL_SERVER_ERROR, "Thiếu đơn vị cơ sở cho sản phẩm");
++			}
+ 			String note = buildApplyReferenceNote(sid, row.lineId(), req.reason());
+-			repo.insertInventoryLog(row.productId(), delta, baseUnitId, userId, note);
+-			repo.setVarianceAppliedAt(row.lineId());
++			logItems.add(new AuditLogItem(row.productId(), delta, baseUnitId, userId, note));
++			appliedLineIds.add(row.lineId());
+ 			results.add(new AuditApplyVarianceLineResult(row.lineId(), row.inventoryId(), delta, newQty));
+ 		}
++
++		if (!idToNewQty.isEmpty()) {
++			repo.updateInventoryQuantitiesBatch(idToNewQty);
++		}
++		if (!logItems.isEmpty()) {
++			repo.batchInsertInventoryLogs(logItems);
++		}
++		if (!appliedLineIds.isEmpty()) {
++			repo.setVarianceAppliedAtBatch(appliedLineIds);
++		}
+ 		return new AuditApplyVarianceData(sid, results);
+ 	}
+ 
+ 	private static int computeNewQuantity(int currentQty, LineApplyRow row, String mode) {
+ 		int roundedActual = row.actualQty().setScale(0, RoundingMode.HALF_UP).intValue();
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/dispatch/ManualStockDispatchService.java b/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/dispatch/ManualStockDispatchService.java
+index 29a9ac2b..b4bb1eb6 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/dispatch/ManualStockDispatchService.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/dispatch/ManualStockDispatchService.java
+@@ -9,10 +9,11 @@ import java.util.ArrayList;
+ import java.util.LinkedHashMap;
+ import java.util.List;
+ import java.util.Map;
+ import java.util.UUID;
+ 
++import org.springframework.context.ApplicationEventPublisher;
+ import org.springframework.security.oauth2.jwt.Jwt;
+ import org.springframework.stereotype.Service;
+ import org.springframework.transaction.annotation.Transactional;
+ import org.springframework.util.StringUtils;
+ 
+@@ -39,20 +40,23 @@ public class ManualStockDispatchService {
+ 
+ 	private final BusinessFinanceLedgerPostingService financeLedgerPostingService;
+ 
+ 	private final SalesOrderJdbcRepository salesOrderJdbcRepository;
+ 
++	private final ApplicationEventPublisher eventPublisher;
++
+ 	public ManualStockDispatchService(StockDispatchJdbcRepository dispatchRepo, RetailStockJdbcRepository retailStockRepo,
+ 			StockDispatchNotifier dispatchNotifier, DispatchLedgerPostingService dispatchLedgerPostingService,
+ 			BusinessFinanceLedgerPostingService financeLedgerPostingService,
+-			SalesOrderJdbcRepository salesOrderJdbcRepository) {
++			SalesOrderJdbcRepository salesOrderJdbcRepository, ApplicationEventPublisher eventPublisher) {
+ 		this.dispatchRepo = dispatchRepo;
+ 		this.retailStockRepo = retailStockRepo;
+ 		this.dispatchNotifier = dispatchNotifier;
+ 		this.dispatchLedgerPostingService = dispatchLedgerPostingService;
+ 		this.financeLedgerPostingService = financeLedgerPostingService;
+ 		this.salesOrderJdbcRepository = salesOrderJdbcRepository;
++		this.eventPublisher = eventPublisher;
+ 	}
+ 
+ 	@Transactional(readOnly = true)
+ 	public StockDispatchListPageData list(String search, String status, String dateFrom, String dateTo, boolean mineOnly,
+ 			int page, int limit, Jwt jwt) {
+@@ -99,40 +103,41 @@ public class ManualStockDispatchService {
+ 	public StockDispatchDetailData getDetail(long dispatchId, Jwt jwt) {
+ 		var header = dispatchRepo.loadDispatchDetailHeader(dispatchId)
+ 				.orElseThrow(() -> new BusinessException(ApiErrorCode.NOT_FOUND, "Không tìm thấy phiếu xuất."));
+ 		int uid = StockReceiptAccessPolicy.parseUserId(jwt);
+ 		boolean manual = header.orderId() == null;
+-		boolean stockLinesFulfillment = dispatchRepo.dispatchHasPendingLines(dispatchId);
++		boolean hasPendingLines = dispatchRepo.dispatchHasPendingLines(dispatchId);
++		boolean stockLinesFulfillment = hasPendingLines;
+ 		boolean locked = DispatchMutationPolicy.isCompletedLockedForMutation(header.status());
+ 		boolean elevated = StockDispatchAccessPolicy.isElevatedDispatchManager(jwt);
+ 		boolean admin = StockDispatchAccessPolicy.isAdmin(jwt);
+ 		boolean creator = uid == header.userId();
+-		boolean awaitingApproval = dispatchAwaitingApprovalDetail(dispatchId, header.status());
++		boolean awaitingApproval = dispatchAwaitingApprovalDetail(hasPendingLines, header.status());
+ 		boolean canEdit = !locked && (awaitingApproval ? (creator || admin) : (creator || elevated));
+ 		boolean canDelete = canEdit;
+ 		boolean shortage = dispatchRepo.detailHasShortage(dispatchId);
+-		List<StockDispatchDetailLineData> lines = resolveDetailLines(dispatchId);
++		List<StockDispatchDetailLineData> lines = resolveDetailLines(dispatchId, hasPendingLines);
+ 		String deletedByName = StringUtils.hasText(header.deletedByDisplayName()) ? header.deletedByDisplayName() : null;
+ 		return new StockDispatchDetailData(header.id(), header.dispatchCode(), header.orderCode(),
+ 				header.customerName(), header.dispatchDate(), header.userId(), header.userName(), header.status(),
+ 				header.notes(), header.referenceLabel(), manual, stockLinesFulfillment, shortage, lines, canEdit,
+ 				canDelete, header.deletedAt(), header.deletedByUserId(), deletedByName, header.deleteReason());
+ 	}
+ 
+-	private List<StockDispatchDetailLineData> resolveDetailLines(long dispatchId) {
++	private List<StockDispatchDetailLineData> resolveDetailLines(long dispatchId, boolean hasPendingLines) {
+ 		List<StockDispatchDetailLineData> outbound = dispatchRepo.loadOutboundLinesForDispatchDetail(dispatchId);
+ 		if (!outbound.isEmpty()) {
+ 			return outbound;
+ 		}
+-		if (dispatchRepo.dispatchHasPendingLines(dispatchId)) {
++		if (hasPendingLines) {
+ 			return dispatchRepo.loadManualDetailLines(dispatchId);
+ 		}
+ 		return List.of();
+ 	}
+ 
+-	private boolean dispatchAwaitingApprovalDetail(long dispatchId, String status) {
+-		if (!dispatchRepo.dispatchHasPendingLines(dispatchId)) {
++	private boolean dispatchAwaitingApprovalDetail(boolean hasPendingLines, String status) {
++		if (!hasPendingLines) {
+ 			return false;
+ 		}
+ 		return "Pending".equalsIgnoreCase(status) || "Partial".equalsIgnoreCase(status);
+ 	}
+ 
+@@ -181,14 +186,14 @@ public class ManualStockDispatchService {
+ 		if (!shortageLines.isEmpty()) {
+ 			createdStatus = ManualDispatchStatuses.PARTIAL;
+ 			dispatchRepo.updateDispatchStatus(dispatchId, ManualDispatchStatuses.PARTIAL);
+ 		}
+ 		if (!shortageLines.isEmpty()) {
+-			dispatchNotifier.notifyDispatchShortage(userId, dispatchId, finalCode, shortageLines);
++			eventPublisher.publishEvent(new StockDispatchShortageEvent(userId, dispatchId, finalCode, shortageLines));
+ 		}
+ 		else {
+-			dispatchNotifier.notifyManualDispatchCreated(userId, dispatchId, finalCode, ref);
++			eventPublisher.publishEvent(new ManualDispatchCreatedEvent(userId, dispatchId, finalCode, ref));
+ 		}
+ 		return new StockDispatchCreatedData(dispatchId, finalCode, dispatchDate, createdStatus, ref);
+ 	}
+ 
+ 	@Transactional
+@@ -203,25 +208,26 @@ public class ManualStockDispatchService {
+ 		}
+ 		if (DispatchMutationPolicy.isCompletedLockedForMutation(locked.status())) {
+ 			throw new BusinessException(ApiErrorCode.BAD_REQUEST,
+ 					"Phiếu đã giao hoặc đã hoàn tất xuất — không được sửa.");
+ 		}
+-		boolean awaitingApproval = dispatchAwaitingApprovalDetail(dispatchId, locked.status());
++		boolean hasPendingLines = dispatchRepo.dispatchHasPendingLines(dispatchId);
++		boolean awaitingApproval = dispatchAwaitingApprovalDetail(hasPendingLines, locked.status());
+ 		if (awaitingApproval) {
+ 			StockDispatchAccessPolicy.assertCreatorOrAdmin(locked.creatorUserId(), jwt);
+ 			return patchAwaitingOwnerDispatch(dispatchId, patch, locked, jwt);
+ 		}
+ 
+ 		StockDispatchAccessPolicy.assertCreatorOrElevatedForDispatchEdit(locked.creatorUserId(), jwt);
+ 
+-		if (locked.orderId() != null && !supportsFullManualWorkflow(locked)) {
++		if (locked.orderId() != null && !supportsFullManualWorkflow(locked, hasPendingLines)) {
+ 			patchDispatchHeaderOnly(dispatchId, patch, locked.status(),
+ 					"Phiếu gắn đơn hàng: chỉ sửa được ngày xuất, ghi chú và nhãn tham chiếu (không đổi trạng thái hay dòng qua API này).");
+ 			return getDetail(dispatchId, jwt);
+ 		}
+ 
+-		if (!supportsFullManualWorkflow(locked)) {
++		if (!supportsFullManualWorkflow(locked, hasPendingLines)) {
+ 			patchDispatchHeaderOnly(dispatchId, patch, locked.status(),
+ 					"Phiếu xuất thủ công (dạng cũ): chỉ sửa được ngày xuất, ghi chú và nhãn tham chiếu.");
+ 			return getDetail(dispatchId, jwt);
+ 		}
+ 
+@@ -264,18 +270,18 @@ public class ManualStockDispatchService {
+ 		}
+ 
+ 		return getDetail(dispatchId, jwt);
+ 	}
+ 
+-	private boolean supportsFullManualWorkflow(StockDispatchJdbcRepository.LockedManualDispatchRow locked) {
++	private boolean supportsFullManualWorkflow(StockDispatchJdbcRepository.LockedManualDispatchRow locked, boolean hasPendingLines) {
+ 		if (!ManualDispatchStatuses.isManualLifecycle(locked.status())) {
+ 			return false;
+ 		}
+ 		if (locked.orderId() == null) {
+ 			return true;
+ 		}
+-		return dispatchRepo.dispatchHasPendingLines(locked.id());
++		return hasPendingLines;
+ 	}
+ 
+ 	private StockDispatchDetailData patchAwaitingOwnerDispatch(long dispatchId, StockDispatchPatchRequest patch,
+ 			StockDispatchJdbcRepository.LockedManualDispatchRow locked, Jwt jwt) {
+ 		if (patch.getStatus() != null && !patch.getStatus().trim().equalsIgnoreCase(locked.status())) {
+@@ -301,12 +307,12 @@ public class ManualStockDispatchService {
+ 			boolean hasShortage = dispatchRepo.detailHasShortage(dispatchId);
+ 			if (hasShortage && !hadShortage) {
+ 				String code = dispatchRepo.loadDispatchDetailHeader(dispatchId)
+ 						.map(h -> h.dispatchCode())
+ 						.orElse("PX");
+-				dispatchNotifier.notifyDispatchShortage(StockReceiptAccessPolicy.parseUserId(jwt), dispatchId, code,
+-						buildShortageLineMessages(dispatchId));
++				eventPublisher.publishEvent(new StockDispatchShortageEvent(StockReceiptAccessPolicy.parseUserId(jwt), dispatchId, code,
++						buildShortageLineMessages(dispatchId)));
+ 			}
+ 		}
+ 		return getDetail(dispatchId, jwt);
+ 	}
+ 
+@@ -392,28 +398,40 @@ public class ManualStockDispatchService {
+ 		}
+ 		var lines = new ArrayList<>(dispatchRepo.loadPendingLinesOrdered(dispatchId));
+ 		if (lines.isEmpty()) {
+ 			throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Phiếu không có dòng hàng để giao.");
+ 		}
++		List<Long> inventoryIds = lines.stream().map(StockDispatchJdbcRepository.ManualLineRow::inventoryId).toList();
++		Map<Long, StockDispatchJdbcRepository.LockedInventoryRow> lockedMap = dispatchRepo.lockInventoryRowsForUpdate(inventoryIds);
++
++		Map<Long, Integer> idToDeduct = new LinkedHashMap<>();
++		List<StockDispatchJdbcRepository.OutboundLogItem> logItems = new ArrayList<>();
++
+ 		for (var row : lines) {
+-			var locked = dispatchRepo.lockInventoryRowForUpdate(row.inventoryId())
+-					.orElseThrow(() -> new BusinessException(ApiErrorCode.NOT_FOUND,
+-							"Không tìm thấy dòng tồn id=" + row.inventoryId()));
++			var locked = lockedMap.get(row.inventoryId());
++			if (locked == null) {
++				throw new BusinessException(ApiErrorCode.NOT_FOUND,
++						"Không tìm thấy dòng tồn id=" + row.inventoryId());
++			}
+ 			if (row.quantity() > locked.quantity()) {
+ 				throw new BusinessException(ApiErrorCode.CONFLICT, "Thiếu hàng tại thời điểm xác nhận đã giao: tồn "
+ 						+ locked.quantity() + ", cần " + row.quantity());
+ 			}
+ 			BigDecimal rate = locked.lineConversionRate() == null ? BigDecimal.ONE : locked.lineConversionRate();
+ 			int baseQty = rate.multiply(BigDecimal.valueOf(row.quantity())).setScale(0, RoundingMode.DOWN).intValue();
+ 			if (baseQty <= 0) {
+ 				throw new BusinessException(ApiErrorCode.BAD_REQUEST,
+ 						"Số lượng quy đổi đơn vị cơ sở không hợp lệ cho inventory id=" + row.inventoryId());
+ 			}
+-			dispatchRepo.deductInventoryQuantity(locked.id(), row.quantity());
++			idToDeduct.put(locked.id(), row.quantity());
+ 			String logNote = "MANUAL_DISPATCH_DELIVERED invId=" + locked.id();
+-			retailStockRepo.insertInventoryLogOutbound(locked.productId(), baseQty, locked.baseUnitId(), userId,
+-					dispatchId, locked.locationId(), logNote);
++			logItems.add(new StockDispatchJdbcRepository.OutboundLogItem(locked.productId(), baseQty, locked.baseUnitId(),
++					userId, dispatchId, locked.locationId(), logNote));
++		}
++		dispatchRepo.deductInventoryQuantitiesBatch(idToDeduct);
++		if (!logItems.isEmpty()) {
++			dispatchRepo.batchInsertInventoryLogsOutbound(logItems);
+ 		}
+ 		dispatchRepo.updateDispatchStatus(dispatchId, ManualDispatchStatuses.DELIVERED);
+ 		dispatchLedgerPostingService.postPrimaryCogsIfAbsent(dispatchId, userId);
+ 		dispatchRepo.findOrderIdByDispatchId(dispatchId).flatMap(salesOrderJdbcRepository::loadOrderFinancialForLedger)
+ 				.ifPresent(fin -> financeLedgerPostingService.tryPostOrderLedgerOnFinancialState(fin, userId));
+@@ -448,11 +466,12 @@ public class ManualStockDispatchService {
+ 		}
+ 		if (DispatchMutationPolicy.isCompletedLockedForMutation(locked.status())) {
+ 			throw new BusinessException(ApiErrorCode.BAD_REQUEST,
+ 					"Không xóa mềm phiếu đã giao hoặc đã hoàn tất xuất.");
+ 		}
+-		boolean awaitingApproval = dispatchAwaitingApprovalDetail(dispatchId, locked.status());
++		boolean hasPendingLines = dispatchRepo.dispatchHasPendingLines(dispatchId);
++		boolean awaitingApproval = dispatchAwaitingApprovalDetail(hasPendingLines, locked.status());
+ 		if (awaitingApproval) {
+ 			StockDispatchAccessPolicy.assertCreatorOrAdmin(locked.creatorUserId(), jwt);
+ 		}
+ 		else {
+ 			StockDispatchAccessPolicy.assertCreatorOrElevatedForSoftDelete(locked.creatorUserId(), jwt);
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/dispatch/OrderLinkedDispatchService.java b/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/dispatch/OrderLinkedDispatchService.java
+index deed7f6d..05a7a8b4 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/dispatch/OrderLinkedDispatchService.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/dispatch/OrderLinkedDispatchService.java
+@@ -6,37 +6,37 @@ import java.util.LinkedHashMap;
+ import java.util.List;
+ import java.util.Map;
+ import java.util.Set;
+ import java.util.UUID;
+ 
++import org.springframework.context.ApplicationEventPublisher;
+ import org.springframework.security.oauth2.jwt.Jwt;
+ import org.springframework.stereotype.Service;
+ import org.springframework.transaction.annotation.Transactional;
+ import org.springframework.util.StringUtils;
+ 
+ import com.example.smart_erp.common.api.ApiErrorCode;
+ import com.example.smart_erp.common.exception.BusinessException;
+ import com.example.smart_erp.inventory.dispatch.response.StockDispatchCreatedData;
+ import com.example.smart_erp.inventory.receipts.lifecycle.StockReceiptAccessPolicy;
+-import com.example.smart_erp.notifications.repository.NotificationJdbcRepository;
+ import com.example.smart_erp.sales.repository.SalesOrderJdbcRepository;
+ 
+ @Service
+ public class OrderLinkedDispatchService {
+ 
+ 	private final StockDispatchJdbcRepository dispatchRepo;
+ 	private final SalesOrderJdbcRepository salesOrderRepo;
+-	private final NotificationJdbcRepository notificationRepo;
+ 	private final StockDispatchNotifier dispatchNotifier;
++	private final ApplicationEventPublisher eventPublisher;
+ 
+ 	public OrderLinkedDispatchService(StockDispatchJdbcRepository dispatchRepo,
+-			SalesOrderJdbcRepository salesOrderRepo, NotificationJdbcRepository notificationRepo,
+-			StockDispatchNotifier dispatchNotifier) {
++			SalesOrderJdbcRepository salesOrderRepo, StockDispatchNotifier dispatchNotifier,
++			ApplicationEventPublisher eventPublisher) {
+ 		this.dispatchRepo = dispatchRepo;
+ 		this.salesOrderRepo = salesOrderRepo;
+-		this.notificationRepo = notificationRepo;
+ 		this.dispatchNotifier = dispatchNotifier;
++		this.eventPublisher = eventPublisher;
+ 	}
+ 
+ 	@Transactional
+ 	public StockDispatchCreatedData createFromOrder(StockDispatchFromOrderRequest req, Jwt jwt) {
+ 		int userId = StockReceiptAccessPolicy.parseUserId(jwt);
+@@ -95,32 +95,19 @@ public class OrderLinkedDispatchService {
+ 		String finalCode = buildDispatchCode(dispatchId);
+ 		dispatchRepo.updateDispatchCode(dispatchId, finalCode);
+ 
+ 		String orderCode = salesOrderRepo.findOrderCode(req.orderId()).orElse("đơn #" + req.orderId());
+ 		if (!shortageLines.isEmpty()) {
+-			dispatchNotifier.notifyDispatchShortage(userId, dispatchId, finalCode, shortageLines);
++			eventPublisher.publishEvent(new StockDispatchShortageEvent(userId, dispatchId, finalCode, shortageLines));
+ 		}
+ 		else {
+-			notifyDispatchWaitingApproval(userId, dispatchId, orderCode);
++			eventPublisher.publishEvent(new OrderDispatchWaitingApprovalEvent(userId, dispatchId, orderCode));
+ 		}
+ 
+ 		return new StockDispatchCreatedData(dispatchId, finalCode, req.dispatchDate(), initialStatus, null);
+ 	}
+ 
+-	private void notifyDispatchWaitingApproval(int actorUserId, long dispatchId, String orderCode) {
+-		String title = "Phiếu xuất chờ duyệt";
+-		String message = "Đơn " + orderCode + ": phiếu đã tạo — đủ tồn, chờ Owner/Admin duyệt.";
+-		int refId = Math.toIntExact(dispatchId);
+-		for (int recipientId : notificationRepo.findActiveOwnerAdminUserIds()) {
+-			if (recipientId == actorUserId) {
+-				continue;
+-			}
+-			notificationRepo.insertTyped(recipientId, "StockDispatchPendingApproval", title, message, "StockDispatch",
+-					refId);
+-		}
+-	}
+-
+ 	private static String buildDispatchCode(long dispatchId) {
+ 		int year = java.time.Year.now(java.time.ZoneId.systemDefault()).getValue();
+ 		return "PX-" + year + "-" + String.format("%06d", dispatchId);
+ 	}
+ }
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/dispatch/StockDispatchJdbcRepository.java b/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/dispatch/StockDispatchJdbcRepository.java
+index 9de11077..93e14355 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/dispatch/StockDispatchJdbcRepository.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/dispatch/StockDispatchJdbcRepository.java
+@@ -3,10 +3,12 @@ package com.example.smart_erp.inventory.dispatch;
+ import java.math.BigDecimal;
+ import java.sql.Date;
+ import java.sql.Types;
+ import java.time.Instant;
+ import java.time.LocalDate;
++import java.util.ArrayList;
++import java.util.LinkedHashMap;
+ import java.util.List;
+ import java.util.Map;
+ import java.util.Optional;
+ 
+ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+@@ -193,10 +195,95 @@ public class StockDispatchJdbcRepository {
+ 	}
+ 
+ 	public record DispatchLedgerMetaRow(String dispatchCode, LocalDate dispatchDate, String status) {
+ 	}
+ 
++	public record OutboundLogItem(int productId, int quantityChange, int baseUnitId, int userId, long dispatchId,
++			int fromLocationId, String referenceNote) {
++	}
++
++	public Map<Long, LockedInventoryRow> lockInventoryRowsForUpdate(List<Long> inventoryIds) {
++		if (inventoryIds == null || inventoryIds.isEmpty()) {
++			return Map.of();
++		}
++		String sql = """
++				SELECT i.id, i.product_id, p.name AS product_name, p.sku_code, i.location_id, i.quantity,
++				       COALESCE(i.unit_id, pub.id) AS line_unit_id,
++				       pub.id AS base_unit_id,
++				       COALESCE(pud.conversion_rate, 1) AS line_rate
++				FROM inventory i
++				INNER JOIN products p ON p.id = i.product_id
++				INNER JOIN productunits pub ON pub.product_id = p.id AND pub.is_base_unit = TRUE
++				LEFT JOIN productunits pud ON pud.id = i.unit_id
++				WHERE i.id IN (:ids)
++				FOR UPDATE OF i
++				""";
++		List<LockedInventoryRow> rows = namedJdbc.query(sql, new MapSqlParameterSource("ids", inventoryIds),
++				(rs, rn) -> new LockedInventoryRow(
++						rs.getLong("id"),
++						rs.getInt("product_id"),
++						rs.getString("product_name"),
++						rs.getString("sku_code"),
++						rs.getInt("location_id"),
++						rs.getInt("quantity"),
++						rs.getInt("line_unit_id"),
++						rs.getInt("base_unit_id"),
++						rs.getBigDecimal("line_rate")));
++		Map<Long, LockedInventoryRow> map = new LinkedHashMap<>();
++		for (LockedInventoryRow row : rows) {
++			map.put(row.id(), row);
++		}
++		return map;
++	}
++
++	public void deductInventoryQuantitiesBatch(Map<Long, Integer> idToDeduct) {
++		if (idToDeduct == null || idToDeduct.isEmpty()) {
++			return;
++		}
++		StringBuilder sb = new StringBuilder("UPDATE inventory SET quantity = quantity - CASE id ");
++		var src = new MapSqlParameterSource();
++		int i = 0;
++		for (var entry : idToDeduct.entrySet()) {
++			String idParam = "id" + i;
++			String valParam = "v" + i;
++			sb.append("WHEN :").append(idParam).append(" THEN :").append(valParam).append(" ");
++			src.addValue(idParam, entry.getKey());
++			src.addValue(valParam, entry.getValue());
++			i++;
++		}
++		sb.append("END, updated_at = CURRENT_TIMESTAMP WHERE id IN (:ids)");
++		src.addValue("ids", new ArrayList<>(idToDeduct.keySet()));
++		namedJdbc.update(sb.toString(), src);
++	}
++
++	public void batchInsertInventoryLogsOutbound(List<OutboundLogItem> items) {
++		if (items == null || items.isEmpty()) {
++			return;
++		}
++		String sql = """
++				INSERT INTO inventorylogs (
++				  product_id, action_type, quantity_change, unit_id, user_id,
++				  dispatch_id, receipt_id, from_location_id, to_location_id, reference_note
++				) VALUES (
++				  :pid, 'OUTBOUND', :qchg, :unit_id, :uid,
++				  :did, NULL, :from_loc, NULL, :note
++				)
++				""";
++		MapSqlParameterSource[] batch = new MapSqlParameterSource[items.size()];
++		for (int i = 0; i < items.size(); i++) {
++			OutboundLogItem it = items.get(i);
++			batch[i] = new MapSqlParameterSource("pid", it.productId())
++					.addValue("qchg", -it.quantityChange())
++					.addValue("unit_id", it.baseUnitId())
++					.addValue("uid", it.userId())
++					.addValue("did", it.dispatchId())
++					.addValue("from_loc", it.fromLocationId())
++					.addValue("note", it.referenceNote(), Types.VARCHAR);
++		}
++		namedJdbc.batchUpdate(sql, batch);
++	}
++
+ 	public void updateDispatchCode(long dispatchId, String dispatchCode) {
+ 		namedJdbc.update("UPDATE stockdispatches SET dispatch_code = :c, updated_at = CURRENT_TIMESTAMP WHERE id = :id",
+ 				Map.of("c", dispatchCode, "id", dispatchId));
+ 	}
+ 
+@@ -259,26 +346,31 @@ public class StockDispatchJdbcRepository {
+ 				       COALESCE(c.name, COALESCE(sd.reference_label, '—')) AS customer_name,
+ 				       sd.dispatch_date,
+ 				       sd.user_id AS creator_user_id,
+ 				       (sd.order_id IS NULL) AS manual_dispatch,
+ 				       COALESCE(u.full_name, u.email, '—') AS user_name,
+-				       CASE WHEN EXISTS (SELECT 1 FROM stockdispatch_lines sdl WHERE sdl.dispatch_id = sd.id)
+-				            THEN (SELECT COUNT(*)::int FROM stockdispatch_lines x WHERE x.dispatch_id = sd.id)
+-				            ELSE COALESCE((SELECT COUNT(*)::int FROM inventorylogs il WHERE il.dispatch_id = sd.id
+-				                          AND il.action_type = 'OUTBOUND'), 0)
+-				       END AS item_count,
++				       CASE WHEN line_agg.has_lines THEN line_agg.line_count ELSE COALESCE(log_agg.log_count, 0) END AS item_count,
+ 				       sd.status,
+-				       EXISTS (SELECT 1 FROM stockdispatch_lines sdlx WHERE sdlx.dispatch_id = sd.id) AS has_stockdispatch_lines,
+-				       EXISTS (
+-				         SELECT 1 FROM stockdispatch_lines sdl2
+-				         INNER JOIN inventory i ON i.id = sdl2.inventory_id
+-				         WHERE sdl2.dispatch_id = sd.id AND sdl2.quantity > i.quantity
+-				       ) AS has_shortage_warning
++				       line_agg.has_lines AS has_stockdispatch_lines,
++				       COALESCE(line_agg.has_shortage, false) AS has_shortage_warning
+ 				FROM stockdispatches sd
+ 				INNER JOIN users u ON u.id = sd.user_id
+ 				LEFT JOIN salesorders so ON so.id = sd.order_id
+ 				LEFT JOIN customers c ON c.id = so.customer_id
++				LEFT JOIN LATERAL (
++				  SELECT COUNT(*)::int AS line_count,
++				         COUNT(*) > 0 AS has_lines,
++				         bool_or(sdl.quantity > i.quantity) AS has_shortage
++				  FROM stockdispatch_lines sdl
++				  LEFT JOIN inventory i ON i.id = sdl.inventory_id
++				  WHERE sdl.dispatch_id = sd.id
++				) line_agg ON true
++				LEFT JOIN LATERAL (
++				  SELECT COUNT(*)::int AS log_count
++				  FROM inventorylogs il
++				  WHERE il.dispatch_id = sd.id AND il.action_type = 'OUTBOUND'
++				) log_agg ON true
+ 				"""
+ 				+ where + """
+ 							ORDER BY sd.id DESC
+ 							LIMIT :lim OFFSET :off
+ 							""";
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/dispatch/StockDispatchNotifier.java b/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/dispatch/StockDispatchNotifier.java
+index f734ff95..b8d945ad 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/dispatch/StockDispatchNotifier.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/dispatch/StockDispatchNotifier.java
+@@ -1,10 +1,12 @@
+ package com.example.smart_erp.inventory.dispatch;
+ 
+ import java.util.List;
+ 
+ import org.springframework.stereotype.Component;
++import org.springframework.transaction.event.TransactionPhase;
++import org.springframework.transaction.event.TransactionalEventListener;
+ import org.springframework.util.StringUtils;
+ 
+ import com.example.smart_erp.notifications.repository.NotificationJdbcRepository;
+ 
+ /**
+@@ -17,10 +19,25 @@ public class StockDispatchNotifier {
+ 
+ 	public StockDispatchNotifier(NotificationJdbcRepository notificationRepo) {
+ 		this.notificationRepo = notificationRepo;
+ 	}
+ 
++	@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
++	public void onManualDispatchCreated(ManualDispatchCreatedEvent event) {
++		notifyManualDispatchCreated(event.actorUserId(), event.dispatchId(), event.dispatchCode(), event.referenceLabel());
++	}
++
++	@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
++	public void onDispatchShortage(StockDispatchShortageEvent event) {
++		notifyDispatchShortage(event.actorUserId(), event.dispatchId(), event.dispatchCode(), event.shortageLines());
++	}
++
++	@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
++	public void onOrderDispatchWaitingApproval(OrderDispatchWaitingApprovalEvent event) {
++		notifyDispatchWaitingApproval(event.actorUserId(), event.dispatchId(), event.orderCode());
++	}
++
+ 	/** Phiếu xuất tay mới (đủ tồn, chờ duyệt) — Admin khác người tạo. */
+ 	public void notifyManualDispatchCreated(int actorUserId, long dispatchId, String dispatchCode, String referenceLabel) {
+ 		String title = "Phiếu xuất kho mới";
+ 		String refSuffix = StringUtils.hasText(referenceLabel) ? " — tham chiếu: " + referenceLabel.trim() : "";
+ 		String message = "Đã tạo phiếu xuất tay " + dispatchCode + refSuffix
+@@ -38,10 +55,23 @@ public class StockDispatchNotifier {
+ 		String title = "Phiếu xuất thiếu tồn";
+ 		String message = dispatchCode + ": " + String.join(" · ", shortageLines);
+ 		sendToActiveAdmins(actorUserId, dispatchId, "StockDispatchShortage", title, message);
+ 	}
+ 
++	private void notifyDispatchWaitingApproval(int actorUserId, long dispatchId, String orderCode) {
++		String title = "Phiếu xuất chờ duyệt";
++		String message = "Đơn " + orderCode + ": phiếu đã tạo — đủ tồn, chờ Owner/Admin duyệt.";
++		int refId = Math.toIntExact(dispatchId);
++		for (int recipientId : notificationRepo.findActiveOwnerAdminUserIds()) {
++			if (recipientId == actorUserId) {
++				continue;
++			}
++			notificationRepo.insertTyped(recipientId, "StockDispatchPendingApproval", title, message, "StockDispatch",
++					refId);
++		}
++	}
++
+ 	private void sendToActiveAdmins(int actorUserId, long dispatchId, String notificationType, String title,
+ 			String message) {
+ 		int refId = Math.toIntExact(dispatchId);
+ 		for (int recipientId : notificationRepo.findActiveAdminUserIds()) {
+ 			if (recipientId == actorUserId) {
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/receipts/lifecycle/StockReceiptLifecycleJdbcRepository.java b/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/receipts/lifecycle/StockReceiptLifecycleJdbcRepository.java
+index 61e8c491..9685f2f6 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/receipts/lifecycle/StockReceiptLifecycleJdbcRepository.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/receipts/lifecycle/StockReceiptLifecycleJdbcRepository.java
+@@ -3,11 +3,14 @@ package com.example.smart_erp.inventory.receipts.lifecycle;
+ import java.math.BigDecimal;
+ import java.sql.Timestamp;
+ import java.sql.Types;
+ import java.time.Instant;
+ import java.time.LocalDate;
++import java.util.ArrayList;
++import java.util.HashMap;
+ import java.util.List;
++import java.util.Map;
+ import java.util.Optional;
+ 
+ import org.springframework.jdbc.core.RowMapper;
+ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+@@ -218,10 +221,170 @@ public class StockReceiptLifecycleJdbcRepository {
+ 
+ 	public record ApproveDetailRow(int productId, int unitId, int quantity, BigDecimal costPrice, String batchNumber,
+ 			LocalDate expiryDate, BigDecimal conversionRate, boolean baseUnit) {
+ 	}
+ 
++	public record InventoryInsert(int productId, int locationId, String batchNumber, LocalDate expiryDate, int quantity) {
++	}
++
++	public record InventoryLogItem(int productId, int quantityChange, int unitId, Integer userId, long receiptId,
++			Integer toLocationId, String referenceNote) {
++	}
++
++	public record InventoryLockRow(long id, int productId, String batchNumber) {
++	}
++
++	public List<Integer> findActiveProductIds(List<Integer> ids) {
++		if (ids == null || ids.isEmpty()) {
++			return List.of();
++		}
++		String sql = "SELECT id FROM products WHERE id IN (:ids) AND status = 'Active'";
++		return namedJdbc.query(sql, new MapSqlParameterSource("ids", ids), (rs, i) -> rs.getInt("id"));
++	}
++
++	public List<UnitRow> findUnitsByTuples(List<int[]> tuples) {
++		if (tuples == null || tuples.isEmpty()) {
++			return List.of();
++		}
++		StringBuilder sql = new StringBuilder("""
++				SELECT id, product_id, is_base_unit, conversion_rate
++				FROM productunits
++				WHERE (id, product_id) IN (
++				""");
++		for (int i = 0; i < tuples.size(); i++) {
++			if (i > 0) {
++				sql.append(", ");
++			}
++			int[] t = tuples.get(i);
++			sql.append("(").append(t[0]).append(",").append(t[1]).append(")");
++		}
++		sql.append(")");
++		return namedJdbc.query(sql.toString(), new MapSqlParameterSource(), UNIT_ROW);
++	}
++
++	public void batchInsertDetails(long receiptId, List<StockReceiptDetailRequest> details) {
++		if (details == null || details.isEmpty()) {
++			return;
++		}
++		String sql = """
++				INSERT INTO stockreceiptdetails (receipt_id, product_id, unit_id, quantity, cost_price, batch_number, expiry_date)
++				VALUES (:receipt_id, :product_id, :unit_id, :quantity, :cost_price, :batch_number, :expiry_date)
++				""";
++		MapSqlParameterSource[] batch = new MapSqlParameterSource[details.size()];
++		for (int i = 0; i < details.size(); i++) {
++			StockReceiptDetailRequest d = details.get(i);
++			LocalDate exp = null;
++			if (d.expiryDate() != null && !d.expiryDate().isBlank()) {
++				exp = LocalDate.parse(d.expiryDate());
++			}
++			batch[i] = new MapSqlParameterSource("receipt_id", receiptId)
++					.addValue("product_id", d.productId())
++					.addValue("unit_id", d.unitId())
++					.addValue("quantity", d.quantity())
++					.addValue("cost_price", d.costPrice())
++					.addValue("batch_number", blankToNull(d.batchNumber()), Types.VARCHAR)
++					.addValue("expiry_date", exp != null ? java.sql.Date.valueOf(exp) : null, Types.DATE);
++		}
++		namedJdbc.batchUpdate(sql, batch);
++	}
++
++	public Map<Integer, Integer> findBaseUnitIdsByProductIds(List<Integer> productIds) {
++		if (productIds == null || productIds.isEmpty()) {
++			return Map.of();
++		}
++		String sql = "SELECT id, product_id FROM productunits WHERE product_id IN (:pids) AND is_base_unit = TRUE";
++		List<Map<String, Object>> rows = namedJdbc.queryForList(sql, new MapSqlParameterSource("pids", productIds));
++		Map<Integer, Integer> map = new HashMap<>();
++		for (Map<String, Object> row : rows) {
++			map.put((Integer) row.get("product_id"), (Integer) row.get("id"));
++		}
++		return map;
++	}
++
++	public List<InventoryLockRow> findInventoryByProductsForUpdate(int locationId, List<Integer> productIds) {
++		if (productIds == null || productIds.isEmpty()) {
++			return List.of();
++		}
++		String sql = """
++				SELECT id, product_id, batch_number
++				FROM inventory
++				WHERE location_id = :loc AND product_id IN (:pids)
++				FOR UPDATE
++				""";
++		return namedJdbc.query(sql, new MapSqlParameterSource("loc", locationId).addValue("pids", productIds),
++				(rs, rn) -> new InventoryLockRow(rs.getLong("id"), rs.getInt("product_id"), rs.getString("batch_number")));
++	}
++
++	public void updateInventoryQuantitiesBatch(Map<Long, Integer> idToDelta) {
++		if (idToDelta == null || idToDelta.isEmpty()) {
++			return;
++		}
++		StringBuilder sb = new StringBuilder("UPDATE inventory SET quantity = quantity + CASE id ");
++		var src = new MapSqlParameterSource();
++		int i = 0;
++		for (var entry : idToDelta.entrySet()) {
++			String idParam = "id" + i;
++			String valParam = "v" + i;
++			sb.append("WHEN :").append(idParam).append(" THEN :").append(valParam).append(" ");
++			src.addValue(idParam, entry.getKey());
++			src.addValue(valParam, entry.getValue());
++			i++;
++		}
++		sb.append("END, updated_at = CURRENT_TIMESTAMP WHERE id IN (:ids)");
++		src.addValue("ids", new ArrayList<>(idToDelta.keySet()));
++		namedJdbc.update(sb.toString(), src);
++	}
++
++	public void batchInsertInventory(List<InventoryInsert> items) {
++		if (items == null || items.isEmpty()) {
++			return;
++		}
++		String sql = """
++				INSERT INTO inventory (product_id, location_id, batch_number, expiry_date, quantity, min_quantity)
++				VALUES (:pid, :loc, :batch, :exp, :qty, 0)
++				""";
++		MapSqlParameterSource[] batch = new MapSqlParameterSource[items.size()];
++		for (int i = 0; i < items.size(); i++) {
++			InventoryInsert it = items.get(i);
++			batch[i] = new MapSqlParameterSource("pid", it.productId())
++					.addValue("loc", it.locationId())
++					.addValue("batch", it.batchNumber(), Types.VARCHAR)
++					.addValue("exp", it.expiryDate() != null ? java.sql.Date.valueOf(it.expiryDate()) : null, Types.DATE)
++					.addValue("qty", it.quantity());
++		}
++		namedJdbc.batchUpdate(sql, batch);
++	}
++
++	public void batchInsertInventoryLogs(List<InventoryLogItem> items) {
++		if (items == null || items.isEmpty()) {
++			return;
++		}
++		String sql = """
++				INSERT INTO inventorylogs (product_id, action_type, quantity_change, unit_id, user_id, dispatch_id, receipt_id, from_location_id, to_location_id, reference_note)
++				VALUES (:pid, 'INBOUND', :qchg, :uid_unit, :user_id, NULL, :receipt_id, NULL, :to_loc, :note)
++				""";
++		MapSqlParameterSource[] batch = new MapSqlParameterSource[items.size()];
++		for (int i = 0; i < items.size(); i++) {
++			InventoryLogItem it = items.get(i);
++			batch[i] = new MapSqlParameterSource("pid", it.productId())
++					.addValue("qchg", it.quantityChange())
++					.addValue("uid_unit", it.unitId())
++					.addValue("user_id", it.userId(), Types.INTEGER)
++					.addValue("receipt_id", it.receiptId())
++					.addValue("to_loc", it.toLocationId())
++					.addValue("note", it.referenceNote(), Types.VARCHAR);
++		}
++		namedJdbc.batchUpdate(sql, batch);
++	}
++
++	private static String blankToNull(String s) {
++		if (s == null || s.isBlank()) {
++			return null;
++		}
++		return s.trim();
++	}
++
+ 	public Optional<Long> findInventoryIdForUpdate(int productId, int locationId, String batchNumber) {
+ 		String sql = """
+ 				SELECT i.id FROM inventory i
+ 				WHERE i.product_id = :pid AND i.location_id = :loc
+ 				  AND i.batch_number IS NOT DISTINCT FROM CAST(:batch AS varchar)
+@@ -300,21 +463,48 @@ public class StockReceiptLifecycleJdbcRepository {
+ 				""";
+ 		List<StockReceiptLineViewData> lines = namedJdbc.query(dsql, new MapSqlParameterSource("id", receiptId), VIEW_LINE);
+ 		return Optional.of(h.toView(lines));
+ 	}
+ 
+-	private record HeaderSnapshot(long id, String receiptCode, long supplierId, String supplierName, int staffId,
++	public List<StockReceiptLineViewData> loadDetailLines(long receiptId) {
++		String dsql = """
++				SELECT d.id, d.receipt_id, d.product_id, p.name AS product_name, p.sku_code, d.unit_id, pu.unit_name,
++				  d.quantity, d.cost_price, d.batch_number, d.expiry_date, d.line_total
++				FROM stockreceiptdetails d
++				INNER JOIN products p ON p.id = d.product_id
++				INNER JOIN productunits pu ON pu.id = d.unit_id
++				WHERE d.receipt_id = :id
++				ORDER BY d.id
++				""";
++		return namedJdbc.query(dsql, new MapSqlParameterSource("id", receiptId), VIEW_LINE);
++	}
++
++	public record NamePair(String supplierName, String staffName) {
++	}
++
++	public NamePair loadNames(int supplierId, int staffId) {
++		String sql = "SELECT (SELECT name FROM suppliers WHERE id = :supplierId) AS supplier_name, (SELECT full_name FROM users WHERE id = :staffId) AS staff_name";
++		return namedJdbc.queryForObject(sql,
++				new MapSqlParameterSource("supplierId", supplierId).addValue("staffId", staffId),
++				(rs, i) -> new NamePair(rs.getString("supplier_name"), rs.getString("staff_name")));
++	}
++
++	public record HeaderSnapshot(long id, String receiptCode, long supplierId, String supplierName, int staffId,
+ 			String staffName, LocalDate receiptDate, String status, String invoiceNumber, BigDecimal totalAmount, String notes,
+ 			Integer approvedBy, String approvedByName, Instant approvedAt, Integer reviewedBy, String reviewedByName,
+ 			Instant reviewedAt, String rejectionReason, Instant createdAt, Instant updatedAt) {
+ 		StockReceiptViewData toView(List<StockReceiptLineViewData> details) {
+ 			return new StockReceiptViewData(id, receiptCode, supplierId, supplierName, staffId, staffName, receiptDate, status,
+ 					invoiceNumber, totalAmount, notes, approvedBy, approvedByName, approvedAt, reviewedBy, reviewedByName,
+ 					reviewedAt, rejectionReason, createdAt, updatedAt, details);
+ 		}
+ 	}
+ 
++	public StockReceiptViewData buildView(HeaderSnapshot header, List<StockReceiptLineViewData> lines) {
++		return header.toView(lines);
++	}
++
+ 	private static final RowMapper<ReceiptHeaderLockRow> HEADER_LOCK_ROW = (rs, i) -> new ReceiptHeaderLockRow(rs.getLong("id"),
+ 			rs.getString("receipt_code"), rs.getLong("supplier_id"), rs.getInt("staff_id"),
+ 			rs.getObject("receipt_date", LocalDate.class), rs.getString("status"), rs.getString("invoice_number"),
+ 			rs.getBigDecimal("total_amount"), rs.getString("notes"));
+ 
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/receipts/lifecycle/StockReceiptLifecycleService.java b/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/receipts/lifecycle/StockReceiptLifecycleService.java
+index b166ee45..9c007c73 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/receipts/lifecycle/StockReceiptLifecycleService.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/receipts/lifecycle/StockReceiptLifecycleService.java
+@@ -1,19 +1,21 @@
+ package com.example.smart_erp.inventory.receipts.lifecycle;
+ 
+ import java.math.BigDecimal;
+ import java.math.RoundingMode;
++import java.time.Instant;
+ import java.time.LocalDate;
+ import java.time.format.DateTimeParseException;
++import java.util.ArrayList;
+ import java.util.HashMap;
+ import java.util.HashSet;
+ import java.util.List;
+ import java.util.Map;
+ import java.util.Objects;
+ import java.util.Set;
+ 
+-import org.springframework.dao.DuplicateKeyException;
++import org.springframework.context.ApplicationEventPublisher;
+ import org.springframework.security.core.Authentication;
+ import org.springframework.security.oauth2.jwt.Jwt;
+ import org.springframework.stereotype.Service;
+ import org.springframework.transaction.annotation.Transactional;
+ 
+@@ -22,10 +24,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
+ 
+ import com.example.smart_erp.auth.repository.SystemLogJdbcRepository;
+ import com.example.smart_erp.common.api.ApiErrorCode;
+ import com.example.smart_erp.common.exception.BusinessException;
+ import com.example.smart_erp.finance.ledger.BusinessFinanceLedgerPostingService;
++import com.example.smart_erp.inventory.receipts.lifecycle.StockReceiptLifecycleJdbcRepository.InventoryInsert;
++import com.example.smart_erp.inventory.receipts.lifecycle.StockReceiptLifecycleJdbcRepository.InventoryLogItem;
++import com.example.smart_erp.inventory.receipts.lifecycle.StockReceiptLifecycleJdbcRepository.InventoryLockRow;
++import com.example.smart_erp.inventory.receipts.lifecycle.StockReceiptLifecycleJdbcRepository.UnitRow;
+ import com.example.smart_erp.inventory.receipts.lifecycle.StockReceiptLifecycleJdbcRepository.ReceiptHeaderLockRow;
+ import com.example.smart_erp.inventory.receipts.response.StockReceiptViewData;
+ 
+ @Service
+ public class StockReceiptLifecycleService {
+@@ -42,18 +48,22 @@ public class StockReceiptLifecycleService {
+ 
+ 	private final StockReceiptNotifier stockReceiptNotifier;
+ 
+ 	private final BusinessFinanceLedgerPostingService financeLedgerPostingService;
+ 
++	private final ApplicationEventPublisher eventPublisher;
++
+ 	public StockReceiptLifecycleService(StockReceiptLifecycleJdbcRepository repo,
+ 			SystemLogJdbcRepository systemLogJdbcRepository, ObjectMapper objectMapper,
+-			StockReceiptNotifier stockReceiptNotifier, BusinessFinanceLedgerPostingService financeLedgerPostingService) {
++			StockReceiptNotifier stockReceiptNotifier, BusinessFinanceLedgerPostingService financeLedgerPostingService,
++			ApplicationEventPublisher eventPublisher) {
+ 		this.repo = repo;
+ 		this.systemLogJdbcRepository = systemLogJdbcRepository;
+ 		this.objectMapper = objectMapper;
+ 		this.stockReceiptNotifier = stockReceiptNotifier;
+ 		this.financeLedgerPostingService = financeLedgerPostingService;
++		this.eventPublisher = eventPublisher;
+ 	}
+ 
+ 	@Transactional
+ 	public StockReceiptViewData create(StockReceiptCreateRequest req, Jwt jwt) {
+ 		int staffId = StockReceiptAccessPolicy.parseUserId(jwt);
+@@ -67,18 +77,24 @@ public class StockReceiptLifecycleService {
+ 		for (int attempt = 0; attempt < RECEIPT_CODE_RETRY; attempt++) {
+ 			String code = nextReceiptCode(receiptDate.getYear());
+ 			try {
+ 				long id = repo.insertReceipt(code, req.supplierId(), staffId, receiptDate, status, invoice, total,
+ 						blankToNull(req.notes()));
+-				insertAllDetails(id, req.details());
+-				StockReceiptViewData created = loadOrThrow(id);
++				repo.batchInsertDetails(id, req.details());
++				// Avoid re-reading the entire receipt after creation
++				var names = repo.loadNames(req.supplierId(), staffId);
++				var header = new StockReceiptLifecycleJdbcRepository.HeaderSnapshot(id, code, req.supplierId(),
++						names.supplierName(), staffId, names.staffName(), receiptDate, status, invoice, total,
++						blankToNull(req.notes()), null, null, null, null, null, null, null, Instant.now(), Instant.now());
++				var lines = repo.loadDetailLines(id);
++				StockReceiptViewData created = header.toView(lines);
+ 				if ("Pending".equals(created.status())) {
+-					stockReceiptNotifier.notifyPendingApproval(staffId, id, created.receiptCode());
++					eventPublisher.publishEvent(new StockReceiptPendingApprovalEvent(staffId, id, created.receiptCode()));
+ 				}
+ 				return created;
+ 			}
+-			catch (DuplicateKeyException e) {
++			catch (org.springframework.dao.DuplicateKeyException e) {
+ 				if (attempt == RECEIPT_CODE_RETRY - 1) {
+ 					throw new BusinessException(ApiErrorCode.CONFLICT, "Trùng mã phiếu hoặc trùng lô trong cùng phiếu, vui lòng thử lại");
+ 				}
+ 			}
+ 		}
+@@ -127,11 +143,11 @@ public class StockReceiptLifecycleService {
+ 		String notesVal = req.notes() == null ? null : blankToNull(req.notes());
+ 		repo.updateHeaderAllowNullInvoiceNotes(id, req.supplierId(), req.receiptDate() != null ? receiptDate : null, setInv,
+ 				invVal, setNotes, notesVal, newDetails != null ? total : null);
+ 		if (newDetails != null) {
+ 			repo.deleteDetails(id);
+-			insertAllDetails(id, newDetails);
++			repo.batchInsertDetails(id, newDetails);
+ 		}
+ 		return loadOrThrow(id);
+ 	}
+ 
+ 	@Transactional
+@@ -162,11 +178,11 @@ public class StockReceiptLifecycleService {
+ 		if (repo.countDetails(id) == 0) {
+ 			throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Không thể gửi duyệt phiếu không có dòng chi tiết");
+ 		}
+ 		repo.updateStatusSubmit(id);
+ 		StockReceiptViewData submitted = loadOrThrow(id);
+-		stockReceiptNotifier.notifyPendingApproval(StockReceiptAccessPolicy.parseUserId(jwt), id, submitted.receiptCode());
++		eventPublisher.publishEvent(new StockReceiptPendingApprovalEvent(StockReceiptAccessPolicy.parseUserId(jwt), id, submitted.receiptCode()));
+ 		return submitted;
+ 	}
+ 
+ 	@Transactional
+ 	public StockReceiptViewData approve(long id, StockReceiptApproveRequest req, Jwt jwt, Authentication authentication) {
+@@ -191,23 +207,58 @@ public class StockReceiptLifecycleService {
+ 			BigDecimal baseBd = d.conversionRate().multiply(BigDecimal.valueOf(d.quantity())).setScale(0, RoundingMode.HALF_UP);
+ 			if (baseBd.compareTo(BigDecimal.valueOf(Integer.MAX_VALUE)) > 0 || baseBd.compareTo(BigDecimal.ZERO) < 0) {
+ 				throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Số lượng quy đổi không hợp lệ");
+ 			}
+ 			int baseQty = baseBd.intValueExact();
++		}
++
++		List<Integer> productIds = rows.stream().map(StockReceiptLifecycleJdbcRepository.ApproveDetailRow::productId).toList();
++		Map<Integer, Integer> baseUnitIdMap = repo.findBaseUnitIdsByProductIds(productIds);
++
++		List<Integer> distinctProductIds = productIds.stream().distinct().toList();
++		List<InventoryLockRow> lockedInvRows = repo.findInventoryByProductsForUpdate(req.inboundLocationId(), distinctProductIds);
++		Map<String, Long> existingKeyToId = new HashMap<>();
++		for (InventoryLockRow inv : lockedInvRows) {
++			String key = inv.productId() + "\0" + Objects.toString(inv.batchNumber(), "");
++			existingKeyToId.put(key, inv.id());
++		}
++
++		Map<Long, Integer> idToDelta = new HashMap<>();
++		List<InventoryInsert> newInventories = new ArrayList<>();
++		List<InventoryLogItem> logItems = new ArrayList<>();
++
++		for (var d : rows) {
++			BigDecimal baseBd = d.conversionRate().multiply(BigDecimal.valueOf(d.quantity())).setScale(0, RoundingMode.HALF_UP);
++			int baseQty = baseBd.intValueExact();
+ 			String batch = blankToNull(d.batchNumber());
+-			var existingInv = repo.findInventoryIdForUpdate(d.productId(), req.inboundLocationId(), batch);
+-			if (existingInv.isPresent()) {
+-				repo.updateInventoryQuantity(existingInv.get(), baseQty);
++			String key = d.productId() + "\0" + Objects.toString(batch, "");
++			Long existingId = existingKeyToId.get(key);
++			if (existingId != null) {
++				idToDelta.merge(existingId, baseQty, Integer::sum);
+ 			}
+ 			else {
+-				repo.insertInventory(d.productId(), req.inboundLocationId(), batch, d.expiryDate(), baseQty);
++				newInventories.add(new InventoryInsert(d.productId(), req.inboundLocationId(), batch, d.expiryDate(), baseQty));
++			}
++			int baseUnitId = baseUnitIdMap.get(d.productId());
++			if (baseUnitId == 0) {
++				throw new BusinessException(ApiErrorCode.BAD_REQUEST,
++						"Sản phẩm không có đơn vị cơ sở: " + d.productId());
+ 			}
+-			int baseUnitId = repo.findBaseUnitId(d.productId()).orElseThrow(() -> new BusinessException(ApiErrorCode.BAD_REQUEST,
+-					"Sản phẩm không có đơn vị cơ sở: " + d.productId()));
+ 			String note = "Phiếu " + h.receiptCode();
+-			repo.insertInventoryLog(d.productId(), baseQty, baseUnitId, approverId, id, req.inboundLocationId(), note);
++			logItems.add(new InventoryLogItem(d.productId(), baseQty, baseUnitId, approverId, id, req.inboundLocationId(), note));
+ 		}
++
++		if (!idToDelta.isEmpty()) {
++			repo.updateInventoryQuantitiesBatch(idToDelta);
++		}
++		if (!newInventories.isEmpty()) {
++			repo.batchInsertInventory(newInventories);
++		}
++		if (!logItems.isEmpty()) {
++			repo.batchInsertInventoryLogs(logItems);
++		}
++
+ 		repo.updateApprove(id, approverId);
+ 		financeLedgerPostingService.postStockReceiptPurchaseCostIfAbsent(h.receiptDate(), (int) id, h.totalAmount(),
+ 				h.receiptCode(), approverId);
+ 		writeStockReceiptAudit(approverId, "STOCK_RECEIPT_APPROVE", "Phê duyệt phiếu nhập kho " + h.receiptCode(),
+ 				Map.of("receiptId", id, "receiptCode", h.receiptCode(), "inboundLocationId", req.inboundLocationId()));
+@@ -267,21 +318,37 @@ public class StockReceiptLifecycleService {
+ 			throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Nhà cung cấp không tồn tại hoặc không Active");
+ 		}
+ 	}
+ 
+ 	private void validateDetails(List<StockReceiptDetailRequest> details, LocalDate receiptDate, boolean requireBaseUnit) {
++		List<Integer> productIds = new ArrayList<>();
++		List<int[]> tuples = new ArrayList<>();
++		for (StockReceiptDetailRequest d : details) {
++			productIds.add(d.productId());
++			tuples.add(new int[] { d.unitId(), d.productId() });
++		}
++		List<Integer> activeIds = repo.findActiveProductIds(productIds);
++		Set<Integer> activeSet = new HashSet<>(activeIds);
++		List<UnitRow> unitRows = repo.findUnitsByTuples(tuples);
++		Map<String, UnitRow> unitMap = new HashMap<>();
++		for (UnitRow u : unitRows) {
++			unitMap.put(u.id() + ":" + u.productId(), u);
++		}
++
+ 		Set<String> batchKeys = new HashSet<>();
+ 		for (int i = 0; i < details.size(); i++) {
+ 			StockReceiptDetailRequest d = details.get(i);
+ 			String prefix = "details[" + i + "].";
+-			if (!repo.productActive(d.productId())) {
++			if (!activeSet.contains(d.productId())) {
+ 				throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Sản phẩm không tồn tại hoặc không Active",
+ 						Map.of(prefix + "productId", "Sản phẩm không hợp lệ"));
+ 			}
+-			var unit = repo.findUnit(d.unitId(), d.productId())
+-					.orElseThrow(() -> new BusinessException(ApiErrorCode.BAD_REQUEST, "unitId không thuộc productId",
+-							Map.of(prefix + "unitId", "Đơn vị không thuộc sản phẩm")));
++			UnitRow unit = unitMap.get(d.unitId() + ":" + d.productId());
++			if (unit == null) {
++				throw new BusinessException(ApiErrorCode.BAD_REQUEST, "unitId không thuộc productId",
++						Map.of(prefix + "unitId", "Đơn vị không thuộc sản phẩm"));
++			}
+ 			if (requireBaseUnit && !unit.baseUnit()) {
+ 				throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Chỉ chấp nhận đơn vị cơ sở (is_base_unit)",
+ 						Map.of(prefix + "unitId", "Phải là đơn vị cơ sở"));
+ 			}
+ 			LocalDate exp = null;
+@@ -305,15 +372,11 @@ public class StockReceiptLifecycleService {
+ 			}
+ 		}
+ 	}
+ 
+ 	private void insertAllDetails(long receiptId, List<StockReceiptDetailRequest> details) {
+-		for (StockReceiptDetailRequest d : details) {
+-			LocalDate exp = parseExpiryOrNull(d.expiryDate());
+-			repo.insertDetail(receiptId, d.productId(), d.unitId(), d.quantity(), d.costPrice(), blankToNull(d.batchNumber()),
+-					exp);
+-		}
++		repo.batchInsertDetails(receiptId, details);
+ 	}
+ 
+ 	private static LocalDate parseExpiryOrNull(String s) {
+ 		if (s == null || s.isBlank()) {
+ 			return null;
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/receipts/lifecycle/StockReceiptNotifier.java b/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/receipts/lifecycle/StockReceiptNotifier.java
+index 422e6be0..c06c7a71 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/receipts/lifecycle/StockReceiptNotifier.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/receipts/lifecycle/StockReceiptNotifier.java
+@@ -1,8 +1,10 @@
+ package com.example.smart_erp.inventory.receipts.lifecycle;
+ 
+ import org.springframework.stereotype.Component;
++import org.springframework.transaction.event.TransactionPhase;
++import org.springframework.transaction.event.TransactionalEventListener;
+ 
+ import com.example.smart_erp.notifications.repository.NotificationJdbcRepository;
+ 
+ /**
+  * Thông báo phiếu nhập chờ duyệt — chỉ gửi tới role Admin (SRS PRD admin-notifications).
+@@ -14,10 +16,15 @@ public class StockReceiptNotifier {
+ 
+ 	public StockReceiptNotifier(NotificationJdbcRepository notificationRepo) {
+ 		this.notificationRepo = notificationRepo;
+ 	}
+ 
++	@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
++	public void onStockReceiptPendingApproval(StockReceiptPendingApprovalEvent event) {
++		notifyPendingApproval(event.actorUserId(), event.receiptId(), event.receiptCode());
++	}
++
+ 	public void notifyPendingApproval(int actorUserId, long receiptId, String receiptCode) {
+ 		int refId = Math.toIntExact(receiptId);
+ 		String title = "Phiếu nhập chờ duyệt";
+ 		String message = "Phiếu " + receiptCode + " đã gửi duyệt — Admin vui lòng kiểm tra.";
+ 		for (int recipientId : notificationRepo.findActiveAdminUserIds()) {
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/receipts/repository/StockReceiptListJdbcRepository.java b/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/receipts/repository/StockReceiptListJdbcRepository.java
+index b22e7522..f6b9452b 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/receipts/repository/StockReceiptListJdbcRepository.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/receipts/repository/StockReceiptListJdbcRepository.java
+@@ -28,10 +28,15 @@ public class StockReceiptListJdbcRepository {
+ 			FROM stockreceipts sr
+ 			INNER JOIN suppliers s ON s.id = sr.supplier_id
+ 			INNER JOIN users u_staff ON u_staff.id = sr.staff_id
+ 			LEFT JOIN users u_appr ON u_appr.id = sr.approved_by
+ 			LEFT JOIN users u_rev ON u_rev.id = sr.reviewed_by
++			LEFT JOIN LATERAL (
++			  SELECT COUNT(*)::int AS line_count
++			  FROM stockreceiptdetails d
++			  WHERE d.receipt_id = sr.id
++			) line_agg ON true
+ 			""";
+ 
+ 	private static final String SELECT_LIST = """
+ 			SELECT
+ 			  sr.id,
+@@ -52,11 +57,11 @@ public class StockReceiptListJdbcRepository {
+ 			  u_rev.full_name AS reviewed_by_name,
+ 			  sr.reviewed_at,
+ 			  sr.rejection_reason,
+ 			  sr.created_at,
+ 			  sr.updated_at,
+-			  (SELECT COUNT(*)::int FROM stockreceiptdetails d WHERE d.receipt_id = sr.id) AS line_count
++			  line_agg.line_count
+ 			""";
+ 
+ 	private final NamedParameterJdbcTemplate namedJdbc;
+ 
+ 	public StockReceiptListJdbcRepository(NamedParameterJdbcTemplate namedJdbc) {
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/repository/InventoryListJdbcRepository.java b/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/repository/InventoryListJdbcRepository.java
+index 400c7266..ec477517 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/repository/InventoryListJdbcRepository.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/repository/InventoryListJdbcRepository.java
+@@ -153,12 +153,13 @@ public class InventoryListJdbcRepository {
+ 	}
+ 
+ 	public List<InventoryListRow> loadPage(InventoryListQuery q) {
+ 		Filter f = buildFilter(q);
+ 		int offset = (q.page() - 1) * q.limit();
+-		// page/limit đã validate; ghép số an toàn hơn mở rộng tên tham số
+-		String sql = SELECT_LIST_COLUMNS + BASE_FROM + f.where + " ORDER BY i.id ASC LIMIT " + q.limit() + " OFFSET " + offset;
++		String sql = SELECT_LIST_COLUMNS + BASE_FROM + f.where + " ORDER BY i.id ASC LIMIT :_lim OFFSET :_off";
++		f.source.addValue("_lim", q.limit());
++		f.source.addValue("_off", offset);
+ 		return namedJdbc.query(sql, f.source, ROW);
+ 	}
+ 
+ 	/** Task006 — một dòng tồn (cùng cột với list). */
+ 	public Optional<InventoryListRow> findById(long id) {
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/repository/InventoryPatchJdbcRepository.java b/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/repository/InventoryPatchJdbcRepository.java
+index 0eb42adb..d3c0f67f 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/repository/InventoryPatchJdbcRepository.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/repository/InventoryPatchJdbcRepository.java
+@@ -71,11 +71,11 @@ public class InventoryPatchJdbcRepository {
+ 		String sql = """
+ 				SELECT COUNT(*)::int
+ 				FROM inventory
+ 				WHERE product_id = :_product_id
+ 				  AND location_id = :_location_id
+-				  AND COALESCE(batch_number, '') = COALESCE(:_batch_key, '')
++				  AND batch_number IS NOT DISTINCT FROM :_batch_key
+ 				  AND id <> :_exclude_id
+ 				""";
+ 		var src = new MapSqlParameterSource("_product_id", productId)
+ 				.addValue("_location_id", locationId)
+ 				.addValue("_batch_key", batchKey, Types.VARCHAR)
+@@ -137,10 +137,25 @@ public class InventoryPatchJdbcRepository {
+ 				.addValue("_message", message)
+ 				.addValue("_ref_id", inventoryId);
+ 		namedJdbc.update(sql, src);
+ 	}
+ 
++	public void insertNotificationsForOwners(String title, String message, int refId, int excludeUserId) {
++		String sql = """
++				INSERT INTO notifications (user_id, notification_type, title, message, is_read, reference_type, reference_id)
++				SELECT u.id, 'SystemAlert', :_title, :_message, FALSE, 'Inventory', :_ref_id
++				FROM users u
++				INNER JOIN roles r ON r.id = u.role_id
++				WHERE r.name = 'Owner' AND u.status = 'Active' AND u.id <> :_exclude_id
++				""";
++		var src = new MapSqlParameterSource("_title", title)
++				.addValue("_message", message)
++				.addValue("_ref_id", refId)
++				.addValue("_exclude_id", excludeUserId);
++		namedJdbc.update(sql, src);
++	}
++
+ 	private static InventoryLockRow mapLockRow(ResultSet rs, int i) throws SQLException {
+ 		int uid = rs.getInt("unit_id");
+ 		boolean wasNull = rs.wasNull();
+ 		return new InventoryLockRow(
+ 				rs.getLong("id"),
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/service/InventoryPatchService.java b/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/service/InventoryPatchService.java
+index 00bfcb0a..a63b4633 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/service/InventoryPatchService.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/inventory/service/InventoryPatchService.java
+@@ -175,26 +175,24 @@ public class InventoryPatchService {
+ 		long inventoryId = data.id();
+ 		String actorName = jwt.hasClaim("name") ? Objects.toString(jwt.getClaim("name"), "user") : "user";
+ 		String sku = StringUtils.hasText(data.skuCode()) ? data.skuCode() : "—";
+ 		String title = "Nhân viên cập nhật tồn kho";
+ 		String message = actorName + " vừa cập nhật meta tồn kho SKU " + sku + " (id=" + inventoryId + ").";
+-		for (int ownerId : patchRepo.findActiveOwnerUserIds()) {
+-			patchRepo.insertNotificationForOwner(ownerId, title, message, (int) inventoryId);
+-		}
++		int userId = parseUserId(jwt);
++		patchRepo.insertNotificationsForOwners(title, message, (int) inventoryId, userId);
+ 	}
+ 
+ 	private void notifyOwnersBulkPatch(List<InventoryListItemData> updated, Jwt jwt, int rowCount) {
+ 		if (!shouldNotifyOwners(jwt) || updated.isEmpty()) {
+ 			return;
+ 		}
+ 		String actorName = jwt.hasClaim("name") ? Objects.toString(jwt.getClaim("name"), "user") : "user";
+ 		String title = "Nhân viên cập nhật tồn kho";
+ 		String message = actorName + " vừa cập nhật meta " + rowCount + " dòng tồn kho (hàng loạt).";
+ 		int refId = (int) updated.get(0).id();
+-		for (int ownerId : patchRepo.findActiveOwnerUserIds()) {
+-			patchRepo.insertNotificationForOwner(ownerId, title, message, refId);
+-		}
++		int userId = parseUserId(jwt);
++		patchRepo.insertNotificationsForOwners(title, message, refId, userId);
+ 	}
+ 
+ 	private static boolean shouldNotifyOwners(Jwt jwt) {
+ 		String role = jwt.getClaimAsString("role");
+ 		if (!StringUtils.hasText(role)) {
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/notifications/repository/NotificationJdbcRepository.java b/backend/smart-erp/src/main/java/com/example/smart_erp/notifications/repository/NotificationJdbcRepository.java
+index 47e183aa..21b44af3 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/notifications/repository/NotificationJdbcRepository.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/notifications/repository/NotificationJdbcRepository.java
+@@ -90,10 +90,28 @@ public class NotificationJdbcRepository {
+ 		var src = new MapSqlParameterSource("_uid", recipientUserId).addValue("_title", title)
+ 				.addValue("_message", message).addValue("_ref_id", refId);
+ 		namedJdbc.update(sql, src);
+ 	}
+ 
++	public void batchInsertPasswordResetRequested(List<Integer> recipientUserIds, String title, String message, long requestId) {
++		int refId = Math.toIntExact(requestId);
++		String sql = """
++				INSERT INTO notifications (user_id, notification_type, title, message, is_read,
++					reference_type, reference_id)
++				VALUES (:_uid, 'PasswordResetRequest', :_title, :_message, FALSE,
++					'StaffPasswordResetRequest', :_ref_id)
++				""";
++		MapSqlParameterSource[] batch = new MapSqlParameterSource[recipientUserIds.size()];
++		for (int i = 0; i < recipientUserIds.size(); i++) {
++			batch[i] = new MapSqlParameterSource("_uid", recipientUserIds.get(i))
++					.addValue("_title", title)
++					.addValue("_message", message)
++					.addValue("_ref_id", refId);
++		}
++		namedJdbc.batchUpdate(sql, batch);
++	}
++
+ 	public long countForUser(int userId, Boolean unreadOnly) {
+ 		boolean unread = Boolean.TRUE.equals(unreadOnly);
+ 		String sql = "SELECT COUNT(*) FROM notifications WHERE user_id = :_uid "
+ 				+ (unread ? "AND is_read = FALSE" : "");
+ 		var src = new MapSqlParameterSource("_uid", userId);
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/notifications/service/NotificationsService.java b/backend/smart-erp/src/main/java/com/example/smart_erp/notifications/service/NotificationsService.java
+index fb78f45e..a59d6e4b 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/notifications/service/NotificationsService.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/notifications/service/NotificationsService.java
+@@ -56,10 +56,8 @@ public class NotificationsService {
+ 		if (recipients.isEmpty()) {
+ 			return;
+ 		}
+ 		String title = "Yêu cầu đặt lại mật khẩu";
+ 		String msg = String.format("Nhân viên %s đã gửi yêu cầu đặt lại mật khẩu.", staffUsername.strip());
+-		for (int uid : recipients) {
+-			notificationJdbcRepository.insertPasswordResetRequested(uid, title, msg, passwordResetRequestId);
+-		}
++		notificationJdbcRepository.batchInsertPasswordResetRequested(recipients, title, msg, passwordResetRequestId);
+ 	}
+ }
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/sales/repository/SalesOrderJdbcRepository.java b/backend/smart-erp/src/main/java/com/example/smart_erp/sales/repository/SalesOrderJdbcRepository.java
+index 7cb15bce..5183929b 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/sales/repository/SalesOrderJdbcRepository.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/sales/repository/SalesOrderJdbcRepository.java
+@@ -3,16 +3,20 @@ package com.example.smart_erp.sales.repository;
+ import java.math.BigDecimal;
+ import java.sql.Timestamp;
+ import java.sql.Types;
+ import java.time.Instant;
+ import java.time.LocalDate;
++import java.util.Collections;
++import java.util.HashSet;
+ import java.util.List;
+ import java.util.Map;
+ import java.util.Optional;
++import java.util.Set;
+ 
+ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
++import org.springframework.jdbc.core.namedparam.SqlParameterSource;
+ import org.springframework.jdbc.support.GeneratedKeyHolder;
+ import org.springframework.jdbc.support.KeyHolder;
+ import org.springframework.stereotype.Repository;
+ 
+ import com.example.smart_erp.sales.response.SalesOrderDetailData;
+@@ -272,13 +276,14 @@ public class SalesOrderJdbcRepository {
+ 		namedJdbc.update(sql, p, kh, new String[] { "id" });
+ 		Number key = kh.getKey();
+ 		return key == null ? 0 : key.intValue();
+ 	}
+ 
+-	public void updateOrderCode(int orderId, String orderCode) {
++	public String updateOrderCode(int orderId, String orderCode) {
+ 		namedJdbc.update("UPDATE salesorders SET order_code = :code WHERE id = :id",
+ 				Map.of("code", orderCode, "id", orderId));
++		return orderCode;
+ 	}
+ 
+ 	public Optional<String> findOrderCode(int orderId) {
+ 		String code = namedJdbc.queryForObject("SELECT order_code FROM salesorders WHERE id = :id LIMIT 1",
+ 				Map.of("id", orderId), String.class);
+@@ -290,10 +295,48 @@ public class SalesOrderJdbcRepository {
+ 				INSERT INTO orderdetails (order_id, product_id, unit_id, quantity, price_at_time)
+ 				VALUES (:oid, :pid, :uid, :qty, :price)
+ 				""", Map.of("oid", orderId, "pid", productId, "uid", unitId, "qty", quantity, "price", unitPrice));
+ 	}
+ 
++	public void batchInsertOrderLines(int orderId, List<LineInput> lines) {
++		if (lines == null || lines.isEmpty()) {
++			return;
++		}
++		String sql = """
++				INSERT INTO orderdetails (order_id, product_id, unit_id, quantity, price_at_time)
++				VALUES (:oid, :pid, :uid, :qty, :price)
++				""";
++		SqlParameterSource[] batch = lines.stream()
++				.map(l -> new MapSqlParameterSource("oid", orderId).addValue("pid", l.productId())
++						.addValue("uid", l.unitId()).addValue("qty", l.quantity()).addValue("price", l.unitPrice()))
++				.toArray(SqlParameterSource[]::new);
++		namedJdbc.batchUpdate(sql, batch);
++	}
++
++	public record LineInput(int productId, int unitId, int quantity, BigDecimal unitPrice) {
++	}
++
++	public record ProductUnitPair(int productId, int unitId) {
++	}
++
++	public Set<ProductUnitPair> findExistingProductUnitPairs(List<ProductUnitPair> pairs) {
++		if (pairs == null || pairs.isEmpty()) {
++			return Collections.emptySet();
++		}
++		Integer[] pids = pairs.stream().map(ProductUnitPair::productId).toArray(Integer[]::new);
++		Integer[] uids = pairs.stream().map(ProductUnitPair::unitId).toArray(Integer[]::new);
++		String sql = """
++				SELECT product_id, unit_id FROM productunits
++				WHERE (product_id, unit_id) IN (
++				  SELECT * FROM unnest(:pids, :uids) AS t(product_id, unit_id)
++				)
++				""";
++		List<ProductUnitPair> rows = namedJdbc.query(sql, Map.of("pids", pids, "uids", uids),
++				(rs, rn) -> new ProductUnitPair(rs.getInt("product_id"), rs.getInt("unit_id")));
++		return new HashSet<>(rows);
++	}
++
+ 	public Optional<OrderLockRow> lockOrderForUpdate(int id) {
+ 		String sql = """
+ 				SELECT id, status, order_channel, order_code, payment_status, total_amount, discount_amount,
+ 				  cancelled_at, cancelled_by, voucher_id
+ 				FROM salesorders WHERE id = :id FOR UPDATE
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/sales/repository/VoucherJdbcRepository.java b/backend/smart-erp/src/main/java/com/example/smart_erp/sales/repository/VoucherJdbcRepository.java
+index 33105eec..c617ce2a 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/sales/repository/VoucherJdbcRepository.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/sales/repository/VoucherJdbcRepository.java
+@@ -39,11 +39,11 @@ public class VoucherJdbcRepository {
+ 		}
+ 		String sql = """
+ 				SELECT id, code, name, discount_type, discount_value, is_active, valid_from, valid_to,
+ 				       used_count, max_uses, created_at
+ 				FROM vouchers
+-				WHERE UPPER(TRIM(code)) = UPPER(TRIM(:code))
++				WHERE code = :code
+ 				LIMIT 1
+ 				FOR UPDATE
+ 				""";
+ 		List<VoucherRow> rows = namedJdbc.query(sql, Map.of("code", code), (rs, rn) -> mapRow(rs));
+ 		return rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst());
+@@ -127,11 +127,11 @@ public class VoucherJdbcRepository {
+ 	private Optional<VoucherRow> loadByCodeIgnoreCase(String code) {
+ 		String sql = """
+ 				SELECT id, code, name, discount_type, discount_value, is_active, valid_from, valid_to,
+ 				       used_count, max_uses, created_at
+ 				FROM vouchers
+-				WHERE UPPER(TRIM(code)) = UPPER(TRIM(:code))
++				WHERE code = :code
+ 				LIMIT 1
+ 				""";
+ 		List<VoucherRow> rows = namedJdbc.query(sql, Map.of("code", code), (rs, rn) -> mapRow(rs));
+ 		return rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst());
+ 	}
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/sales/service/SalesOrderService.java b/backend/smart-erp/src/main/java/com/example/smart_erp/sales/service/SalesOrderService.java
+index 7afe7912..93134ff9 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/sales/service/SalesOrderService.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/sales/service/SalesOrderService.java
+@@ -235,14 +235,14 @@ public class SalesOrderService {
+ 				status, ch, payment, body.shippingAddress(), body.notes(), null, body.refSalesOrderId(), null, null);
+ 		if (id <= 0) {
+ 			throw new BusinessException(ApiErrorCode.INTERNAL_SERVER_ERROR, "Không tạo được đơn hàng");
+ 		}
+ 		salesOrderJdbcRepository.updateOrderCode(id, buildOrderCode(id));
+-		for (SalesOrderLineRequest line : body.lines()) {
+-			salesOrderJdbcRepository.insertOrderLine(id, line.productId(), line.unitId(), line.quantity(),
+-					line.unitPrice());
+-		}
++		var lineInputs = body.lines().stream()
++				.map(l -> new SalesOrderJdbcRepository.LineInput(l.productId(), l.unitId(), l.quantity(), l.unitPrice()))
++				.toList();
++		salesOrderJdbcRepository.batchInsertOrderLines(id, lineInputs);
+ 		salesOrderJdbcRepository.loadOrderFinancialForLedger(id)
+ 				.ifPresent(fin -> financeLedgerPostingService.tryPostOrderLedgerOnFinancialState(fin, uid));
+ 		return getById(id);
+ 	}
+ 
+@@ -294,16 +294,15 @@ public class SalesOrderService {
+ 		int id = salesOrderJdbcRepository.insertOrderHeader(tempCode, customerId, uid, subtotal, totalDiscount,
+ 				"Delivered", "Retail", payment, null, body.notes(), null, null, voucherId, shiftRef);
+ 		if (id <= 0) {
+ 			throw new BusinessException(ApiErrorCode.INTERNAL_SERVER_ERROR, "Không tạo được đơn hàng");
+ 		}
+-		salesOrderJdbcRepository.updateOrderCode(id, buildOrderCode(id));
+-		for (SalesOrderLineRequest line : body.lines()) {
+-			salesOrderJdbcRepository.insertOrderLine(id, line.productId(), line.unitId(), line.quantity(),
+-					line.unitPrice());
+-		}
+-		String orderCode = salesOrderJdbcRepository.findOrderCode(id).orElseGet(() -> buildOrderCode(id));
++		String orderCode = salesOrderJdbcRepository.updateOrderCode(id, buildOrderCode(id));
++		var lineInputs = body.lines().stream()
++				.map(l -> new SalesOrderJdbcRepository.LineInput(l.productId(), l.unitId(), l.quantity(), l.unitPrice()))
++				.toList();
++		salesOrderJdbcRepository.batchInsertOrderLines(id, lineInputs);
+ 		retailStockService.deductStockForRetailCheckout(id, orderCode, uid, body.lines());
+ 		if (voucherId != null) {
+ 			voucherJdbcRepository.incrementUsedCount(voucherId);
+ 			voucherJdbcRepository.insertRedemption(voucherId, id);
+ 		}
+@@ -541,14 +540,24 @@ public class SalesOrderService {
+ 				throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Số lượng dòng không hợp lệ");
+ 			}
+ 			if (line.unitPrice() == null || line.unitPrice().signum() < 0) {
+ 				throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Đơn giá không hợp lệ");
+ 			}
+-			if (!salesOrderJdbcRepository.existsProductUnitForProduct(line.productId(), line.unitId())) {
++		}
++		List<Integer> productIds = lines.stream().map(SalesOrderLineRequest::productId).distinct().toList();
++		java.util.Set<Integer> existingProductIds = productJdbcRepository.findExistingProductIds(productIds);
++		List<SalesOrderJdbcRepository.ProductUnitPair> pairs = lines.stream()
++				.map(l -> new SalesOrderJdbcRepository.ProductUnitPair(l.productId(), l.unitId()))
++				.distinct()
++				.toList();
++		java.util.Set<SalesOrderJdbcRepository.ProductUnitPair> existingPairs = salesOrderJdbcRepository
++				.findExistingProductUnitPairs(pairs);
++		for (SalesOrderLineRequest line : lines) {
++			if (!existingPairs.contains(new SalesOrderJdbcRepository.ProductUnitPair(line.productId(), line.unitId()))) {
+ 				throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Đơn vị không thuộc sản phẩm");
+ 			}
+-			if (!productJdbcRepository.existsProductId(line.productId())) {
++			if (!existingProductIds.contains(line.productId())) {
+ 				throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Sản phẩm không tồn tại");
+ 			}
+ 			validateUnitPriceAgainstCatalog(line.productId(), line.unitId(), line.unitPrice());
+ 		}
+ 	}
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/sales/stock/RetailStockJdbcRepository.java b/backend/smart-erp/src/main/java/com/example/smart_erp/sales/stock/RetailStockJdbcRepository.java
+index 5c9ff94a..53e2315c 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/sales/stock/RetailStockJdbcRepository.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/sales/stock/RetailStockJdbcRepository.java
+@@ -2,16 +2,19 @@ package com.example.smart_erp.sales.stock;
+ 
+ import java.math.BigDecimal;
+ import java.sql.Date;
+ import java.sql.Types;
+ import java.time.LocalDate;
++import java.util.Collections;
++import java.util.LinkedHashMap;
+ import java.util.List;
+ import java.util.Map;
+ import java.util.Optional;
+ 
+ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
++import org.springframework.jdbc.core.namedparam.SqlParameterSource;
+ import org.springframework.jdbc.support.GeneratedKeyHolder;
+ import org.springframework.jdbc.support.KeyHolder;
+ import org.springframework.stereotype.Repository;
+ 
+ @SuppressWarnings("null")
+@@ -57,19 +60,36 @@ public class RetailStockJdbcRepository {
+ 		});
+ 	}
+ 
+ 	public List<InventoryBucketRow> lockInventoryBucketsFefo(int productId, int locationId) {
+ 		String sql = """
+-				SELECT id, quantity, batch_number, expiry_date
++				SELECT id, product_id, quantity, batch_number, expiry_date
+ 				FROM inventory
+ 				WHERE product_id = :pid AND location_id = :loc AND quantity > 0
+ 				ORDER BY expiry_date NULLS LAST, id
+ 				FOR UPDATE
+ 				""";
+ 		return namedJdbc.query(sql, new MapSqlParameterSource("pid", productId).addValue("loc", locationId),
+ 				(rs, rn) -> new InventoryBucketRow(rs.getLong("id"), rs.getInt("quantity"), rs.getString("batch_number"),
+-						rs.getObject("expiry_date", LocalDate.class)));
++						rs.getObject("expiry_date", LocalDate.class), rs.getInt("product_id")));
++	}
++
++	public List<InventoryBucketRow> lockInventoryBucketsFefoBatch(List<Integer> productIds, int locationId) {
++		if (productIds == null || productIds.isEmpty()) {
++			return Collections.emptyList();
++		}
++		Integer[] ids = productIds.toArray(new Integer[0]);
++		String sql = """
++				SELECT id, product_id, quantity, batch_number, expiry_date
++				FROM inventory
++				WHERE product_id = ANY(:pids) AND location_id = :loc AND quantity > 0
++				ORDER BY product_id, expiry_date NULLS LAST, id
++				FOR UPDATE
++				""";
++		return namedJdbc.query(sql, new MapSqlParameterSource("pids", ids).addValue("loc", locationId),
++				(rs, rn) -> new InventoryBucketRow(rs.getLong("id"), rs.getInt("quantity"), rs.getString("batch_number"),
++						rs.getObject("expiry_date", LocalDate.class), rs.getInt("product_id")));
+ 	}
+ 
+ 	public void deductInventory(long inventoryId, int deductBaseQty) {
+ 		namedJdbc.update(
+ 				"UPDATE inventory SET quantity = quantity - :d, updated_at = CURRENT_TIMESTAMP WHERE id = :id",
+@@ -147,10 +167,88 @@ public class RetailStockJdbcRepository {
+ 		namedJdbc.update(sql, new MapSqlParameterSource("pid", productId).addValue("qchg", addBaseQty)
+ 				.addValue("unit_id", baseUnitId).addValue("uid", userId).addValue("did", dispatchId)
+ 				.addValue("to_loc", toLocationId).addValue("note", referenceNote, Types.VARCHAR));
+ 	}
+ 
++	public Map<Integer, Integer> findBaseUnitIds(List<Integer> productIds) {
++		if (productIds == null || productIds.isEmpty()) {
++			return Collections.emptyMap();
++		}
++		Integer[] ids = productIds.toArray(new Integer[0]);
++		String sql = """
++				SELECT product_id, id FROM productunits
++				WHERE product_id = ANY(:ids) AND is_base_unit = TRUE
++				""";
++		List<Map<Integer, Integer>> rows = namedJdbc.query(sql, Map.of("ids", ids),
++				(rs, rn) -> Map.of(rs.getInt("product_id"), rs.getInt("id")));
++		Map<Integer, Integer> result = new LinkedHashMap<>();
++		for (Map<Integer, Integer> m : rows) {
++			for (Map.Entry<Integer, Integer> e : m.entrySet()) {
++				result.put(e.getKey(), e.getValue());
++			}
++		}
++		return result;
++	}
++
++	public void batchInsertInventoryLogOutbound(List<LogEntry> entries) {
++		if (entries == null || entries.isEmpty()) {
++			return;
++		}
++		String sql = """
++				INSERT INTO inventorylogs (
++				  product_id, action_type, quantity_change, unit_id, user_id,
++				  dispatch_id, receipt_id, from_location_id, to_location_id, reference_note
++				) VALUES (
++				  :pid, 'OUTBOUND', :qchg, :unit_id, :uid,
++				  :did, NULL, :from_loc, NULL, :note
++				)
++				""";
++		SqlParameterSource[] batch = entries.stream()
++				.map(e -> new MapSqlParameterSource("pid", e.productId()).addValue("qchg", -e.quantity())
++						.addValue("unit_id", e.unitId()).addValue("uid", e.userId()).addValue("did", e.dispatchId())
++						.addValue("from_loc", e.fromLocationId()).addValue("note", e.referenceNote(), Types.VARCHAR))
++				.toArray(SqlParameterSource[]::new);
++		namedJdbc.batchUpdate(sql, batch);
++	}
++
++	public record LogEntry(int productId, int quantity, int unitId, int userId, long dispatchId, int fromLocationId,
++			String referenceNote) {
++	}
++
++	public record ProductUnitPair(int productId, int unitId) {
++	}
++
++	public Map<ProductUnitPair, BigDecimal> findCurrentCostPrices(List<ProductUnitPair> pairs) {
++		if (pairs == null || pairs.isEmpty()) {
++			return Collections.emptyMap();
++		}
++		Integer[] pids = pairs.stream().map(ProductUnitPair::productId).toArray(Integer[]::new);
++		Integer[] uids = pairs.stream().map(ProductUnitPair::unitId).toArray(Integer[]::new);
++		String sql = """
++				SELECT product_id, unit_id, cost_price FROM (
++				  SELECT product_id, unit_id, cost_price,
++				         ROW_NUMBER() OVER (PARTITION BY product_id, unit_id ORDER BY effective_date DESC, id DESC) AS rn
++				  FROM productpricehistory
++				  WHERE (product_id, unit_id) IN (
++				    SELECT * FROM unnest(:pids, :uids) AS t(product_id, unit_id)
++				  )
++				    AND effective_date <= CURRENT_DATE
++				) t
++				WHERE rn = 1
++				""";
++		List<Map.Entry<ProductUnitPair, BigDecimal>> rows = namedJdbc.query(sql, Map.of("pids", pids, "uids", uids),
++				(rs, rn) -> Map.entry(new ProductUnitPair(rs.getInt("product_id"), rs.getInt("unit_id")),
++						rs.getBigDecimal("cost_price")));
++		Map<ProductUnitPair, BigDecimal> result = new LinkedHashMap<>();
++		for (Map.Entry<ProductUnitPair, BigDecimal> e : rows) {
++			if (e.getValue() != null) {
++				result.put(e.getKey(), e.getValue());
++			}
++		}
++		return result;
++	}
++
+ 	/** Tổng SL đơn vị cơ sở xuất theo sản phẩm (POS / log), dùng khi phiếu không có stockdispatch_lines. */
+ 	public List<ProductOutboundBaseQtyRow> sumOutboundBaseQtyByProduct(long dispatchId) {
+ 		String sql = """
+ 				SELECT product_id, SUM(ABS(quantity_change))::int AS base_qty
+ 				FROM inventorylogs
+@@ -191,11 +289,12 @@ public class RetailStockJdbcRepository {
+ 
+ 	public void resetOrderLinesDispatched(int orderId) {
+ 		namedJdbc.update("UPDATE orderdetails SET dispatched_qty = 0 WHERE order_id = :oid", Map.of("oid", orderId));
+ 	}
+ 
+-	public record InventoryBucketRow(long inventoryId, int quantityBase, String batchNumber, LocalDate expiryDate) {
++	public record InventoryBucketRow(long inventoryId, int quantityBase, String batchNumber, LocalDate expiryDate,
++			int productId) {
+ 	}
+ 
+ 	public record OutboundLogRow(long logId, int productId, int quantityChange, int unitId, Integer fromLocationId,
+ 			String referenceNote) {
+ 	}
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/sales/stock/RetailStockService.java b/backend/smart-erp/src/main/java/com/example/smart_erp/sales/stock/RetailStockService.java
+index ef8a1e84..382796df 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/sales/stock/RetailStockService.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/sales/stock/RetailStockService.java
+@@ -3,13 +3,15 @@ package com.example.smart_erp.sales.stock;
+ import java.math.BigDecimal;
+ import java.math.RoundingMode;
+ import java.time.LocalDate;
+ import java.time.Year;
+ import java.time.ZoneId;
++import java.util.ArrayList;
+ import java.util.LinkedHashMap;
+ import java.util.List;
+ import java.util.Map;
++import java.util.stream.Collectors;
+ import java.util.regex.Matcher;
+ import java.util.regex.Pattern;
+ 
+ import org.springframework.stereotype.Service;
+ import org.springframework.transaction.annotation.Transactional;
+@@ -48,18 +50,23 @@ public class RetailStockService {
+ 	public long deductStockForRetailCheckout(int orderId, String orderCode, int userId, List<SalesOrderLineRequest> lines) {
+ 		int locationId = requireDefaultRetailLocationId();
+ 
+ 		Map<Integer, Integer> requiredBaseByProduct = computeRequiredBaseByProduct(lines);
+ 
++		Map<Integer, Integer> baseUnitIds = repo.findBaseUnitIds(new ArrayList<>(requiredBaseByProduct.keySet()));
++		List<RetailStockJdbcRepository.InventoryBucketRow> allBuckets = repo
++				.lockInventoryBucketsFefoBatch(new ArrayList<>(requiredBaseByProduct.keySet()), locationId);
++		Map<Integer, List<RetailStockJdbcRepository.InventoryBucketRow>> bucketsByProduct = allBuckets.stream()
++				.collect(Collectors.groupingBy(RetailStockJdbcRepository.InventoryBucketRow::productId));
++
+ 		// Lock + kiểm tra tồn
+ 		Map<String, String> insufficient = new LinkedHashMap<>();
+-		Map<Integer, List<RetailStockJdbcRepository.InventoryBucketRow>> bucketsByProduct = new LinkedHashMap<>();
+ 		for (var e : requiredBaseByProduct.entrySet()) {
+ 			int productId = e.getKey();
+ 			int required = e.getValue();
+-			List<RetailStockJdbcRepository.InventoryBucketRow> buckets = repo.lockInventoryBucketsFefo(productId, locationId);
+-			bucketsByProduct.put(productId, buckets);
++			List<RetailStockJdbcRepository.InventoryBucketRow> buckets = bucketsByProduct.getOrDefault(productId,
++					List.of());
+ 			int avail = buckets.stream().mapToInt(RetailStockJdbcRepository.InventoryBucketRow::quantityBase).sum();
+ 			if (avail < required) {
+ 				insufficient.put("productId:" + productId, "Không đủ tồn. Còn " + avail + ", cần " + required + ".");
+ 			}
+ 		}
+@@ -72,30 +79,36 @@ public class RetailStockService {
+ 		long dispatchId = repo.insertStockDispatchTempCode(tmpCode, orderId, userId, today, "Full",
+ 				"POS checkout " + orderCode);
+ 		repo.updateStockDispatchCode(dispatchId, buildDispatchCode(dispatchId));
+ 
+ 		// Cấp phát FEFO + ghi log
++		List<RetailStockJdbcRepository.LogEntry> logEntries = new ArrayList<>();
+ 		for (var e : requiredBaseByProduct.entrySet()) {
+ 			int productId = e.getKey();
+ 			int required = e.getValue();
+-			int baseUnitId = repo.findBaseUnitId(productId).orElseThrow(
+-					() -> new BusinessException(ApiErrorCode.BAD_REQUEST, "Sản phẩm không có đơn vị cơ sở: " + productId));
+-
++			Integer baseUnitId = baseUnitIds.get(productId);
++			if (baseUnitId == null) {
++				throw new BusinessException(ApiErrorCode.BAD_REQUEST,
++						"Sản phẩm không có đơn vị cơ sở: " + productId);
++			}
+ 			int remain = required;
+-			for (var b : bucketsByProduct.get(productId)) {
++			for (var b : bucketsByProduct.getOrDefault(productId, List.of())) {
+ 				if (remain <= 0) break;
+ 				int take = Math.min(remain, b.quantityBase());
+ 				repo.deductInventory(b.inventoryId(), take);
+ 				String note = "POS_CHECKOUT orderId=" + orderId + " invId=" + b.inventoryId();
+-				repo.insertInventoryLogOutbound(productId, take, baseUnitId, userId, dispatchId, locationId, note);
++				logEntries.add(new RetailStockJdbcRepository.LogEntry(productId, take, baseUnitId, userId, dispatchId,
++						locationId, note));
+ 				remain -= take;
+ 			}
+ 			if (remain != 0) {
+ 				// Defensive: đã check đủ tồn trước đó; nếu còn → rollback.
+-				throw new BusinessException(ApiErrorCode.INTERNAL_SERVER_ERROR, "Không thể cấp phát tồn kho cho sản phẩm: " + productId);
++				throw new BusinessException(ApiErrorCode.INTERNAL_SERVER_ERROR,
++						"Không thể cấp phát tồn kho cho sản phẩm: " + productId);
+ 			}
+ 		}
++		repo.batchInsertInventoryLogOutbound(logEntries);
+ 
+ 		repo.markOrderLinesDispatchedAll(orderId);
+ 		dispatchLedgerPostingService.postPrimaryCogsIfAbsent(dispatchId, userId);
+ 		return dispatchId;
+ 	}
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/settings/alerts/repository/AlertSettingsJdbcRepository.java b/backend/smart-erp/src/main/java/com/example/smart_erp/settings/alerts/repository/AlertSettingsJdbcRepository.java
+index 3fb55256..25dfbe26 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/settings/alerts/repository/AlertSettingsJdbcRepository.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/settings/alerts/repository/AlertSettingsJdbcRepository.java
+@@ -56,24 +56,31 @@ public class AlertSettingsJdbcRepository {
+ 					ua != null ? ua.toInstant() : Instant.EPOCH);
+ 		};
+ 	}
+ 
+ 	public List<AlertSettingItemData> list(Integer ownerId, String alertType, Boolean isEnabled) {
+-		String sql = """
++		StringBuilder sb = new StringBuilder("""
+ 				SELECT
+ 				  id, alert_type, threshold_value, channel, frequency, is_enabled, recipients, updated_at
+ 				FROM alertsettings
+-				WHERE owner_id = COALESCE(:ownerId, owner_id)
+-				  AND alert_type = COALESCE(:alertType, alert_type)
+-				  AND is_enabled = COALESCE(:isEnabled, is_enabled)
+-				ORDER BY id ASC
+-				""";
+-		var src = new MapSqlParameterSource()
+-				.addValue("ownerId", ownerId)
+-				.addValue("alertType", alertType)
+-				.addValue("isEnabled", isEnabled);
+-		return namedJdbc.query(sql, src, rowMapper);
++				WHERE 1=1
++				""");
++		var src = new MapSqlParameterSource();
++		if (ownerId != null) {
++			sb.append(" AND owner_id = :ownerId");
++			src.addValue("ownerId", ownerId);
++		}
++		if (alertType != null && !alertType.isBlank()) {
++			sb.append(" AND alert_type = :alertType");
++			src.addValue("alertType", alertType);
++		}
++		if (isEnabled != null) {
++			sb.append(" AND is_enabled = :isEnabled");
++			src.addValue("isEnabled", isEnabled);
++		}
++		sb.append(" ORDER BY id ASC");
++		return namedJdbc.query(sb.toString(), src, rowMapper);
+ 	}
+ 
+ 	public Optional<String> findAlertTypeByIdAndOwner(long id, int ownerId) {
+ 		String sql = """
+ 				SELECT alert_type
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/settings/systemlogs/SystemLogsJdbcRepository.java b/backend/smart-erp/src/main/java/com/example/smart_erp/settings/systemlogs/SystemLogsJdbcRepository.java
+index 8d64014a..5ac2d689 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/settings/systemlogs/SystemLogsJdbcRepository.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/settings/systemlogs/SystemLogsJdbcRepository.java
+@@ -102,12 +102,11 @@ public class SystemLogsJdbcRepository {
+ 			sb.append("""
+ 					 AND (
+ 					  s.message ILIKE :_search OR
+ 					  s.action  ILIKE :_search OR
+ 					  s.module  ILIKE :_search OR
+-					  COALESCE(u.full_name, '') ILIKE :_search OR
+-					  COALESCE(s.context_data::text, '') ILIKE :_search
++					  COALESCE(u.full_name, '') ILIKE :_search
+ 					)
+ 					""");
+ 			src.addValue("_search", searchPattern);
+ 		}
+ 
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/settings/tablecolumns/repository/GlobalTableColumnSettingsJdbcRepository.java b/backend/smart-erp/src/main/java/com/example/smart_erp/settings/tablecolumns/repository/GlobalTableColumnSettingsJdbcRepository.java
+index 8daf3884..cdca3334 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/settings/tablecolumns/repository/GlobalTableColumnSettingsJdbcRepository.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/settings/tablecolumns/repository/GlobalTableColumnSettingsJdbcRepository.java
+@@ -35,10 +35,31 @@ public class GlobalTableColumnSettingsJdbcRepository {
+ 				rs.getString("column_order_json"),
+ 				toInstant(rs.getTimestamp("updated_at")),
+ 				rs.getString("updated_by_name")));
+ 	}
+ 
++	public List<Row> findByKeys(List<String> keys) {
++		String sql = """
++				SELECT
++				  s.table_key,
++				  s.hidden_columns::text AS hidden_columns_json,
++				  s.column_order::text AS column_order_json,
++				  s.updated_at,
++				  u.full_name AS updated_by_name
++				FROM global_table_column_settings s
++				LEFT JOIN users u ON u.id = s.updated_by
++				WHERE s.table_key IN (:keys)
++				ORDER BY s.table_key
++				""";
++		return namedJdbc.query(sql, new MapSqlParameterSource("keys", keys), (rs, i) -> new Row(
++				rs.getString("table_key"),
++				rs.getString("hidden_columns_json"),
++				rs.getString("column_order_json"),
++				toInstant(rs.getTimestamp("updated_at")),
++				rs.getString("updated_by_name")));
++	}
++
+ 	public void upsert(String tableKey, String hiddenColumnsJson, String columnOrderJson, int updatedBy) {
+ 		String sql = """
+ 				INSERT INTO global_table_column_settings (
+ 				  table_key, hidden_columns, column_order, updated_by
+ 				) VALUES (
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/settings/tablecolumns/service/TableColumnSettingsService.java b/backend/smart-erp/src/main/java/com/example/smart_erp/settings/tablecolumns/service/TableColumnSettingsService.java
+index 48d60606..ae776532 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/settings/tablecolumns/service/TableColumnSettingsService.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/settings/tablecolumns/service/TableColumnSettingsService.java
+@@ -46,12 +46,13 @@ public class TableColumnSettingsService {
+ 	}
+ 
+ 	@Transactional(readOnly = true)
+ 	public TableColumnSettingsData getByScope(Jwt jwt, String scopeWire) {
+ 		Scope scope = Scope.parse(scopeWire);
++		List<String> keys = scope.tableKeys().stream().map(TableKey::key).toList();
+ 		Map<String, GlobalTableColumnSettingsJdbcRepository.Row> byKey = new LinkedHashMap<>();
+-		for (GlobalTableColumnSettingsJdbcRepository.Row row : repo.findAll()) {
++		for (GlobalTableColumnSettingsJdbcRepository.Row row : repo.findByKeys(keys)) {
+ 			byKey.put(row.tableKey(), row);
+ 		}
+ 		List<TableColumnSettingsData.ItemData> out = new ArrayList<>();
+ 		for (TableKey tableKey : scope.tableKeys()) {
+ 			out.add(toItemData(tableKey, byKey.get(tableKey.key())));
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/users/service/UserCreationService.java b/backend/smart-erp/src/main/java/com/example/smart_erp/users/service/UserCreationService.java
+index 703bc0b1..d4798180 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/users/service/UserCreationService.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/users/service/UserCreationService.java
+@@ -81,15 +81,12 @@ public class UserCreationService {
+ 			u.setStaffCode(request.staffCode().strip());
+ 		}
+ 		u.setRoleId(roleId);
+ 		u.setStatus(dbStatus);
+ 		User saved = userRepository.save(u);
+-
+-		User withRole = userRepository.findWithRoleById(Objects.requireNonNull(saved.getId(), "id"))
+-				.orElse(saved);
+-		String roleName = withRole.getRole() != null ? withRole.getRole().getName() : targetRole.getName();
+-		return toResponse(withRole, roleName);
++		String roleName = targetRole.getName();
++		return toResponse(saved, roleName);
+ 	}
+ 
+ 	private void assertNotDuplicate(String username, String email) {
+ 		Map<String, String> details = new LinkedHashMap<>();
+ 		if (userRepository.existsByUsername(username)) {
+diff --git a/backend/smart-erp/src/main/java/com/example/smart_erp/users/service/UsersManagementService.java b/backend/smart-erp/src/main/java/com/example/smart_erp/users/service/UsersManagementService.java
+index c3b4a393..5df3ce61 100644
+--- a/backend/smart-erp/src/main/java/com/example/smart_erp/users/service/UsersManagementService.java
++++ b/backend/smart-erp/src/main/java/com/example/smart_erp/users/service/UsersManagementService.java
+@@ -62,11 +62,11 @@ public class UsersManagementService {
+ 		boolean isSelf = actorUserId == userId;
+ 		if (!isSelf && !rolePermissionReader.canManageStaff(actor.getRole())) {
+ 			throw new BusinessException(ApiErrorCode.FORBIDDEN, "Bạn không có quyền xem nhân viên");
+ 		}
+ 
+-		User u = userRepository.findWithRoleById(userId)
++		User u = isSelf ? actor : userRepository.findWithRoleById(userId)
+ 				.orElseThrow(() -> new BusinessException(ApiErrorCode.NOT_FOUND, "Không tìm thấy nhân viên"));
+ 		return toDetail(u);
+ 	}
+ 
+ 	@Transactional
