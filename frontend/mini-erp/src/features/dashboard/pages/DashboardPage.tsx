@@ -224,31 +224,29 @@ export function DashboardPage() {
     <div className="p-6 space-y-6 max-w-screen-xl mx-auto">
       {/* Header */}
       <div>
-        <h1
-          className="text-2xl font-semibold text-slate-900 tracking-tight"
-          style={{ letterSpacing: "-0.02em" }}
-        >
-          {getGreeting()}, {user?.fullName ?? "Admin"}!
+        <h1 className="text-2xl font-bold text-foreground tracking-tight">
+          {getGreeting()}, {user?.fullName ?? "Admin"} 👋
         </h1>
-        <p className="text-sm text-slate-400 mt-0.5 capitalize">{todayVN()}</p>
+        <p className="text-sm text-muted-foreground mt-0.5 capitalize">{todayVN()}</p>
       </div>
 
       {/* Phân tích nhanh — chỉ role tài chính */}
       {canSeeFinancials && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {/* Doanh thu hôm nay + so sánh */}
-          <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-xl p-5 text-white shadow-sm">
-            <div className="flex items-center justify-between">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                Doanh thu hôm nay
-              </p>
-              <Wallet className="h-4 w-4 text-slate-500" />
+          {/* Doanh thu hôm nay */}
+          <div className="relative bg-white rounded-xl border border-border shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5 overflow-hidden">
+            <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-br from-emerald-100 to-transparent rounded-bl-3xl" />
+            <div className="flex items-center gap-3 mb-3">
+              <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center shrink-0">
+                <span className="text-white font-bold text-sm">₫</span>
+              </div>
+              <span className="text-xs font-medium text-muted-foreground">Doanh thu hôm nay</span>
             </div>
-            <div className="h-9 flex items-center mt-3">
+            <div className="h-9 flex items-center">
               {ordersLoading ? (
-                <Loader2 className="h-5 w-5 animate-spin text-slate-600" />
+                <Loader2 className="h-5 w-5 animate-spin text-slate-200" />
               ) : (
-                <p className="text-2xl font-black tabular-nums truncate">
+                <p className="text-2xl font-bold text-foreground tracking-tight tabular-nums truncate">
                   {formatCurrency(comparison?.todayRevenue ?? 0)}
                 </p>
               )}
@@ -257,64 +255,69 @@ export function DashboardPage() {
               {!ordersLoading && comparison && (
                 <>
                   {comparison.pctChange == null ? (
-                    <span className="text-xs text-slate-400">So với hôm qua: —</span>
+                    <span className="text-xs text-muted-foreground">So với hôm qua: —</span>
                   ) : (
                     <span
-                      className={`inline-flex items-center gap-0.5 text-xs font-semibold ${
-                        comparison.pctChange >= 0 ? "text-emerald-400" : "text-red-400"
+                      className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs font-semibold ${
+                        comparison.pctChange >= 0
+                          ? "bg-emerald-50 text-emerald-600"
+                          : "bg-red-50 text-red-600"
                       }`}
                     >
                       {comparison.pctChange >= 0 ? (
-                        <ArrowUpRight className="h-3.5 w-3.5" />
+                        <ArrowUpRight className="h-3 w-3" />
                       ) : (
-                        <ArrowDownRight className="h-3.5 w-3.5" />
+                        <ArrowDownRight className="h-3 w-3" />
                       )}
-                      {Math.abs(comparison.pctChange).toFixed(0)}% so với hôm qua
+                      {Math.abs(comparison.pctChange).toFixed(0)}%
                     </span>
                   )}
+                  <span className="text-xs text-muted-foreground">so với hôm qua</span>
                 </>
               )}
             </div>
           </div>
 
           {/* Số đơn hôm nay */}
-          <div className="bg-white rounded-xl border border-slate-200 p-5">
-            <div className="flex items-center justify-between">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                Số đơn hôm nay
-              </p>
-              <Receipt className="h-4 w-4 text-slate-300" />
+          <div className="relative bg-white rounded-xl border border-border shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5 overflow-hidden">
+            <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-br from-blue-100 to-transparent rounded-bl-3xl" />
+            <div className="flex items-center gap-3 mb-3">
+              <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shrink-0">
+                <Receipt className="h-4 w-4 text-white" />
+              </div>
+              <span className="text-xs font-medium text-muted-foreground">Số đơn hôm nay</span>
             </div>
-            <div className="h-9 flex items-center mt-3">
+            <div className="h-9 flex items-center">
               {ordersLoading ? (
                 <Loader2 className="h-5 w-5 animate-spin text-slate-200" />
               ) : (
-                <p className="text-2xl font-black text-slate-900 tabular-nums">
+                <p className="text-2xl font-bold text-foreground tracking-tight tabular-nums">
                   {comparison?.todayOrders ?? 0}
                 </p>
               )}
             </div>
-            <p className="h-5 mt-2 flex items-center text-xs text-slate-400">đơn đã tạo trong ngày</p>
+            <p className="h-5 mt-2 flex items-center text-xs text-muted-foreground">đơn đã tạo trong ngày</p>
           </div>
 
           {/* Giá trị đơn trung bình */}
-          <div className="bg-white rounded-xl border border-slate-200 p-5">
-            <div className="flex items-center justify-between">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                Giá trị đơn TB
-              </p>
-              <BarChart3 className="h-4 w-4 text-slate-300" />
+          <div className="relative bg-white rounded-xl border border-border shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5 overflow-hidden">
+            <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-br from-purple-100 to-transparent rounded-bl-3xl" />
+            <div className="flex items-center gap-3 mb-3">
+              <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center shrink-0">
+                <BarChart3 className="h-4 w-4 text-white" />
+              </div>
+              <span className="text-xs font-medium text-muted-foreground">Giá trị đơn TB</span>
             </div>
-            <div className="h-9 flex items-center mt-3">
+            <div className="h-9 flex items-center">
               {ordersLoading ? (
                 <Loader2 className="h-5 w-5 animate-spin text-slate-200" />
               ) : (
-                <p className="text-2xl font-black text-slate-900 tabular-nums truncate">
+                <p className="text-2xl font-bold text-foreground tracking-tight tabular-nums truncate">
                   {formatCurrency(comparison?.avgOrderValue ?? 0)}
                 </p>
               )}
             </div>
-            <p className="h-5 mt-2 flex items-center text-xs text-slate-400">trên mỗi đơn hôm nay</p>
+            <p className="h-5 mt-2 flex items-center text-xs text-muted-foreground">trên mỗi đơn hôm nay</p>
           </div>
         </div>
       )}
