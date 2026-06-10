@@ -39,3 +39,9 @@ Thumbs.db
 # Environment variables
 .env
 *.local
+
+# Codegraph daemon runtime / index
+.codegraph/
+
+# Ad-hoc diff dumps
+diff.txt
