@@ -488,7 +488,11 @@ public class ProductService {
 		productJdbcRepository.lockProductsForUpdate(ids);
 		int deleted = productJdbcRepository.deleteProducts(ids);
 		if (deleted != ids.size()) {
-			throw new BusinessException(ApiErrorCode.INTERNAL_SERVER_ERROR, "Xóa bulk không khớp số dòng");
+			// TOCTOU: row có thể bị xóa bởi transaction khác giữa findExistingProductIds và lock.
+			// Dùng CONFLICT (thay vì INTERNAL_SERVER_ERROR) để thống nhất với TOCTOU race ở lock step
+			// — caller xử lý giống nhau cho cùng 1 race condition.
+			throw new BusinessException(ApiErrorCode.CONFLICT, "Sản phẩm đã bị xóa bởi người dùng khác",
+					Map.of("expected", String.valueOf(ids.size()), "deleted", String.valueOf(deleted)));
 		}
 		return new ProductBulkDeleteData(new ArrayList<>(ids), deleted);
 	}

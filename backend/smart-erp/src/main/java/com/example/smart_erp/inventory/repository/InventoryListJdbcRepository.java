@@ -105,12 +105,20 @@ public class InventoryListJdbcRepository {
 	 * Task 2 — gộp summary + count: chạy 1 query duy nhất, trả về cả KPI và tổng
 	 * số dòng. Tận dụng cùng {@link #BASE_FROM} + filter; vẫn giữ {@link #loadSummary}
 	 * và {@link #countRows} cho {@code summary()} và các caller khác.
+	 *
+	 * <p>Lưu ý: {@code total_skus} và {@code total_rows} đều dùng {@code COUNT(*)} over
+	 * cùng {@code BASE_FROM + filter}, nên luôn bằng nhau. Tên field {@code total_skus}
+	 * giữ theo semantic API cũ (tương đương {@code loadSummary().totalSkus()}); giá trị
+	 * thực tế là <b>số dòng inventory trong filter</b>, không phải số SKU distinct.
+	 * Nếu sau này cần đếm distinct product, thêm field mới thay vì đổi field này
+	 * (để tránh breaking change).
 	 */
 	public InventorySummaryWithCount loadSummaryWithCount(InventoryListQuery q) {
 		Filter f = buildFilter(q);
 		String sql = """
 				SELECT
 				  COUNT(*)::bigint AS total_rows,
+				  -- total_skus: cùng COUNT(*) over filter; giữ tên theo API cũ
 				  COUNT(*)::bigint AS total_skus,
 				  COALESCE(SUM(i.quantity::numeric * COALESCE(pph.latest_cost::numeric, 0)), 0) AS total_value,
 				  COALESCE(SUM(

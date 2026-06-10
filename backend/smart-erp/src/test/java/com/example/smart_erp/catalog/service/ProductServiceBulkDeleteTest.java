@@ -205,7 +205,9 @@ class ProductServiceBulkDeleteTest {
 	}
 
 	@Test
-	void bulkDelete_throwsInternalServerErrorWhenDeletedCountMismatch() {
+	void bulkDelete_throwsConflictWhenDeletedCountMismatch() {
+		// TOCTOU: row bị xóa bởi transaction khác giữa findExistingProductIds và lock.
+		// Dùng CONFLICT (thay vì INTERNAL_SERVER_ERROR) để thống nhất với TOCTOU race ở lock step.
 		List<Integer> ids = List.of(1, 2, 3);
 		when(productJdbcRepository.findExistingProductIds(ids)).thenReturn(new HashSet<>(ids));
 		when(productJdbcRepository.findBulkDeleteBlockReasons(ids)).thenReturn(Map.of());
@@ -213,8 +215,10 @@ class ProductServiceBulkDeleteTest {
 
 		assertThatThrownBy(() -> service.bulkDelete(new ProductsBulkDeleteRequest(ids), ownerJwt()))
 				.isInstanceOfSatisfying(BusinessException.class, ex -> {
-					assertThat(ex.getCode()).isEqualTo(ApiErrorCode.INTERNAL_SERVER_ERROR);
-					assertThat(ex.getMessage()).contains("không khớp số dòng");
+					assertThat(ex.getCode()).isEqualTo(ApiErrorCode.CONFLICT);
+					assertThat(ex.getMessage()).contains("đã bị xóa bởi người dùng khác");
+					assertThat(ex.getDetails()).containsEntry("expected", "3");
+					assertThat(ex.getDetails()).containsEntry("deleted", "2");
 				});
 	}
 
