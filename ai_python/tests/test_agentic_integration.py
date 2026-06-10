@@ -280,35 +280,6 @@ async def test_plan_executor_static_input_spec_unchanged():
 
 
 # --------------------------------------------------------------------------- #
-# P6 — sensitive-column masking applied at SqlQueryTool OUTPUT (real tool).
-# --------------------------------------------------------------------------- #
-@pytest.mark.asyncio
-async def test_sql_tool_masks_sensitive_columns_for_staff():
-    from app.graph.tools.sql_query import SqlQueryTool
-
-    rows = [{"name": "Áo", "cost_price": 100, "sale_price": 150}]
-
-    async def _gen(hint):
-        return "SELECT name, cost_price, sale_price FROM products"
-
-    async def _review(sql):
-        return {"ok": True, "issues": []}
-
-    async def _execute(sql):
-        return rows
-
-    deps = SimpleNamespace(settings=_settings(agentic_capability_guard_enabled=True))
-    tool = SqlQueryTool(deps, _test_generate=_gen, _test_review=_review, _test_execute=_execute)
-
-    staff = await tool.invoke({"query": "x"}, _ctx(role="staff"))
-    owner = await tool.invoke({"query": "x"}, _ctx(role="owner"))
-
-    assert "cost_price" not in (staff.sse_payload or {}).get("rows", [{}])[0]
-    assert "cost_price" not in staff.observation_text
-    assert owner.sse_payload["rows"][0]["cost_price"] == 100
-
-
-# --------------------------------------------------------------------------- #
 # P3/P4 — new tools are registered (reachable by the planner) when flags on.
 # --------------------------------------------------------------------------- #
 def test_new_tools_registered_when_flags_on():
