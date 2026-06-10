@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import time
 from typing import Any
 
 from app.graph.deps import GraphDeps
 from app.graph.nodes.schema_explore import make_schema_explore_node
 from app.graph.tools._state import build_tool_state
 from app.harness.tool_registry import ToolManifest, ToolResult, TurnContext
+
+logger = logging.getLogger(__name__)
 
 
 class SchemaExploreTool:
@@ -32,6 +36,8 @@ class SchemaExploreTool:
         self._node_fn = make_schema_explore_node(deps)
 
     async def invoke(self, args: dict[str, Any], ctx: TurnContext) -> ToolResult:
+        _invoke_start = time.monotonic()
+        logger.info("tool_invoke_start tool=schema_explore topic=%s", args.get("topic", ""))
         topic = str(args.get("topic") or args.get("query") or "").strip()
         state = build_tool_state(topic, ctx, self._deps.settings)
         out = await asyncio.to_thread(self._node_fn, state)
@@ -43,4 +49,8 @@ class SchemaExploreTool:
             obs = "Schema artifact loaded."
         else:
             obs = "Schema exploration did not return additional schema context."
-        return ToolResult(ok=not bool(out.get("error_payload")), output=dict(out or {}), observation_text=obs)
+        _latency_ms = (time.monotonic() - _invoke_start) * 1000
+        result = ToolResult(ok=not bool(out.get("error_payload")), output=dict(out or {}), observation_text=obs)
+        logger.info("tool_invoke_end tool=schema_explore ok=%s latency_ms=%.0f tables=%s",
+                    result.ok, _latency_ms, len(result.output.get("schema", {}).get("tables", [])))
+        return result

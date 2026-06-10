@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from typing import Any
 
 from app.graph.nodes.chart_report import build_chart_spec_final
 from app.graph.tools._result_ref import rows_from_args_or_ref
 from app.harness.tool_registry import ToolManifest, ToolResult, TurnContext
+
+logger = logging.getLogger(__name__)
 
 
 class BuildChartTool:
@@ -28,17 +32,27 @@ class BuildChartTool:
     )
 
     async def invoke(self, args: dict[str, Any], ctx: TurnContext) -> ToolResult:
+        _invoke_start = time.monotonic()
+        logger.info("tool_invoke_start tool=build_chart rows=%s", len(args.get("rows", [])))
         rows, error = rows_from_args_or_ref(args, ctx)
         if error:
-            return ToolResult(ok=False, output={}, observation_text=error, error_message=error)
+            _result = ToolResult(ok=False, output={}, observation_text=error, error_message=error)
+            _latency_ms = (time.monotonic() - _invoke_start) * 1000
+            logger.info("tool_invoke_end tool=build_chart ok=%s latency_ms=%.0f chart_type=%s",
+                        _result.ok, _latency_ms, _result.output.get("chart_spec", {}).get("chart_type"))
+            return _result
         chart_type, x_key, y_key = _infer_chart(rows)
         spec = build_chart_spec_final(rows, chart_type, x_key, y_key, args.get("title") or "Biểu đồ dữ liệu")
-        return ToolResult(
+        _latency_ms = (time.monotonic() - _invoke_start) * 1000
+        result = ToolResult(
             ok=True,
             output=spec,
             observation_text=f"Đã tạo biểu đồ {spec.get('chartType')}.",
             sse_payload={"_event": "chart", **spec},
         )
+        logger.info("tool_invoke_end tool=build_chart ok=%s latency_ms=%.0f chart_type=%s",
+                    result.ok, _latency_ms, result.output.get("chartType"))
+        return result
 
 
 def _infer_chart(rows: list[dict[str, Any]]) -> tuple[str, str, str]:

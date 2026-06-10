@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 from app.harness.tool_registry import ToolManifest, ToolResult, TurnContext
+
+logger = logging.getLogger(__name__)
 
 
 class AnswerComposerOutput(BaseModel):
@@ -33,6 +37,8 @@ class AnswerComposerTool:
     )
 
     async def invoke(self, args: dict[str, Any], ctx: TurnContext) -> ToolResult:
+        _invoke_start = time.monotonic()
+        logger.info("tool_invoke_start tool=answer_composer observations_count=%s", len(args.get("observations", [])))
         _ = ctx
         observations = args.get("observations") or []
         assumptions = [str(item) for item in (args.get("assumptions") or []) if str(item).strip()]
@@ -59,12 +65,16 @@ class AnswerComposerTool:
             assumptions=assumptions,
             follow_ups=follow_ups,
         )
-        return ToolResult(
+        _latency_ms = (time.monotonic() - _invoke_start) * 1000
+        result = ToolResult(
             ok=True,
             output=output.model_dump(mode="json"),
             observation_text=answer,
             sse_payload={"_event": "delta_full", "text": answer},
         )
+        logger.info("tool_invoke_end tool=answer_composer ok=%s latency_ms=%.0f answer_chars=%s",
+                    result.ok, _latency_ms, len(result.output.get("answer_markdown", "")))
+        return result
 
 
 def _first_rows(observations: Any) -> list[dict[str, Any]]:

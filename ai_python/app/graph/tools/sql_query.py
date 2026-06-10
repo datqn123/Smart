@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
@@ -286,6 +287,8 @@ class SqlQueryTool:
         return generate, review, execute, analyze
 
     async def invoke(self, args: dict[str, Any], ctx: TurnContext) -> ToolResult:
+        _invoke_start = time.monotonic()
+        logger.info("tool_invoke_start tool=sql_query query_preview=%s", args.get("query", "")[:120])
         query = str(args.get("query") or args.get("sql") or "").strip()
         settings = self._deps.settings
         regen_max = int(getattr(settings, "sql_regen_max", 3))
@@ -322,12 +325,18 @@ class SqlQueryTool:
         if guard_on:
             observation = sanitize_user_data(observation)
 
-        return ToolResult(
+        _latency_ms = (time.monotonic() - _invoke_start) * 1000
+        result = ToolResult(
             ok=runner_result.ok,
             output={"query_result": {"rows": rows}, "generated_sql": sql},
             observation_text=observation,
             sse_payload=sse,
         )
+        logger.info("tool_invoke_end tool=sql_query ok=%s latency_ms=%.0f rows=%s sql_hash=%s has_sse=%s",
+                    result.ok, _latency_ms, len(result.output.get("query_result", {}).get("rows", [])),
+                    hashlib.md5(result.output.get("generated_sql", "").encode()).hexdigest()[:8],
+                    result.sse_payload is not None)
+        return result
 
 
 _ENTITY_CACHE_MAX_THREADS = 1000

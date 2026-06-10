@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from typing import Any
 
 from app.graph.tools._result_ref import rows_from_args_or_ref
 from app.harness.tool_registry import ToolManifest, ToolResult, TurnContext
+
+logger = logging.getLogger(__name__)
 
 
 class DataTableBuilderTool:
@@ -27,14 +31,25 @@ class DataTableBuilderTool:
     )
 
     async def invoke(self, args: dict[str, Any], ctx: TurnContext) -> ToolResult:
+        _invoke_start = time.monotonic()
+        logger.info("tool_invoke_start tool=data_table_builder rows=%s title=%s",
+                    len(args.get("rows", [])), args.get("title", ""))
         rows, error = rows_from_args_or_ref(args, ctx)
         if error:
-            return ToolResult(ok=False, output={}, observation_text=error, error_message=error)
+            _result = ToolResult(ok=False, output={}, observation_text=error, error_message=error)
+            _latency_ms = (time.monotonic() - _invoke_start) * 1000
+            logger.info("tool_invoke_end tool=data_table_builder ok=%s latency_ms=%.0f row_count=%s",
+                        _result.ok, _latency_ms, _result.output.get("row_count"))
+            return _result
         title = str(args.get("title") or "Bảng dữ liệu").strip()
         payload = {"title": title, "rows": rows, "row_count": len(rows)}
-        return ToolResult(
+        _latency_ms = (time.monotonic() - _invoke_start) * 1000
+        result = ToolResult(
             ok=True,
             output={"query_table_sse": payload, "row_count": len(rows)},
             observation_text=f"Đã tạo bảng dữ liệu với {len(rows)} dòng.",
             sse_payload={"_event": "data_table", **payload},
         )
+        logger.info("tool_invoke_end tool=data_table_builder ok=%s latency_ms=%.0f row_count=%s",
+                    result.ok, _latency_ms, result.output.get("row_count"))
+        return result

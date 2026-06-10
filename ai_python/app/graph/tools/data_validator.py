@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 from app.graph.tools._result_ref import rows_from_args_or_ref
 from app.harness.tool_registry import ToolManifest, ToolResult, TurnContext
+
+logger = logging.getLogger(__name__)
 
 
 class DataValidatorOutput(BaseModel):
@@ -33,9 +36,14 @@ class DataValidatorTool:
     )
 
     async def invoke(self, args: dict[str, Any], ctx: TurnContext) -> ToolResult:
+        logger.info("tool_invoke_start tool=data_validator rows=%s required=%s",
+                    len(args.get("rows", [])), args.get("required_data"))
         rows, error = rows_from_args_or_ref(args, ctx)
         if error:
-            return ToolResult(ok=False, output={}, observation_text=error, error_message=error)
+            _result = ToolResult(ok=False, output={}, observation_text=error, error_message=error)
+            logger.info("tool_invoke_end tool=data_validator ok=%s issues=%s",
+                        _result.ok, len(_result.output.get("issues", [])))
+            return _result
         required_data = [str(item) for item in (args.get("required_data") or [])]
         issues: list[str] = []
         if required_data:
@@ -60,8 +68,11 @@ class DataValidatorTool:
             if issues
             else "Dữ liệu đạt kiểm tra nghiệp vụ."
         )
-        return ToolResult(
+        result = ToolResult(
             ok=output.ok,
             output=output.model_dump(mode="json"),
             observation_text=observation,
         )
+        logger.info("tool_invoke_end tool=data_validator ok=%s issues=%s",
+                    result.ok, len(result.output.get("issues", [])))
+        return result
