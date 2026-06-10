@@ -1,8 +1,9 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Card,
   CardContent,
@@ -54,6 +55,16 @@ export function LoginForm() {
   const [ownerResetSubmitting, setOwnerResetSubmitting] = useState(false)
   const [ownerResetSuccess, setOwnerResetSuccess] = useState(false)
   const [ownerResetError, setOwnerResetError] = useState<string | null>(null)
+  const [rememberMe, setRememberMe] = useState(false)
+
+  // Load remembered email on mount — set checkbox if email was remembered
+  useEffect(() => {
+    const remembered = localStorage.getItem("rememberEmail")
+    if (remembered) {
+      setRememberMe(true)
+    }
+  }, [])
+
   const navigate = useNavigate()
 
   const {
@@ -63,6 +74,10 @@ export function LoginForm() {
     formState: { errors },
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
+    defaultValues: {
+      email: localStorage.getItem("rememberEmail") || "",
+      password: "",
+    },
   })
 
   const ownerResetForm = useForm<OwnerResetRequestValues>({
@@ -97,6 +112,11 @@ export function LoginForm() {
         },
         result.accessToken,
       )
+      if (rememberMe) {
+        localStorage.setItem("rememberEmail", data.email)
+      } else {
+        localStorage.removeItem("rememberEmail")
+      }
       navigate("/dashboard")
     } catch (err) {
       if (err instanceof ApiRequestError && err.status === 400 && err.body.details) {
@@ -222,10 +242,34 @@ export function LoginForm() {
 
           {submitError ? <p className="text-sm text-alert">{submitError}</p> : null}
 
+          {/* Remember me + Forgot password */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="remember"
+                checked={rememberMe}
+                onCheckedChange={(checked) => setRememberMe(checked as boolean)}
+              />
+              <Label
+                htmlFor="remember"
+                className="text-sm font-medium cursor-pointer"
+              >
+                Ghi nhớ đăng nhập
+              </Label>
+            </div>
+            <button
+              type="button"
+              onClick={() => setOwnerResetOpen(true)}
+              className="text-sm text-muted-foreground hover:text-foreground font-medium"
+            >
+              Quên mật khẩu?
+            </button>
+          </div>
+
           {/* Login Button */}
           <Button
             type="submit"
-            className="w-full h-10 bg-primary text-white font-medium rounded-lg hover:bg-primary-hover active:scale-[0.98] transition-colors mt-4"
+            className="w-full h-10 bg-primary text-white font-medium rounded-lg hover:bg-primary-hover active:scale-[0.98] transition-colors"
             disabled={isLoading}
           >
             {isLoading ? (
@@ -234,16 +278,6 @@ export function LoginForm() {
               "Đăng nhập"
             )}
           </Button>
-
-          <p className="text-center pt-1">
-            <button
-              type="button"
-              onClick={() => setOwnerResetOpen(true)}
-              className="text-sm text-muted-foreground hover:text-foreground font-medium"
-            >
-              Yêu cầu mật khẩu
-            </button>
-          </p>
         </form>
       </CardContent>
 

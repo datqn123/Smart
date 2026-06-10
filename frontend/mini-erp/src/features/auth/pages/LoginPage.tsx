@@ -32,6 +32,11 @@ export function LoginPage() {
         
         {/* Login Form Component */}
         <LoginForm />
+
+        {/* Footer */}
+        <p className="text-xs text-muted-foreground text-center mt-6">
+          © 2024 Mini ERP. All rights reserved.
+        </p>
       </div>
     </main>
   )
