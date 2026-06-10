@@ -1,55 +1,138 @@
-"""Intent object and confidence gate for the harness loop."""
+"""Intent recognition — LLM-centric skill-based approach."""
 
 from __future__ import annotations
 
-from difflib import SequenceMatcher
+from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 
-class ResolvedEntity(BaseModel):
-    raw: str
-    matched: str = ""
-    score: float = 0.0
+class IntentDecision(BaseModel):
+    """Simple intent decision from LLM."""
+
+    action: Literal["direct_answer", "call_tool", "final_answer", "clarify"]
+    goal_text: str = ""
+    tool_name: str | None = None
+    tool_args: dict[str, Any] = Field(default_factory=dict)
+    answer: str | None = None
+    clarify_questions: list[str] = Field(default_factory=list)
+    reasoning: str = ""
 
 
-class Ambiguity(BaseModel):
-    field: str
-    options: list[str] = Field(default_factory=list)
-    reason: str = ""
+class IntentClassifier:
+    """LLM-based intent classifier using skill.md prompt."""
+
+    def __init__(
+        self,
+        llm_client: Any,
+        skill_path: str = "skill.md",
+    ) -> None:
+        self._llm_client = llm_client
+        self._skill_path = skill_path
+        self._skill_prompt: str | None = None
+
+    def _load_skill_prompt(self) -> str:
+        if self._skill_prompt is None:
+            path = Path(self._skill_path)
+            if path.exists():
+                self._skill_prompt = path.read_text(encoding="utf-8")
+            else:
+                self._skill_prompt = self._default_skill_prompt()
+        return self._skill_prompt
+
+    def _build_system_prompt(self, context: dict[str, Any]) -> str:
+        skill = self._load_skill_prompt()
+        parts = [skill]
+
+        schema_text = context.get("schema_text", "")
+        if schema_text:
+            parts.append(f"\n\n## Database Schema\n{schema_text}")
+
+        system_info = context.get("system_info", "")
+        if system_info:
+            parts.append(f"\n\n## System Info\n{system_info}")
+
+        return "\n".join(parts)
+
+    async def classify(
+        self,
+        question: str,
+        context: dict[str, Any],
+        history: list[dict[str, Any]] | None = None,
+    ) -> IntentDecision:
+        system_prompt = self._build_system_prompt(context)
+
+        messages = []
+        if history:
+            messages.extend(history)
+        messages.append({"role": "user", "content": question})
+
+        response = await self._llm_client.chat(
+            system=system_prompt,
+            messages=messages,
+        )
+
+        if isinstance(response, IntentDecision):
+            return response
+
+        return IntentDecision.model_validate(response)
+
+    @staticmethod
+    def _default_skill_prompt() -> str:
+        return (
+            "You are an ERP data analyst assistant. "
+            "Analyze the user's request and return a JSON response with action, goal_text, "
+            "tool_name, tool_args, answer, clarify_questions, and reasoning."
+        )
+
+
+# ---------------------------------------------------------------------------
+# Backward-compat aliases — will be removed in Task 4 cleanup
+# ---------------------------------------------------------------------------
+import warnings
 
 
 class RequiredDataItem(BaseModel):
     field: str
-    source: str = ""        # bảng/entity cung cấp data này
+    source: str = ""
     required: bool = True
-    resolved: bool = False  # đã có trong context chưa
+    resolved: bool = False
 
 
 class IntentAnalysisResult(BaseModel):
-    goal: str
-    intent_type: str        # data_query | catalog_draft | inventory_draft | chart_report | chat
+    goal: str = ""
+    intent_type: str = "chat"
     required_data: list[RequiredDataItem] = Field(default_factory=list)
-    resolved_entities: list[ResolvedEntity] = Field(default_factory=list)
     confidence: float = 0.0
-    ambiguities: list[Ambiguity] = Field(default_factory=list)
-    # --- LLM judge fields ---
+    ambiguities: list[dict[str, Any]] = Field(default_factory=list)
     mode: Literal["run", "clarify", "auto_assume"] = "run"
     clarify_questions: list[str] = Field(default_factory=list)
     assumptions: list[str] = Field(default_factory=list)
-    reasoning: str = ""     # LLM tự lý giải quyết định (lightweight CoT)
-    schema_refs: list[str] = Field(default_factory=list)  # bảng LLM đã tham chiếu
-    # --- backward-compat fields (old IntentObject) ---
+    reasoning: str = ""
+    schema_refs: list[str] = Field(default_factory=list)
     missing_required: list[str] = Field(default_factory=list)
 
-    @field_validator("required_data", mode="before")
-    @classmethod
-    def _coerce_required_data(cls, v: object) -> object:
-        """Accept list[str] (legacy format) or list[RequiredDataItem]."""
-        if isinstance(v, list):
-            return [RequiredDataItem(field=item) if isinstance(item, str) else item for item in v]
-        return v
+    def to_intent_decision(self) -> IntentDecision:
+        action_map: dict[str, str] = {
+            "data_query": "call_tool",
+            "catalog_draft": "call_tool",
+            "inventory_draft": "call_tool",
+            "chart_report": "call_tool",
+            "chat": "direct_answer",
+        }
+        mapped = action_map.get(self.intent_type, "direct_answer")
+        if self.mode == "clarify":
+            mapped = "clarify"
+        return IntentDecision(
+            action=mapped,
+            goal_text=self.goal,
+            tool_name="sql_query" if self.intent_type == "data_query" else None,
+            tool_args={},
+            answer=None,
+            clarify_questions=self.clarify_questions,
+            reasoning=self.reasoning,
+        )
 
 
 class IntentContext(BaseModel):
@@ -76,6 +159,11 @@ class IntentContextBuilder:
         history_text: str = "",
         memory_text: str = "",
     ) -> IntentContext:
+        warnings.warn(
+            "IntentContextBuilder is deprecated; use IntentClassifier instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return IntentContext(
             schema_text=schema_text,
             history_text=history_text,
@@ -83,117 +171,35 @@ class IntentContextBuilder:
         )
 
 
-class EntityResolver:
-    def __init__(
-        self,
-        *,
-        synonym_map: dict[str, list[str]] | None = None,
-        catalog: list[dict[str, Any]] | None = None,
-    ) -> None:
-        self._synonym_map = synonym_map or {}
-        self._catalog = catalog or []
-
-    def score_sync(self, raw: str, entity_type: str) -> ResolvedEntity:
-        raw_norm = _norm(raw)
-        best_display = ""
-        best_score = 0.0
-        for row in self._catalog:
-            if str(row.get("entity_type") or "") != entity_type:
-                continue
-            display = str(row.get("display") or "")
-            score = SequenceMatcher(None, raw_norm, _norm(display)).ratio()
-            if raw_norm and raw_norm in _norm(display):
-                score = max(score, 0.8)
-            if score > best_score:
-                best_score = score
-                best_display = display
-        if best_display:
-            return ResolvedEntity(raw=raw, matched=best_display, score=round(best_score, 3))
-        for term, targets in self._synonym_map.items():
-            score = SequenceMatcher(None, raw_norm, _norm(term)).ratio()
-            if raw_norm and raw_norm in _norm(term):
-                score = max(score, 0.8)
-            if score > best_score:
-                best_score = score
-                best_display = targets[0] if targets else term
-        return ResolvedEntity(raw=raw, matched=best_display, score=round(best_score, 3))
-
-
 class IntentSubagent:
     def __init__(
         self,
         *,
         llm_registry: Any | None = None,
-        entity_resolver: EntityResolver | None = None,
-        settings: Any,
+        entity_resolver: Any | None = None,
+        settings: Any | None = None,
     ) -> None:
+        warnings.warn(
+            "IntentSubagent is deprecated; use IntentClassifier instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._llm_registry = llm_registry
-        self._entity_resolver = entity_resolver or EntityResolver()
         self._settings = settings
 
     async def analyze(
         self,
         question: str,
         memory_text: str = "",
-        dictionary_text: str = "",  # kept for backward compat — ignored
-        intent_context: "IntentContext | None" = None,
-    ) -> IntentAnalysisResult:
-        ctx = intent_context or IntentContext(memory_text=memory_text)
-        prompt_blocks = ctx.to_prompt_blocks()
-
-        if self._llm_registry is None:
-            return self._heuristic(question)
-        client = self._llm_registry.get("intent")
-        try:
-            return await client.astructured_predict(
-                [
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are an intent analysis expert for a Vietnamese ERP system. "
-                            "Analyze the user's request using the context below and return a structured result. "
-                            "Decide the mode: 'run' if you have enough info, 'clarify' if critical info is missing, "
-                            "'auto_assume' if you can make safe assumptions. "
-                            "Write contextual clarify_questions in Vietnamese if mode='clarify'. "
-                            "Write a 1-2 sentence reasoning explaining your decision. "
-                            "If [CONVERSATION] context is available, treat it as already-known information — "
-                            "do NOT ask for clarification about facts or entities already present in the conversation history; "
-                            "instead, use 'run' or 'auto_assume' mode with higher confidence.\n\n"
-                            f"{prompt_blocks}"
-                        ),
-                    },
-                    {
-                        "role": "user",
-                        "content": question,
-                    },
-                ],
-                IntentAnalysisResult,
-            )
-        except Exception:
-            return self._heuristic(question)
-
-    @staticmethod
-    def _heuristic(question: str) -> IntentAnalysisResult:
-        text = (question or "").lower()
-        if any(token in text for token in ("tạo sản phẩm", "tạo danh mục", "catalog")):
-            intent_type = "catalog_draft"
-        elif any(token in text for token in ("nhập kho", "xuất kho", "tạo phiếu")):
-            intent_type = "inventory_draft"
-        elif any(token in text for token in ("biểu đồ", "chart", "vẽ")):
-            intent_type = "chart_report"
-        elif any(token in text for token in ("doanh thu", "tồn kho", "báo cáo", "công nợ")):
-            intent_type = "data_query"
-        else:
-            intent_type = "chat"
-        return IntentAnalysisResult(
-            goal=question or intent_type,
-            intent_type=intent_type,
-            required_data=[],
-            confidence=0.9,
-            mode="run",
-            reasoning="heuristic fallback",
+        dictionary_text: str = "",
+        intent_context: IntentContext | None = None,
+    ) -> IntentDecision:
+        warnings.warn(
+            "IntentSubagent.analyze is deprecated; use IntentClassifier.classify instead.",
+            DeprecationWarning,
+            stacklevel=2,
         )
-
-
-def _norm(text: str) -> str:
-    return " ".join((text or "").casefold().split())
+        ctx = intent_context or IntentContext(memory_text=memory_text)
+        classifier = IntentClassifier(llm_client=self._llm_registry.get("intent") if self._llm_registry else None)
+        context: dict[str, Any] = {"schema_text": ctx.schema_text, "system_info": ""}
+        return await classifier.classify(question=question, context=context)
