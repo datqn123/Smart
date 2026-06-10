@@ -26,7 +26,10 @@ def build_tool_subgraph(*, tool_name: str, execute: ExecuteFn,
 
     def execute_node(state: ToolState, config) -> dict:
         cfg = config.get("configurable", {})
-        deps = {k: v for k, v in cfg.items() if k != "llm"}
+        # Chi forward dep do app dat vao; bo qua 'llm' (truyen rieng) va cac
+        # key noi bo cua LangGraph (vd __pregel_*, prefix '_').
+        deps = {k: v for k, v in cfg.items()
+                if k != "llm" and not k.startswith("_")}
         output = execute(state, llm=cfg.get("llm"), **deps)
         return {"output": output}
 
