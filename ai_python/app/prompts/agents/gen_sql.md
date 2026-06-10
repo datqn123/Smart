@@ -161,8 +161,69 @@ Trả về JSON duy nhất theo format sau:
 - order_channel: 'Retail', 'Wholesale', 'Online'
 - status: 'Active', 'Inactive', 'Pending', 'Completed'
 
+## VIETNAMESE → TABLE/COLUMN MAPPING
+
+Khi user dùng thuật ngữ Việt, ánh xạ đúng bảng và cột:
+
+| Thuật ngữ Việt | Bảng | Cột tìm kiếm | Ghi chú |
+|---|---|---|---|
+| sản phẩm, hàng, hàng hóa, mặt hàng, gạo, đường, thịt... | products | name (ILIKE) | Tên sản phẩm cụ thể → tìm trong products.name, KHÔNG phải categories.name |
+| danh mục, loại sản phẩm, nhóm hàng, ngành hàng | categories | name (ILIKE) | Phân loại sản phẩm (Thực phẩm, Đồ uống, Vật liệu...) |
+| tồn kho, số lượng trong kho, còn bao nhiêu | inventory | quantity | Fact table hiện tại, KHÔNG tính từ receipt - dispatch |
+| giá vốn, giá nhập | productpricehistory | cost_price | Tên bảng viết liền |
+| giá bán, giá bán lẻ | productpricehistory | selling_price | Tên bảng viết liền |
+| phiếu nhập, nhập kho | stockreceipts | status, transaction_type | Khác với inventory |
+| phiếu xuất, xuất kho | stockdispatches | status, transaction_type | Kh khác với inventory |
+| doanh thu,doanh số | financeledger | amount, transaction_type='SalesRevenue' | Dùng transaction_type filter |
+| chi phí | financeledger | amount, transaction_type='PurchaseCost' hoặc 'OperatingExpense' |
+| dòng tiền, thu chi | financeledger | amount | Sum tất cả transaction_type |
+| đơn hàng, bán lẻ, bán buôn | salesorders | order_channel='Retail'/'Wholesale' |
+| nhà cung cấp | suppliers | name |
+| khách hàng | customers | name |
+| kho, vị trí kho | warehouselocations | name |
+
+**QUAN TRỌNG:**
+- "gạo", "đường", "thịt" → tìm trong **products.name** (tên sản phẩm cụ thể), KHÔNG phải categories.name
+- "Thực phẩm", "Đồ uống" → tìm trong **categories.name** (phân loại sản phẩm)
+- Khi user hỏi "loại gạo" → product có tên chứa "gạo", KHÔNG phải category "gạo"
+
+## QUERY INTENT PATTERNS
+
+**NGUYÊN TẮC VÀNG:** Mặc định SELECT danh sách (list), chỉ dùng COUNT/SUM khi câu hỏi CHỈ hỏi về tổng số/tổng cộng.
+
+| Câu hỏi kiểu | SELECT | Ví dụ |
+|---|---|---|
+| "có bao nhiêu loại X", "bao nhiêu loại" | **SELECT danh sách** + thêm count nếu cần | `SELECT id, name, quantity FROM products WHERE name ILIKE '%gạo%'` → 5 rows |
+| "liệt kê", "danh sách", "các", "những" | SELECT danh sách | `SELECT id, name, quantity FROM ...` |
+| "tổng số X" (chỉ hỏi số, không hỏi chi tiết) | SELECT COUNT | `SELECT COUNT(*) FROM ...` |
+| "tổng doanh thu", "tổng cộng" | SELECT SUM | `SELECT SUM(amount) FROM ...` |
+| "top N", "N lớn nhất/nhỏ nhất" | SELECT + ORDER BY + LIMIT | `SELECT ... ORDER BY x DESC LIMIT N` |
+| "so sánh" | SELECT + GROUP BY | `SELECT dimension, SUM(metric) FROM ... GROUP BY dimension` |
+
+**VÍ DỤ CỤ THỂ:**
+- "có bao nhiêu loại gạo trong kho" → `SELECT id, name, quantity FROM products WHERE name ILIKE '%gạo%' AND quantity > 0` (trả danh sách)
+- "tổng số sản phẩm đang bán" → `SELECT COUNT(*) FROM products WHERE status = 'Active'` (chỉ số)
+- "hãy liệt kê sản phẩm sắp hết hàng" → `SELECT id, name, quantity FROM inventory WHERE quantity < min_quantity`
+
+**SAI LẦM THƯỜNG GẶP (KHÔNG LÀM):**
+- ❌ "có bao nhiêu loại gạo" → `SELECT COUNT(...)` (SAI: user muốn xem các loại gạo)
+- ✅ "có bao nhiêu loại gạo" → `SELECT id, name, quantity ...` (ĐÚNG: trả danh sách, user đếm được từ số rows)
+
 ## DOMAIN HINTS
 - Revenue/expense/cashflow: dùng financeledger với transaction_type filters
 - Stock level/out-of-stock: dùng inventory (current quantity), KHÔNG dùng stockreceiptdetails
 - Cost/sale price: dùng productpricehistory (tên viết liền)
 - Order counts: dùng salesorders với order_channel filter
+
+### Inventory Rules (KHÔNG VI PHẠM)
+- Inventory.quantity = số lượng tồn kho hiện tại (đã trừ xuất, cộng nhập)
+- KHÔNG tự tính tồn kho từ SUM(receipts) - SUM(dispatches) — dùng inventory trực tiếp
+- quantity > 0 = còn hàng, quantity = 0 hoặc NULL = hết hàng
+- Sản phẩm cụ thể (gạo, thịt...) → products.name, KHÔNG phải categories.name
+- Danh mục sản phẩm (nhóm hàng) → categories.name
+
+### Product vs Category (HAY SAI)
+- products.name = tên sản phẩm cụ thể: "Gạo ST25", "Đường RJ162", "Thịt heo ba chỉ"
+- categories.name = tên nhóm/danh mục: "Thực phẩm", "Đồ uống", "Vật liệu xây dựng"
+- "gạo" → products (sản phẩm), KHÔNG phải categories (danh mục)
+- "Thực phẩm" → categories (danh mục), KHÔNG phải products
