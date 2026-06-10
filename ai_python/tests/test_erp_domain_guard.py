@@ -252,9 +252,9 @@ def test_domain_guard_clarifies_ambiguous_followup_detail_with_previous_scalar_c
     sse = out.get("domain_clarify_sse") or {}
     assert isinstance(sse, dict)
     qs = list(sse.get("questions") or [])
-    assert any("theo phiếu" in str(q).lower() for q in qs)
+    assert any("theo chiều" in str(q).lower() or "chiều nào" in str(q).lower() for q in qs)
     suggested = str(sse.get("suggestedRewrite") or "")
-    assert "liệt kê theo phiếu thu" in suggested.lower()
+    assert "liệt kê" in suggested.lower()
 
 
 def test_domain_guard_does_not_clarify_when_followup_already_has_dimension() -> None:

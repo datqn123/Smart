@@ -83,7 +83,7 @@ def _first_rows(observations: Any) -> list[dict[str, Any]]:
     for item in observations:
         if not isinstance(item, dict):
             continue
-        rows = item.get("rows")
+        rows = item.get("rows") or item.get("sample_rows")
         if isinstance(rows, list):
             return [row for row in rows if isinstance(row, dict)]
     return []

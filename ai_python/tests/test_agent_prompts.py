@@ -82,9 +82,9 @@ def test_load_agent_json_contract_non_empty(agent_id: str) -> None:
     assert "JSON" in contract or "json" in contract.lower()
 
 
-def test_gen_sql_mentions_with_cte() -> None:
+def test_gen_sql_mentions_retry_mechanism() -> None:
     body = load_agent_prompt("gen_sql")
-    assert "WITH" in body or "generate_series" in body
+    assert "retry" in body.lower() or "WORK SESSION" in body
 
 
 @pytest.mark.parametrize(

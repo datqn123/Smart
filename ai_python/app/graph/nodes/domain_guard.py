@@ -49,12 +49,20 @@ def build_followup_detail_clarify_advice(
 ) -> dict | None:
     """Check if user asks for detail drill-down after a scalar data answer."""
     qlow = (user_question or "").lower()
-    detail_keywords = ("chi tiết", "chi tiet", "theo", "liệt kê", "liet ke", "breakdown")
+    detail_keywords = ("chi tiết", "chi tiet", "liệt kê", "liet ke", "breakdown")
     if not any(kw in qlow for kw in detail_keywords):
         return None
     if intent != "system_data_query":
         return None
     if not isinstance(previous_data_answer, dict) and not isinstance(previous_scope, dict):
+        return None
+    # If question already specifies a dimension (e.g. "theo khách hàng"), proceed directly
+    dimension_patterns = (
+        "theo khách", "theo khách hàng", "theo sản phẩm", "theo mặt hàng",
+        "theo phiếu", "theo tháng", "theo năm", "theo nhân viên", "theo kho",
+        "theo nhà cung cấp", "theo đơn", "theo channel", "theo kênh",
+    )
+    if any(dim in qlow for dim in dimension_patterns):
         return None
     return {
         "suggested_rewrite": user_question,
