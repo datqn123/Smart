@@ -12,6 +12,8 @@ from app.graph.pg_schema_context import build_schema_artifact_from_postgres
 from app.graph.sql_prompts import format_schema_block
 from app.graph.sql_safety import enforce_read_only_sql, SqlSafetyError
 from app.harness.tool_registry import ToolManifest, ToolResult, TurnContext
+from app.llm.schemas import SqlGenerationOutput
+from app.prompts.load import load_agent_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -71,8 +73,6 @@ class SqlQueryTool:
             )
 
         # 2. Build system prompt with gen_sql.md skill + schema block
-        # Lazy imports to avoid circular dependency
-        from app.prompts.load import load_agent_prompt
 
         skill_prompt = load_agent_prompt("gen_sql")
         schema_block = format_schema_block(artifact, selected_tables=None, enriched=True)
@@ -80,7 +80,6 @@ class SqlQueryTool:
 
         # 3. Call LLM to generate SQL
         try:
-            from app.llm.schemas import SqlGenerationOutput
 
             client = self._deps.llm_registry.get("sql_gen")
             llm_result = await asyncio.to_thread(
