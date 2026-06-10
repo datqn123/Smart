@@ -218,7 +218,7 @@ class HarnessOrchestrator:
         if ctx.clarification_response is not None and (
             (ctx.pending_hitl_tool or "").strip() or _is_hitl_resume(ctx.clarification_response)
         ):
-            logger.info("harness_dispatch mode=hitl_resume has_hitl=%s thread_id=%s", getattr(ctx, 'pending_hitl_tool', None) is not None, getattr(ctx, 'thread_id', None))
+            logger.info("harness_dispatch mode=hitl_resume intent=hitl_resume has_hitl=%s thread_id=%s", getattr(ctx, 'pending_hitl_tool', None) is not None, getattr(ctx, 'thread_id', None))
             async for event in self._resume_hitl(scratchpad, ctx):
                 yield event
             return
@@ -231,7 +231,7 @@ class HarnessOrchestrator:
             bool(getattr(self._settings, "agentic_plan_dag_enabled", False))
             and bool(getattr(self._settings, "agentic_intent_object_enabled", False))
         ) else "reactive"
-        logger.info("harness_dispatch mode=%s has_hitl=%s thread_id=%s", _dispatch_mode, getattr(ctx, 'pending_hitl_tool', None) is not None, getattr(ctx, 'thread_id', None))
+        logger.info("harness_dispatch mode=%s intent=pending has_hitl=%s thread_id=%s", _dispatch_mode, getattr(ctx, 'pending_hitl_tool', None) is not None, getattr(ctx, 'thread_id', None))
         recorder = (
             TraceRecorder(intent="unknown")
             if bool(getattr(self._settings, "agentic_trace_enabled", True))
@@ -720,9 +720,10 @@ class HarnessOrchestrator:
                 if recorder is not None:
                     recorder.record_replan()
                 failed = [r.model_dump(mode="json") for r in results if not (r.ok and r.output_meets_expect)]
+                failing_node_ids = [r.node_id for r in results if not (r.ok and r.output_meets_expect)]
                 logger.info(
-                    "harness_replan attempt=%s/%s failing_nodes=%s nodes_count=%s",
-                    attempt, max_replans, len(failed), len(results),
+                    "harness_replan attempt=%s/%s reason=%s failing_nodes=%s nodes_count=%s",
+                    attempt, max_replans, failing_node_ids, len(failed), len(results),
                 )
                 return await planner.plan({"intent": intent_dump, "failed_nodes": failed}, "", manifest)
 
@@ -784,14 +785,15 @@ class HarnessOrchestrator:
             if recorder is not None:
                 recorder.record_replan()
             failed = [o.model_dump(mode="json") for o in observations if o.replan_required]
+            failing_node_ids = [o.node_id for o in observations if o.replan_required]
             logger.info(
-                "harness_replan attempt=%s/%s failing_nodes=%s nodes_count=%s",
-                attempt, max_replans, len(failed), len(observations),
+                "harness_replan attempt=%s/%s reason=%s failing_nodes=%s nodes_count=%s",
+                attempt, max_replans, failing_node_ids, len(failed), len(observations),
             )
             try:
                 return await planner.plan({"intent": intent_dump, "failed_nodes": failed}, "", manifest)
             except Exception:  # noqa: BLE001
-                logger.warning("harness_replan_stop reason=planner_error attempt=%s", attempt)
+                logger.warning("harness_replan_stop reason=planner_error attempt=%s failing_nodes=%s", attempt, failing_node_ids)
                 return None
 
         return await run_planner_owned_plan(
@@ -852,11 +854,19 @@ class HarnessOrchestrator:
             policy_version=POLICY_VERSION,
             asset_versions=_v3_asset_versions(),
         )
+        versions_ok = False
+        if record is not None:
+            versions_ok = (
+                getattr(record, 'manifest_version', None) == self._tool_registry.manifest_version
+                and getattr(record, 'policy_version', None) == POLICY_VERSION
+                and getattr(record, 'asset_versions', None) == _v3_asset_versions()
+            )
         logger.info(
-            "harness_template_lookup intent=%s found=%s demoted=%s",
+            "harness_template_lookup intent=%s found=%s demoted=%s versions_ok=%s",
             self._turn_intent_key,
             record is not None,
             getattr(record, 'demoted', False) if record else False,
+            versions_ok,
         )
         return record
 
