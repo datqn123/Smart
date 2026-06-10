@@ -542,14 +542,14 @@ export function DashboardPage() {
               recentOrders.map((order) => (
                 <div
                   key={order.id}
-                  className="flex items-center justify-between px-4 py-3 hover:bg-slate-50/60 transition-colors"
+                  className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 transition-colors"
                 >
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-sm font-mono font-semibold text-slate-900">
                         {order.orderCode}
                       </span>
-                      <span className="text-[10px] text-slate-400 border border-slate-200 rounded px-1 shrink-0">
+                      <span className="text-[10px] text-slate-500 bg-slate-100 rounded px-1.5 shrink-0">
                         {channelLabel(order.orderChannel)}
                       </span>
                     </div>
@@ -602,14 +602,14 @@ export function DashboardPage() {
               approvalData!.items.map((item) => (
                 <div
                   key={`${item.entityType}-${item.entityId}`}
-                  className="flex items-center justify-between px-4 py-3 hover:bg-slate-50/60 transition-colors"
+                  className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 transition-colors"
                 >
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-sm font-mono font-semibold text-slate-900">
                         {item.transactionCode}
                       </span>
-                      <span className="text-[10px] text-slate-400 border border-slate-200 rounded px-1 shrink-0">
+                      <span className="text-[10px] text-slate-500 bg-slate-100 rounded px-1.5 shrink-0">
                         {item.type}
                       </span>
                     </div>
@@ -659,7 +659,7 @@ export function DashboardPage() {
               topCustomers.map((c, idx) => (
                 <div
                   key={c.id}
-                  className="flex items-center justify-between px-4 py-3 hover:bg-slate-50/60 transition-colors"
+                  className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 transition-colors"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div
@@ -806,7 +806,7 @@ export function DashboardPage() {
 
       {/* Quick Shortcuts */}
       <div>
-        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">
+        <p className="text-xs font-medium text-muted-foreground mb-3">
           Truy cập nhanh
         </p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -814,14 +814,14 @@ export function DashboardPage() {
             <button
               key={s.to}
               onClick={() => navigate(s.to)}
-              className="flex items-center gap-3 bg-white border border-slate-200 rounded-xl p-4 hover:shadow-md hover:border-slate-300 transition-all text-left group"
+              className="flex items-center gap-3 bg-white border border-border shadow-sm rounded-xl p-4 hover:shadow-md hover:border-slate-300 transition-all text-left group"
             >
               <div
-                className={`h-9 w-9 rounded-lg ${s.color} flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform`}
+                className={`h-10 w-10 rounded-xl ${s.color} flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform`}
               >
                 <s.icon className="h-5 w-5 text-white" />
               </div>
-              <span className="text-sm font-semibold text-slate-700 group-hover:text-slate-900">
+              <span className="text-sm font-semibold text-slate-700 group-hover:text-foreground">
                 {s.label}
               </span>
             </button>
