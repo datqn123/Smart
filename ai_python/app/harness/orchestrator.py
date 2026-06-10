@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, replace
 from typing import Any
@@ -166,6 +167,13 @@ class HarnessOrchestrator:
         self._turn_intent_key = normalize_intent_key(question)
         self._replan_count = 0
         self._last_budget_hit = None
+        start_time = time.monotonic()
+        logger.info(
+            "harness_turn_start correlation_id=%s thread_id=%s message_preview=%s",
+            getattr(ctx, 'correlation_id', None),
+            getattr(ctx, 'thread_id', None),
+            scratchpad.messages[-1].content[:120] if scratchpad.messages else "",
+        )
         status = STATUS_FAILURE
         try:
             async for event in self._dispatch(scratchpad, ctx):
@@ -183,6 +191,14 @@ class HarnessOrchestrator:
                     status = STATUS_FAILURE
                 yield event
         finally:
+            logger.info(
+                "harness_turn_end status=%s steps=%s latency_ms=%.0f replans=%s hitl=%s",
+                status,
+                len(self._turn_tools),
+                (time.monotonic() - start_time) * 1000,
+                self._replan_count,
+                self._turn_hitl,
+            )
             self._record_turn_history(
                 ctx=ctx,
                 status=status,
@@ -202,6 +218,7 @@ class HarnessOrchestrator:
         if ctx.clarification_response is not None and (
             (ctx.pending_hitl_tool or "").strip() or _is_hitl_resume(ctx.clarification_response)
         ):
+            logger.info("harness_dispatch mode=hitl_resume has_hitl=%s thread_id=%s", getattr(ctx, 'pending_hitl_tool', None) is not None, getattr(ctx, 'thread_id', None))
             async for event in self._resume_hitl(scratchpad, ctx):
                 yield event
             return
@@ -210,6 +227,11 @@ class HarnessOrchestrator:
         self._budget.start()
         self._last_budget_hit = None
         self._replan_count = 0
+        _dispatch_mode = "plan" if (
+            bool(getattr(self._settings, "agentic_plan_dag_enabled", False))
+            and bool(getattr(self._settings, "agentic_intent_object_enabled", False))
+        ) else "reactive"
+        logger.info("harness_dispatch mode=%s has_hitl=%s thread_id=%s", _dispatch_mode, getattr(ctx, 'pending_hitl_tool', None) is not None, getattr(ctx, 'thread_id', None))
         recorder = (
             TraceRecorder(intent="unknown")
             if bool(getattr(self._settings, "agentic_trace_enabled", True))
@@ -267,6 +289,12 @@ class HarnessOrchestrator:
                 try:
                     decision = await self._decide(scratchpad)
                     self._budget.add_usage(self._last_llm_tokens, self._last_llm_cost)
+                    logger.info(
+                        "harness_step step=%s/%s action=%s tool=%s confidence=%.2f",
+                        step + 1, max_steps, decision.action,
+                        decision.tool_call.tool_name if decision.tool_call else None,
+                        getattr(decision, 'confidence', 0.0),
+                    )
                     if recorder is not None:
                         recorder.record_step(
                             step=step + 1,
@@ -331,6 +359,8 @@ class HarnessOrchestrator:
                     return
                 seen_tool_calls.add(signature)
 
+                logger.info("harness_tool_start tool=%s step=%s", tool_name, step + 1)
+                _tool_start = time.monotonic()
                 try:
                     self._check_policy(tool_name, args, ctx)
                     self._turn_tools.append(tool_name)
@@ -358,18 +388,29 @@ class HarnessOrchestrator:
                         error_message=str(exc),
                     )
 
+                _tool_latency = (time.monotonic() - _tool_start) * 1000
+                logger.info(
+                    "harness_tool_end tool=%s ok=%s latency_ms=%.0f rows=%s has_sse=%s",
+                    tool_name, result.ok, _tool_latency,
+                    len(result.output.get("rows", [])) if isinstance(result.output, dict) else 0,
+                    result.sse_payload is not None,
+                )
+
                 if result.pending_hitl:
                     if recorder is not None:
                         recorder.record_hitl()
                     self._turn_hitl += 1
                     if result.sse_payload:
-                        yield SsePayloadEvent(result.pending_hitl.event_name, result.sse_payload)
+                        _sse_evt = SsePayloadEvent(result.pending_hitl.event_name, result.sse_payload)
+                        logger.info("harness_sse_emit event=%s payload_keys=%s", _sse_evt.event_name, list(_sse_evt.payload.keys()))
+                        yield _sse_evt
                     yield PendingHitlEvent(result.pending_hitl)
                     return
 
                 if result.sse_payload:
                     event_name = str(result.sse_payload.get("_event") or "data")
                     payload = {k: v for k, v in result.sse_payload.items() if k != "_event"}
+                    logger.info("harness_sse_emit event=%s payload_keys=%s", event_name, list(payload.keys()))
                     yield SsePayloadEvent(event_name, payload)
 
                 scratchpad.add_observation(result, tool_name)
@@ -429,6 +470,7 @@ class HarnessOrchestrator:
         if result.sse_payload:
             event_name = str(result.sse_payload.get("_event") or "data")
             payload = {k: v for k, v in result.sse_payload.items() if k != "_event"}
+            logger.info("harness_sse_emit event=%s payload_keys=%s", event_name, list(payload.keys()))
             yield SsePayloadEvent(event_name, payload)
         scratchpad.add_observation(result, tool_name)
         self._ai_answer = result.observation_text
@@ -510,6 +552,7 @@ class HarnessOrchestrator:
             intent_type=str(getattr(self.last_metrics, "intent", "") or ""),
         )
         self._memory_store.append_turn(thread_id, turn)
+        logger.info("harness_memory_save thread=%s turn=%s tools=%s", thread_id, turn_index, list(self._turn_tools))
 
     @staticmethod
     def _effective_question(scratchpad: TurnScratchpad) -> str:
@@ -677,6 +720,10 @@ class HarnessOrchestrator:
                 if recorder is not None:
                     recorder.record_replan()
                 failed = [r.model_dump(mode="json") for r in results if not (r.ok and r.output_meets_expect)]
+                logger.info(
+                    "harness_replan attempt=%s/%s failing_nodes=%s nodes_count=%s",
+                    attempt, max_replans, len(failed), len(results),
+                )
                 return await planner.plan({"intent": intent_dump, "failed_nodes": failed}, "", manifest)
 
             try:
@@ -698,6 +745,7 @@ class HarnessOrchestrator:
             if sse:
                 event_name = str(sse.get("_event") or "data")
                 payload = {k: v for k, v in sse.items() if k != "_event"}
+                logger.info("harness_sse_emit event=%s payload_keys=%s", event_name, list(payload.keys()))
                 yield SsePayloadEvent(event_name, payload)
             scratchpad.add_observation(
                 ToolResult(ok=result.ok, output=result.tool_result, observation_text=result.observation_text),
@@ -736,9 +784,14 @@ class HarnessOrchestrator:
             if recorder is not None:
                 recorder.record_replan()
             failed = [o.model_dump(mode="json") for o in observations if o.replan_required]
+            logger.info(
+                "harness_replan attempt=%s/%s failing_nodes=%s nodes_count=%s",
+                attempt, max_replans, len(failed), len(observations),
+            )
             try:
                 return await planner.plan({"intent": intent_dump, "failed_nodes": failed}, "", manifest)
             except Exception:  # noqa: BLE001
+                logger.warning("harness_replan_stop reason=planner_error attempt=%s", attempt)
                 return None
 
         return await run_planner_owned_plan(
@@ -792,13 +845,20 @@ class HarnessOrchestrator:
         store = self._plan_template_store
         if store is None:
             return None
-        return store.get(
+        record = store.get(
             self._turn_intent_key,
             role_scope=_role_scope(ctx),
             manifest_version=self._tool_registry.manifest_version,
             policy_version=POLICY_VERSION,
             asset_versions=_v3_asset_versions(),
         )
+        logger.info(
+            "harness_template_lookup intent=%s found=%s demoted=%s",
+            self._turn_intent_key,
+            record is not None,
+            getattr(record, 'demoted', False) if record else False,
+        )
+        return record
 
     def _record_plan_template_outcome(self, ctx: TurnContext, status: str) -> None:
         store = self._plan_template_store
@@ -896,6 +956,7 @@ class HarnessOrchestrator:
             rbac_required=manifest.rbac_required if manifest else (),
             side_effect_class=manifest.side_effect_class if manifest else None,
         )
+        logger.info("harness_policy_check tool=%s role=%s decision=allow", tool_name, ctx.role)
 
     @staticmethod
     def _sse_from_output(output: Any) -> dict[str, Any] | None:
