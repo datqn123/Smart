@@ -9,10 +9,12 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -309,6 +311,71 @@ public class ProductJdbcRepository {
 		List<Integer> hit = namedJdbc.query("SELECT 1 FROM products WHERE id = :id LIMIT 1", Map.of("id", productId),
 				(rs, rn) -> 1);
 		return !hit.isEmpty();
+	}
+
+	/**
+	 * Trả về tập các id tồn tại trong bảng {@code products} (1 query batch). Tránh N+1 khi validate bulk request.
+	 *
+	 * @param ids danh sách id cần kiểm tra; nếu rỗng trả về tập rỗng
+	 * @return tập id thực sự tồn tại trong DB
+	 */
+	public Set<Integer> findExistingProductIds(List<Integer> ids) {
+		if (ids == null || ids.isEmpty()) {
+			return Collections.emptySet();
+		}
+		List<Integer> rows = namedJdbc.query("SELECT id FROM products WHERE id IN (:ids)",
+				Map.of("ids", ids), (rs, rn) -> rs.getInt("id"));
+		return new HashSet<>(rows);
+	}
+
+	/**
+	 * Trả về map id -> lý do block (chỉ chứa id bị block) cho bulk delete. Dùng {@code unnest(:ids)} + LATERAL
+	 * join để gom 3N truy vấn (stock receipt, order detail, inventory sum) về 1 query duy nhất.
+	 *
+	 * <p>Lý do block ưu tiên theo thứ tự: {@code HAS_STOCK_RECEIPT} > {@code HAS_ORDER_LINES} > {@code HAS_STOCK}
+	 * (giữ nguyên thứ tự của {@link #sumInventoryQuantity}/{@link #existsStockReceiptDetail}/{@link #existsOrderDetail}).
+	 *
+	 * @param ids danh sách id cần kiểm tra; nếu rỗng trả về map rỗng
+	 * @return map chỉ chứa id bị block, giá trị là mã lý do ({@code HAS_STOCK_RECEIPT} / {@code HAS_ORDER_LINES} /
+	 *         {@code HAS_STOCK})
+	 */
+	public Map<Integer, String> findBulkDeleteBlockReasons(List<Integer> ids) {
+		if (ids == null || ids.isEmpty()) {
+			return Collections.emptyMap();
+		}
+		String sql = """
+				SELECT p.id,
+				  CASE
+				    WHEN EXISTS (SELECT 1 FROM stockreceiptdetails WHERE product_id = p.id)
+				      THEN 'HAS_STOCK_RECEIPT'
+				    WHEN EXISTS (SELECT 1 FROM orderdetails WHERE product_id = p.id)
+				      THEN 'HAS_ORDER_LINES'
+				    WHEN COALESCE(inv.qty, 0) > 0
+				      THEN 'HAS_STOCK'
+				    ELSE NULL
+				  END AS block_reason
+				FROM unnest(:ids) AS p(id)
+				LEFT JOIN LATERAL (
+				  SELECT SUM(quantity) AS qty FROM inventory WHERE product_id = p.id
+				) inv ON true
+				""";
+		// NamedParameterJdbcTemplate yêu cầu mảng (không phải List) cho unnest(:ids)
+		Integer[] idArray = ids.toArray(new Integer[0]);
+		List<BlockedRow> rows = namedJdbc.query(sql, Map.of("ids", idArray), (rs, rn) -> {
+			int id = rs.getInt("id");
+			String reason = rs.getString("block_reason");
+			return new BlockedRow(id, reason);
+		});
+		Map<Integer, String> result = new HashMap<>();
+		for (BlockedRow r : rows) {
+			if (r.reason() != null) {
+				result.put(r.id(), r.reason());
+			}
+		}
+		return result;
+	}
+
+	private record BlockedRow(int id, String reason) {
 	}
 
 	public Optional<ProductDetailHeaderRow> loadDetailHeader(int productId) {

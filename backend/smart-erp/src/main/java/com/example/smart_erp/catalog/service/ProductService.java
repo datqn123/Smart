@@ -466,21 +466,25 @@ public class ProductService {
 		if (uniq.size() != ids.size()) {
 			throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Danh sách ids không được trùng lặp");
 		}
-		for (int pid : ids) {
-			if (!productJdbcRepository.existsProductId(pid)) {
-				throw new BusinessException(ApiErrorCode.BAD_REQUEST, "ids chứa sản phẩm không tồn tại",
-						Map.of("invalidId", String.valueOf(pid)));
-			}
+
+		// BATCH: 1 query thay vì N lần existsProductId()
+		Set<Integer> existing = productJdbcRepository.findExistingProductIds(ids);
+		if (existing.size() != ids.size()) {
+			Set<Integer> missing = new HashSet<>(ids);
+			missing.removeAll(existing);
+			throw new BusinessException(ApiErrorCode.BAD_REQUEST, "ids chứa sản phẩm không tồn tại",
+					Map.of("invalidId", missing.iterator().next().toString()));
 		}
-		for (int pid : ids) {
-			Optional<String> reason = deleteBlockReason(pid);
-			if (reason.isPresent()) {
-				String r = reason.get();
-				throw new BusinessException(ApiErrorCode.CONFLICT,
-						"Không thể xóa hết danh sách đã chọn. " + userMessageForDeleteBlockReason(r),
-						Map.of("failedId", String.valueOf(pid), "reason", r));
-			}
+
+		// BATCH: 1 query thay vì 3N lần (3 hàm check riêng lẻ trong deleteBlockReason)
+		Map<Integer, String> blocked = productJdbcRepository.findBulkDeleteBlockReasons(ids);
+		for (Map.Entry<Integer, String> entry : blocked.entrySet()) {
+			String r = entry.getValue();
+			throw new BusinessException(ApiErrorCode.CONFLICT,
+					"Không thể xóa hết danh sách đã chọn. " + userMessageForDeleteBlockReason(r),
+					Map.of("failedId", entry.getKey().toString(), "reason", r));
 		}
+
 		productJdbcRepository.lockProductsForUpdate(ids);
 		int deleted = productJdbcRepository.deleteProducts(ids);
 		if (deleted != ids.size()) {
