@@ -25,3 +25,20 @@ def test_allows_select(sql):  # fact-sql-execute
 def test_blocks_non_select(sql):  # fact-sql-guard
     with pytest.raises(SqlGuardError):
         assert_read_only(sql)
+
+
+@pytest.mark.parametrize("sql", [
+    # Postgres data-modifying CTE: get_type() == "SELECT" nhung phai bi chan
+    # boi token-scan tim DML trong CTE (fact-sql-guard, defense-in-depth).
+    "WITH t AS (DELETE FROM x RETURNING *) SELECT * FROM t",
+    "WITH t AS (UPDATE x SET a=1 RETURNING *) SELECT * FROM t",
+    "WITH t AS (INSERT INTO x VALUES (1) RETURNING *) SELECT * FROM t",
+    "SELECT 1 -- c\n; DROP TABLE t",   # comment + multi-statement injection
+])
+def test_blocks_data_modifying_cte_and_injection(sql):  # fact-sql-guard
+    with pytest.raises(SqlGuardError):
+        assert_read_only(sql)
+
+
+def test_allows_select_with_comment():
+    assert_read_only("select * from customers /* ok */")  # khong raise
