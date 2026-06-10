@@ -101,6 +101,49 @@ public class InventoryListJdbcRepository {
 		return c != null ? c : 0L;
 	}
 
+	/**
+	 * Task 2 — gộp summary + count: chạy 1 query duy nhất, trả về cả KPI và tổng
+	 * số dòng. Tận dụng cùng {@link #BASE_FROM} + filter; vẫn giữ {@link #loadSummary}
+	 * và {@link #countRows} cho {@code summary()} và các caller khác.
+	 */
+	public InventorySummaryWithCount loadSummaryWithCount(InventoryListQuery q) {
+		Filter f = buildFilter(q);
+		String sql = """
+				SELECT
+				  COUNT(*)::bigint AS total_rows,
+				  COUNT(*)::bigint AS total_skus,
+				  COALESCE(SUM(i.quantity::numeric * COALESCE(pph.latest_cost::numeric, 0)), 0) AS total_value,
+				  COALESCE(SUM(
+				    CASE
+				      WHEN i.quantity > 0 AND i.quantity <= i.min_quantity
+				      THEN 1
+				      ELSE 0
+				    END
+				  ), 0)::bigint AS low_stock_count,
+				  COALESCE(SUM(
+				    CASE
+				      WHEN i.expiry_date IS NOT NULL
+				        AND i.expiry_date <= (CURRENT_DATE + interval '30 day')
+				        AND i.quantity > 0
+				      THEN 1
+				      ELSE 0
+				    END
+				  ), 0)::bigint AS expiring_soon_count
+				""" + BASE_FROM + f.where;
+		return namedJdbc.queryForObject(sql, f.source, (rs, n) -> {
+			long total = rs.getLong("total_rows");
+			InventorySummaryData summary = new InventorySummaryData(
+					rs.getLong("total_skus"),
+					rs.getBigDecimal("total_value"),
+					rs.getLong("low_stock_count"),
+					rs.getLong("expiring_soon_count"));
+			return new InventorySummaryWithCount(summary, total);
+		});
+	}
+
+	public record InventorySummaryWithCount(InventorySummaryData summary, long total) {
+	}
+
 	public List<InventoryListRow> loadPage(InventoryListQuery q) {
 		Filter f = buildFilter(q);
 		int offset = (q.page() - 1) * q.limit();

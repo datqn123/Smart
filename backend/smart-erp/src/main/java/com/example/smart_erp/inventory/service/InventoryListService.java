@@ -17,6 +17,7 @@ import com.example.smart_erp.inventory.query.InventoryListQuery;
 import com.example.smart_erp.inventory.repository.InventoryListJdbcRepository;
 import com.example.smart_erp.inventory.repository.InventoryListJdbcRepository.InventoryListRow;
 import com.example.smart_erp.inventory.repository.InventoryListJdbcRepository.InventoryRelatedLineRow;
+import com.example.smart_erp.inventory.repository.InventoryListJdbcRepository.InventorySummaryWithCount;
 import com.example.smart_erp.inventory.response.InventoryByIdData;
 import com.example.smart_erp.inventory.response.InventoryListItemData;
 import com.example.smart_erp.inventory.response.InventoryListPageData;
@@ -45,12 +46,11 @@ public class InventoryListService {
 
 	@Transactional(readOnly = true)
 	public InventoryListPageData list(InventoryListQuery q) {
-		InventorySummaryData summary = listRepo.loadSummary(q);
-		long total = listRepo.countRows(q);
+		InventorySummaryWithCount sc = listRepo.loadSummaryWithCount(q);
 		List<InventoryListRow> rows = listRepo.loadPage(q);
 		LocalDate thirtyAhead = LocalDate.now(ZoneOffset.UTC).plusDays(EXPIRY_SOON_DAYS);
 		var items = rows.stream().map(r -> toItem(r, thirtyAhead)).collect(Collectors.toList());
-		return new InventoryListPageData(summary, items, q.page(), q.limit(), total);
+		return new InventoryListPageData(sc.summary(), items, q.page(), q.limit(), sc.total());
 	}
 
 	/** Task007 — đọc lại một dòng list sau PATCH (cùng read-model Task005). */
