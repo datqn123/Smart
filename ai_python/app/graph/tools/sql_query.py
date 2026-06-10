@@ -67,7 +67,7 @@ class SqlQueryTool:
                     observation_text=f"Schema load failed: {err}",
                     error_message=f"Schema load failed: {err}",
                 )
-            schema_tables = list(artifact.tables.keys()) if hasattr(artifact, "tables") else []
+            schema_tables = [t.name for t in (artifact.tables or [])] if hasattr(artifact, "tables") else []
             logger.info("tool=sql_query schema_loaded tables=%s table_names=%s",
                         len(schema_tables), schema_tables[:8])
         except Exception as exc:
