@@ -200,7 +200,7 @@ export function LoginForm() {
                   focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:border-primary focus-visible:bg-white focus-visible:shadow-none
                   ${errors.password ? "bg-alert-light text-alert" : ""}`}
               />
-              {/* Show/Hide password toggle - 44px touch target */}
+              {/* Show/Hide password toggle */}
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
