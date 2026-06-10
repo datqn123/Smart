@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { usePageTitle } from "@/context/PageTitleContext"
 import { OrderTable } from "@/features/orders/components/OrderTable"
@@ -55,14 +56,9 @@ export default function PendingApprovalsPage() {
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
   const [searchCode, setSearchCode] = useState("")
-  const [debouncedSearch, setDebouncedSearch] = useState("")
+  const debouncedSearch = useDebouncedValue(searchCode.trim(), SEARCH_DEBOUNCE_MS)
   const [typeFilter, setTypeFilter] = useState<"all" | "Inbound">("all")
   const [page, setPage] = useState(1)
-
-  useEffect(() => {
-    const t = window.setTimeout(() => setDebouncedSearch(searchCode.trim()), SEARCH_DEBOUNCE_MS)
-    return () => window.clearTimeout(t)
-  }, [searchCode])
 
   useEffect(() => {
     setPage(1)

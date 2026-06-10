@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react"
+import { memo, useCallback, useMemo, useState } from "react"
 import { Copy, RotateCcw, Table2 } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
@@ -204,7 +204,7 @@ function QueryResultTable({
   )
 }
 
-export function AiChatQueryTableCard({ payload }: Props) {
+export const AiChatQueryTableCard = memo(function AiChatQueryTableCard({ payload }: Props) {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editedRows, setEditedRows] = useState(() => cloneRows(payload.rows))
   const [dirty, setDirty] = useState(false)
@@ -356,4 +356,4 @@ export function AiChatQueryTableCard({ payload }: Props) {
       </Dialog>
     </>
   )
-}
+})

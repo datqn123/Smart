@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { usePageTitle } from "@/context/PageTitleContext"
 import type { Transaction } from "../types"
@@ -71,7 +72,7 @@ export function TransactionsPage() {
   const queryClient = useQueryClient()
 
   const [search, setSearch] = useState("")
-  const [debouncedSearch, setDebouncedSearch] = useState("")
+  const debouncedSearch = useDebouncedValue(search.trim(), SEARCH_DEBOUNCE_MS)
   const [statusFilter, setStatusFilter] = useState("all")
   const [typeFilter, setTypeFilter] = useState("all")
   const [dateFrom, setDateFrom] = useState("")
@@ -87,11 +88,6 @@ export function TransactionsPage() {
   useEffect(() => {
     setTitle("Giao dịch thu chi")
   }, [setTitle])
-
-  useEffect(() => {
-    const t = window.setTimeout(() => setDebouncedSearch(search.trim()), SEARCH_DEBOUNCE_MS)
-    return () => window.clearTimeout(t)
-  }, [search])
 
   useEffect(() => {
     const t = window.setTimeout(() => setPage(1), 0)

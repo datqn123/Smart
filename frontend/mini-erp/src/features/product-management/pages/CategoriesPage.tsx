@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { usePageTitle } from "@/context/PageTitleContext"
 import { useAuthStore } from "@/features/auth/store/useAuthStore"
@@ -124,7 +125,7 @@ export function CategoriesPage() {
     "description",
     "status",
   ])
-  const [debouncedSearch, setDebouncedSearch] = useState("")
+  const debouncedSearch = useDebouncedValue(search, SEARCH_DEBOUNCE_MS)
   const [statusFilter, setStatusFilter] = useState("all")
   const [selectedIds, setSelectedIds] = useState<number[]>([])
 
@@ -134,11 +135,6 @@ export function CategoriesPage() {
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingCategory, setEditingCategory] = useState<Category | undefined>()
   const [viewingCategory, setViewingCategory] = useState<Category | null>(null)
-
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS)
-    return () => clearTimeout(t)
-  }, [search])
 
   useEffect(() => {
     setTitle("Danh mục sản phẩm")

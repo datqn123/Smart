@@ -104,6 +104,10 @@ export function ChatBotPage() {
   const [recordingSeconds, setRecordingSeconds] = useState(0)
   const [conversationId, setConversationId] = useState(() => ensureConversationId())
   const chatEndRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  // Theo dõi người dùng có đang ở gần đáy không — chỉ auto-scroll khi đúng vậy,
+  // tránh kéo ngược màn hình khi họ cuộn lên đọc lại trong lúc đang stream.
+  const autoScrollRef = useRef(true)
   const streamRef = useRef<AiChatStreamHandle | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
@@ -112,8 +116,18 @@ export function ChatBotPage() {
   const recordingTickRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const copyResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  const handleMessagesScroll = () => {
+    const el = scrollContainerRef.current
+    if (!el) return
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    autoScrollRef.current = distanceFromBottom < 120
+  }
+
+  // behavior "auto" (instant) thay vì "smooth": trong lúc stream token, scroll mượt
+  // sẽ chồng animation gây layout thrash. Snap tức thời mỗi frame trông vẫn liền mạch.
   const scrollToBottom = () => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
+    if (!autoScrollRef.current) return
+    chatEndRef.current?.scrollIntoView({ behavior: "auto" })
   }
 
   useEffect(() => { scrollToBottom() }, [messages])
@@ -171,6 +185,34 @@ export function ChatBotPage() {
 
     let firstDeltaReceived = false
     let usesDeltaFull = false
+
+    // Gom các token delta vào buffer và chỉ flush 1 lần mỗi animation frame (~60fps).
+    // Trước đây mỗi token = 1 setMessages = 1 re-render; với 30-80 token/s đó là
+    // 30-80 lần map toàn bộ mảng messages mỗi giây. rAF gộp lại còn tối đa 60 render/s
+    // và mỗi render chỉ append 1 lần phần text đã tích luỹ.
+    let pendingDelta = ""
+    let flushRafId: number | null = null
+    const flushPendingDelta = () => {
+      flushRafId = null
+      if (!pendingDelta) return
+      const chunk = pendingDelta
+      pendingDelta = ""
+      setMessages(prev =>
+        prev.map(m =>
+          m.id === assistantId ? { ...m, content: `${m.content ?? ""}${chunk}` } : m
+        )
+      )
+    }
+    const scheduleFlush = () => {
+      if (flushRafId === null) flushRafId = requestAnimationFrame(flushPendingDelta)
+    }
+    const cancelFlush = () => {
+      if (flushRafId !== null) {
+        cancelAnimationFrame(flushRafId)
+        flushRafId = null
+      }
+    }
+
     streamRef.current = startAiChatPostStream({
       query,
       conversationId,
@@ -185,14 +227,14 @@ export function ChatBotPage() {
           firstDeltaReceived = true
           setProgressText("")
         }
-        setMessages(prev =>
-          prev.map(m =>
-            m.id === assistantId ? { ...m, content: `${m.content ?? ""}${delta}` } : m
-          )
-        )
+        pendingDelta += delta
+        scheduleFlush()
       },
       onDeltaFull: (text) => {
         usesDeltaFull = true
+        // delta_full thay thế toàn bộ nội dung → bỏ mọi delta đang buffer.
+        pendingDelta = ""
+        cancelFlush()
         if (!firstDeltaReceived) {
           firstDeltaReceived = true
           setProgressText("")
@@ -259,6 +301,9 @@ export function ChatBotPage() {
         )
       },
       onDone: () => {
+        // Áp nốt phần delta còn trong buffer trước khi kết thúc để không mất token cuối.
+        cancelFlush()
+        flushPendingDelta()
         setIsTyping(false)
         setProgressText("")
         streamRef.current = null
@@ -274,6 +319,8 @@ export function ChatBotPage() {
         }
       },
       onError: (message) => {
+        cancelFlush()
+        pendingDelta = ""
         setIsTyping(false)
         setProgressText("")
         setMessages(prev =>
@@ -516,7 +563,11 @@ export function ChatBotPage() {
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 scroll-smooth scrollbar-hide">
+      <div
+        ref={scrollContainerRef}
+        onScroll={handleMessagesScroll}
+        className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 scrollbar-hide"
+      >
         {messages.map((msg) => {
           // Ẩn bubble assistant đang stream với content rỗng — typing indicator sẽ hiển thị thay
           if (msg.role === "assistant" && isTyping && !msg.content && !msg.metadata) return null

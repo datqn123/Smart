@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from "react"
+import { memo, useId, useMemo, useState } from "react"
 import { BarChart3, Maximize2, PieChart as PieChartIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -341,7 +341,7 @@ function ChartCanvas({
   )
 }
 
-export function AiChatChartCard({ spec }: { spec: Record<string, unknown> }) {
+export const AiChatChartCard = memo(function AiChatChartCard({ spec }: { spec: Record<string, unknown> }) {
   const [dialogOpen, setDialogOpen] = useState(false)
   const gradientId = useId().replace(/:/g, "")
   const s = spec as ChartSpecShape
@@ -558,4 +558,4 @@ export function AiChatChartCard({ spec }: { spec: Record<string, unknown> }) {
       </Dialog>
     </>
   )
-}
+})

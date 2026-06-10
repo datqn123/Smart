@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useNavigate } from "react-router-dom"
 import { usePageTitle } from "@/context/PageTitleContext"
@@ -93,16 +94,11 @@ export function StockPage() {
     "expiryDate",
     "status",
   ])
-  const [debouncedSearch, setDebouncedSearch] = useState("")
+  const debouncedSearch = useDebouncedValue(filters.search, SEARCH_DEBOUNCE_MS)
   const [selectedIds, setSelectedIds] = useState<number[]>([])
 
   const scrollRootRef = useRef<HTMLDivElement>(null)
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(filters.search), SEARCH_DEBOUNCE_MS)
-    return () => clearTimeout(t)
-  }, [filters.search])
 
   const { data, isPending, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage, isFetching } =
     useInfiniteQuery({

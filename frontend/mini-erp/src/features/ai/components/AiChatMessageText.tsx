@@ -1,4 +1,4 @@
-import { Fragment } from "react"
+import { Fragment, memo, useMemo } from "react"
 
 type InlineToken =
   | { type: "text"; value: string }
@@ -158,10 +158,10 @@ function InlineText({ text }: { text: string }) {
   )
 }
 
-export function AiChatMessageText({ text }: { text: string }) {
-  const normalized = normalizeText(text || "")
+export const AiChatMessageText = memo(function AiChatMessageText({ text }: { text: string }) {
+  const normalized = useMemo(() => normalizeText(text || ""), [text])
+  const blocks = useMemo(() => parseBlocks(normalized), [normalized])
   if (!normalized) return null
-  const blocks = parseBlocks(normalized)
   return (
     <div className="flex-1 space-y-3 text-[15px] leading-7 text-slate-700 break-words">
       {blocks.map((block, idx) => {
@@ -209,4 +209,4 @@ export function AiChatMessageText({ text }: { text: string }) {
       })}
     </div>
   )
-}
+})

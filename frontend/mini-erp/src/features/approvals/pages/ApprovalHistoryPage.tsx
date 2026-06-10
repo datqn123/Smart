@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 import { useQuery } from "@tanstack/react-query"
 import { usePageTitle } from "@/context/PageTitleContext"
 import { OrderDetailDialog } from "@/features/orders/components/OrderDetailDialog"
@@ -53,17 +54,12 @@ export default function ApprovalHistoryPage() {
   const [isDetailOpen, setIsDetailOpen] = useState(false)
 
   const [searchCode, setSearchCode] = useState("")
-  const [debouncedSearch, setDebouncedSearch] = useState("")
+  const debouncedSearch = useDebouncedValue(searchCode.trim(), SEARCH_DEBOUNCE_MS)
   const [resolutionFilter, setResolutionFilter] = useState<"all" | "Approved" | "Rejected">("all")
   const [typeFilter, setTypeFilter] = useState<"all" | "Inbound">("all")
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
   const [page, setPage] = useState(1)
-
-  useEffect(() => {
-    const t = window.setTimeout(() => setDebouncedSearch(searchCode.trim()), SEARCH_DEBOUNCE_MS)
-    return () => window.clearTimeout(t)
-  }, [searchCode])
 
   useEffect(() => {
     setPage(1)

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from "react"
+import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { usePageTitle } from "@/context/PageTitleContext"
 import { useAuthStore } from "@/features/auth/store/useAuthStore"
@@ -79,7 +80,7 @@ export function SuppliersPage() {
     "address",
     "status",
   ])
-  const [debouncedSearch, setDebouncedSearch] = useState("")
+  const debouncedSearch = useDebouncedValue(search, SEARCH_DEBOUNCE_MS)
   const [statusFilter, setStatusFilter] = useState("all")
   const [sort, setSort] = useState<SupplierListSort>("updatedAt:desc")
   const [selectedIds, setSelectedIds] = useState<number[]>([])
@@ -95,11 +96,6 @@ export function SuppliersPage() {
   useEffect(() => {
     setTitle("Nhà cung cấp")
   }, [setTitle])
-
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS)
-    return () => clearTimeout(t)
-  }, [search])
 
   useEffect(() => {
     setSelectedIds([])

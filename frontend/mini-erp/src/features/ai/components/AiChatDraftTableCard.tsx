@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react"
+import { memo, useCallback, useMemo, useState } from "react"
 import {
   CheckCircle2,
   Loader2,
@@ -368,7 +368,7 @@ function CatalogDraftTableEditor({
   )
 }
 
-export function AiChatDraftTableCard({ initial, onDismiss }: Props) {
+export const AiChatDraftTableCard = memo(function AiChatDraftTableCard({ initial, onDismiss }: Props) {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [draftId] = useState(initial.draftId)
   const [entityType] = useState(initial.entityType)
@@ -520,4 +520,4 @@ export function AiChatDraftTableCard({ initial, onDismiss }: Props) {
       </Sheet>
     </>
   )
-}
+})

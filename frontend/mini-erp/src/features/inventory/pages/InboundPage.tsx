@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
+import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query"
 import { usePageTitle } from "@/context/PageTitleContext"
 import { Plus, Search, Calendar, Check } from "lucide-react"
@@ -75,7 +76,7 @@ export function InboundPage() {
     "totalAmount",
     "status",
   ])
-  const [debouncedSearch, setDebouncedSearch] = useState("")
+  const debouncedSearch = useDebouncedValue(search, SEARCH_DEBOUNCE_MS)
   const [statusFilter, setStatusFilter] = useState("all")
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
@@ -89,11 +90,6 @@ export function InboundPage() {
   const [editingReceipt, setEditingReceipt] = useState<StockReceipt | undefined>()
 
   const supplierIdParam = parseSupplierId(supplierFilter)
-
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS)
-    return () => clearTimeout(t)
-  }, [search])
 
   useEffect(() => { setTitle("Phiếu nhập kho") }, [setTitle])
 

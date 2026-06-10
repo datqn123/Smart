@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
+import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { useAuthStore } from "@/features/auth/store/useAuthStore"
@@ -61,7 +62,7 @@ export function DispatchPage() {
     "itemCount",
     "status",
   ])
-  const [debouncedSearch, setDebouncedSearch] = useState("")
+  const debouncedSearch = useDebouncedValue(search, SEARCH_DEBOUNCE_MS)
   const [statusFilter, setStatusFilter] = useState("all")
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
@@ -77,11 +78,6 @@ export function DispatchPage() {
   const [deleteReason, setDeleteReason] = useState("")
   const scrollRootRef = useRef<HTMLDivElement>(null)
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS)
-    return () => clearTimeout(t)
-  }, [search])
 
   useEffect(() => {
     setTitle("Phiếu xuất kho")

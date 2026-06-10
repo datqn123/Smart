@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
+import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { usePageTitle } from "@/context/PageTitleContext"
 import { ClipboardCheck, Plus, Search, Calendar, Download, Upload } from "lucide-react"
@@ -56,7 +57,7 @@ export function AuditPage() {
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
 
   const [search, setSearch] = useState("")
-  const [debouncedSearch, setDebouncedSearch] = useState("")
+  const debouncedSearch = useDebouncedValue(search, SEARCH_DEBOUNCE_MS)
   const [statusFilter, setStatusFilter] = useState("all")
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
@@ -66,11 +67,6 @@ export function AuditPage() {
   const [editSessionId, setEditSessionId] = useState<number | null>(null)
   const [editListHint, setEditListHint] = useState<AuditSession | null>(null)
   const [cancelDialogSession, setCancelDialogSession] = useState<AuditSession | null>(null)
-
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS)
-    return () => clearTimeout(t)
-  }, [search])
 
   useEffect(() => {
     setTitle("Kiểm kê kho")

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from "react"
+import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { usePageTitle } from "@/context/PageTitleContext"
 import { useAuthStore } from "@/features/auth/store/useAuthStore"
@@ -71,7 +72,7 @@ export function ProductsPage() {
     "price",
     "status",
   ])
-  const [debouncedSearch, setDebouncedSearch] = useState("")
+  const debouncedSearch = useDebouncedValue(search, SEARCH_DEBOUNCE_MS)
   const [statusFilter, setStatusFilter] = useState("all")
   const [categoryFilter, setCategoryFilter] = useState("all")
   const [sort, setSort] = useState<ProductListSort>("updatedAt:desc")
@@ -87,11 +88,6 @@ export function ProductsPage() {
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | undefined>()
-
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS)
-    return () => clearTimeout(t)
-  }, [search])
 
   useEffect(() => {
     setSelectedIds([])

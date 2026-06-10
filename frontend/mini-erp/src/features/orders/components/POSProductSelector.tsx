@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react"
+import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query"
 import { Search, Plus, Loader2, Package, Barcode } from "lucide-react"
 import { Input } from "@/components/ui/input"
@@ -45,7 +46,7 @@ function flattenCategories(categories: Category[]): Category[] {
 
 export function POSProductSelector() {
   const [search, setSearch] = useState("")
-  const [debouncedSearch, setDebouncedSearch] = useState("")
+  const debouncedSearch = useDebouncedValue(search, SEARCH_DEBOUNCE_MS)
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null)
   const [barcodeInput, setBarcodeInput] = useState("")
   const [barcodeError, setBarcodeError] = useState<string | null>(null)
@@ -54,11 +55,6 @@ export function POSProductSelector() {
   const addItem = useOrderStore((state) => state.addItem)
   const barcodeInputRef = useRef<HTMLInputElement>(null)
   const lineIdSeq = useRef(0)
-
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS)
-    return () => clearTimeout(t)
-  }, [search])
 
   const categoriesQuery = useQuery({
     queryKey: ["product-management", "categories", "pos-tabs"] as const,

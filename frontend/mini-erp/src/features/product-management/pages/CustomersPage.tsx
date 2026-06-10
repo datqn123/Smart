@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from "react"
+import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { usePageTitle } from "@/context/PageTitleContext"
 import { useAuthStore } from "@/features/auth/store/useAuthStore"
@@ -88,7 +89,7 @@ export function CustomersPage() {
     "orderCount",
     "status",
   ])
-  const [debouncedSearch, setDebouncedSearch] = useState("")
+  const debouncedSearch = useDebouncedValue(search, SEARCH_DEBOUNCE_MS)
   const [statusFilter, setStatusFilter] = useState("all")
   const [sort, setSort] = useState<CustomerListSort>("updatedAt:desc")
   const [selectedIds, setSelectedIds] = useState<number[]>([])
@@ -128,11 +129,6 @@ export function CustomersPage() {
   useEffect(() => {
     setTitle("Khách hàng")
   }, [setTitle])
-
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS)
-    return () => clearTimeout(t)
-  }, [search])
 
   const listFilters: Omit<GetCustomerListParams, "page"> = useMemo(
     () => ({

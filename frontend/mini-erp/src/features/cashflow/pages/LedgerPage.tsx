@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 import { useQuery } from "@tanstack/react-query"
 import { useNavigate } from "react-router-dom"
 import { usePageTitle } from "@/context/PageTitleContext"
@@ -22,7 +23,7 @@ export function LedgerPage() {
   const isLedgerAdmin = role === "Admin"
 
   const [search, setSearch] = useState("")
-  const [debouncedSearch, setDebouncedSearch] = useState("")
+  const debouncedSearch = useDebouncedValue(search.trim(), SEARCH_DEBOUNCE_MS)
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
   const [transactionTypeFilter, setTransactionTypeFilter] = useState("all")
@@ -32,11 +33,6 @@ export function LedgerPage() {
   useEffect(() => {
     setTitle("Sổ cái tài chính")
   }, [setTitle])
-
-  useEffect(() => {
-    const t = window.setTimeout(() => setDebouncedSearch(search.trim()), SEARCH_DEBOUNCE_MS)
-    return () => window.clearTimeout(t)
-  }, [search])
 
   useEffect(() => {
     const id = window.setTimeout(() => setPage(1), 0)

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react"
+import { memo, useCallback, useMemo, useState } from "react"
 import { CheckCircle2, Loader2, Package, Plus, Save, Trash2, Upload, X } from "lucide-react"
 import { toast } from "sonner"
 import { Link } from "react-router-dom"
@@ -305,7 +305,7 @@ function InventoryReceiptDraftEditor({
   )
 }
 
-export function AiChatReceiptDraftCard({ initial, onDismiss }: Props) {
+export const AiChatReceiptDraftCard = memo(function AiChatReceiptDraftCard({ initial, onDismiss }: Props) {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [draftId] = useState(initial.draftId)
   const [lineColumns] = useState<InventoryDraftColumn[]>(() => initial.lineColumns ?? [])
@@ -477,4 +477,4 @@ export function AiChatReceiptDraftCard({ initial, onDismiss }: Props) {
       </Sheet>
     </>
   )
-}
+})
