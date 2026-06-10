@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from typing import Any
@@ -20,6 +22,8 @@ from app.harness.tool_registry import (
     TurnContext,
     can_silent_retry,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class PlanNode(BaseModel):
@@ -82,7 +86,9 @@ class PlannerSubagent:
             ],
             PlanGraphOutput,
         )
-        return PlanGraph(nodes=out.nodes)
+        plan = PlanGraph(nodes=out.nodes)
+        logger.info("planner_generated nodes=%s", len(plan.nodes))
+        return plan
 
 
 class PlanExecutor:
@@ -127,6 +133,10 @@ class PlanExecutor:
             ]
             if blocked:
                 for node in blocked:
+                    blocked_by = [dep for dep in node.needs if dep in hard_failed]
+                    logger.warning(
+                        "plan_dep_blocked node=%s blocked_by=%s", node.id, blocked_by
+                    )
                     results.append(
                         NodeResult(
                             node_id=node.id,
@@ -146,6 +156,7 @@ class PlanExecutor:
                 and all(dep in succeeded or dep in validation_failed for dep in node.needs)
             ]
             if not ready:
+                logger.warning("plan_cycle_detected remaining_nodes=%s", list(pending))
                 for node_id in list(pending):
                     results.append(
                         NodeResult(
@@ -161,6 +172,11 @@ class PlanExecutor:
             # Resolve each ready node's args against already-succeeded node outputs
             # BEFORE launching the layer (every dependency is guaranteed complete).
             layer = [(node, _resolve_refs(dict(node.input_spec or {}), outputs)) for node in ready]
+            logger.info(
+                "plan_exec_layer_start layer=%s nodes=%s",
+                len(results),
+                [n.id for n in ready],
+            )
             layer_results = await asyncio.gather(
                 *(self._execute_node(node, args, ctx, result_store=result_store) for node, args in layer)
             )
@@ -216,6 +232,8 @@ class PlanExecutor:
                 side_effect_class=manifest.side_effect_class if manifest else None,
             )
             tool = self._tool_registry.get_impl(node.tool)
+            logger.info("plan_exec_node_start node=%s tool=%s", node.id, node.tool)
+            t0 = time.monotonic()
             result: ToolResult = await self._harness.arun_tool(
                 tool_name=node.tool,
                 tool=lambda: tool.invoke(args, ctx),
@@ -226,7 +244,15 @@ class PlanExecutor:
                     thread_id=ctx.thread_id,
                 ),
             )
+            latency_ms = (time.monotonic() - t0) * 1000
             output_meets_expect = _output_meets_expect(result, node.output_expect)
+            logger.info(
+                "plan_exec_node_end node=%s ok=%s meets_expect=%s latency_ms=%.0f",
+                node.id,
+                result.ok,
+                output_meets_expect,
+                latency_ms,
+            )
             observation: ObservationEnvelope | None = None
             output = dict(result.output or {})
             if result_store is not None:
@@ -238,6 +264,13 @@ class PlanExecutor:
                     output_meets_expect=output_meets_expect,
                 )
                 output = _planner_safe_output(output, observation)
+                logger.info(
+                    "plan_observation_built tool=%s rows=%s truncated=%s masked=%s",
+                    node.tool,
+                    observation.row_count,
+                    observation.truncated,
+                    observation.masked,
+                )
             return NodeResult(
                 node_id=node.id,
                 ok=bool(result.ok),
@@ -270,7 +303,10 @@ def _resolve_refs(value: Any, outputs: dict[str, dict[str, Any]]) -> Any:
     if isinstance(value, str):
         full = _REF_FULL.match(value.strip())
         if full:
-            return _lookup(full.group(1), outputs)
+            resolved = _lookup(full.group(1), outputs)
+            if resolved is None:
+                logger.warning("plan_ref_unresolved ref=%s", full.group(1))
+            return resolved
         if "${" in value:
             return _REF_EMBED.sub(lambda m: str(_lookup(m.group(1), outputs) or ""), value)
         return value
@@ -409,6 +445,7 @@ async def run_planner_owned_plan(
     - ``non_idempotent_write`` failures are never silently retried (FR-6.6).
     """
     max_replans = max(0, int(max_replans))
+    logger.info("v3_plan_start nodes=%s", len(plan.nodes))
     exec_ctx = replace(ctx, result_store=result_store) if result_store is not None else ctx
     seen_fingerprints: set[str] = set()
     replan_count = 0
@@ -424,14 +461,25 @@ async def run_planner_owned_plan(
         failing = [o for o in observations if o.replan_required]
         if not failing:
             return ReplanOutcome(results, observations, replan_count, "ok", False)
+        logger.info(
+            "v3_plan_replan attempt=%s/%s observations=%s",
+            replan_count + 1,
+            max_replans,
+            len(observations),
+        )
 
         # FR-6.6: a non-idempotent write must not be silently retried.
         if _has_non_idempotent_failure(results, node_tool, registry):
+            failing_node = next(
+                (r.node_id for r in results if not r.ok or not r.output_meets_expect), ""
+            )
+            logger.warning("v3_plan_nonidempotent_blocked node=%s", failing_node)
             return ReplanOutcome(results, observations, replan_count, "non_idempotent_block", True)
 
         # FR-6.5: identical failure fingerprint(s) => stop instead of looping.
         fps = {o.failure_fingerprint for o in failing if o.failure_fingerprint}
         if fps and fps <= seen_fingerprints:
+            logger.warning("v3_plan_fingerprint_duplicate fingerprints=%s", seen_fingerprints)
             return ReplanOutcome(results, observations, replan_count, "duplicate", True)
         seen_fingerprints |= fps
 
