@@ -23,10 +23,21 @@ def _build_upstream(state, forward_data: dict) -> dict:
 
 
 async def run_session(ctx: TurnContext, *, llm_sm, llm_tool, deps: dict,
-                      max_steps: int = 6, retry_cap: int = 2
+                      max_steps: int = 6, retry_cap: int = 2,
+                      resume_snapshot: dict | None = None,
+                      pending_store=None
                       ) -> AsyncGenerator[dict, None]:
     state = new_session_state(raw_require=ctx.raw_require, thread_id=ctx.thread_id)
     validator_passed = False
+
+    if resume_snapshot is not None:
+        state["tool_results"] = resume_snapshot.get("tool_results", {})
+        state["history"] = resume_snapshot.get("history", [])
+        state["retry_counts"] = resume_snapshot.get("retry_counts", {})
+        validator_passed = False  # re-validate sau clarify
+    if ctx.clarification_response:
+        state["raw_require"] = (f"{state['raw_require']}\n"
+                                f"[Bo sung tu user]: {ctx.clarification_response}")
 
     while state["status"] == "running" and state["step_count"] < max_steps:
         decision = analyze(state, llm=llm_sm)
@@ -42,6 +53,12 @@ async def run_session(ctx: TurnContext, *, llm_sm, llm_tool, deps: dict,
         if action == "request_clarification":
             state["pending_clarification"] = {"message": decision.message or ""}
             state["status"] = "paused"
+            if pending_store is not None:
+                await pending_store.save(ctx.thread_id, {
+                    "raw_require": ctx.raw_require, "thread_id": ctx.thread_id,
+                    "tool_results": state["tool_results"], "history": state["history"],
+                    "retry_counts": state["retry_counts"],
+                    "pending_clarification": state["pending_clarification"]})
             yield _event("clarify", {"message": decision.message or "",
                                      "thread_id": ctx.thread_id})
             break
@@ -62,7 +79,7 @@ async def run_session(ctx: TurnContext, *, llm_sm, llm_tool, deps: dict,
         upstream = _build_upstream(state, decision.forward_data)
         yield _event("tool_call", {"tool_name": tool, "reasoning": decision.reasoning})
         try:
-            result = dispatch(tool, raw_require=ctx.raw_require, upstream_data=upstream,
+            result = dispatch(tool, raw_require=state["raw_require"], upstream_data=upstream,
                               llm=llm_tool, deps=deps, validator_passed=validator_passed)
         except DispatchError as exc:
             state["history"].append({"action": "dispatch_error", "tool": tool, "error": str(exc)})

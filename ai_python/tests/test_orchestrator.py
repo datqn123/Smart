@@ -75,3 +75,26 @@ async def test_budget_exhaustion_aborts_safely(monkeypatch):
     events = await _collect(run_session(ctx, llm_sm=llm, llm_tool=llm, deps={}, max_steps=3, retry_cap=2))
     err = [e for e in events if e["type"] == "error"]
     assert err and "gioi han" in err[0]["data"]["message"].lower()
+
+
+@pytest.mark.asyncio
+async def test_resume_continues_from_snapshot(monkeypatch):  # fact-validator-hitl
+    calls = _deps_with_fake_dispatch(monkeypatch, {
+        "data_validator": {"output": {"verdict": "pass", "reason": "ok"}, "valid": True, "validation_error": None},
+        "answer_composer": {"output": {"answer": "OK.\nGợi ý: tiep?"}, "valid": True, "validation_error": None},
+    })
+    llm = ScriptLLM([
+        {"action": "call_tool", "tool_name": "data_validator", "forward_data": {"from": "sql_execute"}, "reasoning": "revalidate"},
+        {"action": "call_tool", "tool_name": "answer_composer", "forward_data": {"from": "sql_execute"}, "reasoning": "compose"},
+        {"action": "finish", "tool_name": None, "forward_data": {}, "reasoning": "done"},
+    ])
+    ctx = TurnContext(raw_require="doanh thu", user_id="u", thread_id="t",
+                      clarification_response="Quy 1 nam 2026")
+    snapshot = {"raw_require": "doanh thu", "thread_id": "t",
+                "tool_results": {"sql_execute": {"rows": [{"rev": 100}]}},
+                "history": [], "retry_counts": {},
+                "pending_clarification": {"message": "Khi nao?"}}
+    events = await _collect(run_session(ctx, llm_sm=llm, llm_tool=llm, deps={},
+                                        max_steps=6, retry_cap=2, resume_snapshot=snapshot))
+    assert "sql_execute" in snapshot["tool_results"]   # data cu giu nguyen
+    assert any(e["type"] == "answer" for e in events)
