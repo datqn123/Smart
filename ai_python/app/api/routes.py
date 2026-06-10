@@ -471,10 +471,16 @@ async def _aiter_chat_sse_events(
                     if current.startswith(prev_answer) and len(current) > len(prev_answer):
                         delta = current[len(prev_answer):]
                         if delta:
+                            if not first_delta_logged:
+                                logger.info("sse_first_delta ttfb_ms=%.0f", (time.monotonic() - start_time) * 1000)
+                                first_delta_logged = True
                             yield _sse_ui_event("delta", delta)
                             had_stream_payload = True
                         prev_answer = current
                     elif current != prev_answer:
+                        if not first_delta_logged:
+                            logger.info("sse_first_delta ttfb_ms=%.0f", (time.monotonic() - start_time) * 1000)
+                            first_delta_logged = True
                         yield _sse_ui_event("delta", current)
                         had_stream_payload = True
                         prev_answer = current
@@ -486,10 +492,16 @@ async def _aiter_chat_sse_events(
                 if current.startswith(prev_answer) and len(current) > len(prev_answer):
                     delta = current[len(prev_answer):]
                     if delta:
+                        if not first_delta_logged:
+                            logger.info("sse_first_delta ttfb_ms=%.0f", (time.monotonic() - start_time) * 1000)
+                            first_delta_logged = True
                         yield _sse_ui_event("delta", delta)
                         had_stream_payload = True
                     prev_answer = current
                 elif current != prev_answer:
+                    if not first_delta_logged:
+                        logger.info("sse_first_delta ttfb_ms=%.0f", (time.monotonic() - start_time) * 1000)
+                        first_delta_logged = True
                     yield _sse_ui_event("delta", current)
                     had_stream_payload = True
                     prev_answer = current

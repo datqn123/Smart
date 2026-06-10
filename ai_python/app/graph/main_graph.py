@@ -7,8 +7,6 @@ from typing import Any
 
 from langgraph.graph import END, START, StateGraph
 
-logger = logging.getLogger(__name__)
-
 from app.graph.checkpointing import build_checkpointer
 from app.graph.deps import GraphDeps
 from app.graph.nodes.chart_report import (
@@ -32,6 +30,8 @@ from app.graph.inventory_draft_subgraph import build_inventory_draft_subgraph
 from app.graph.sql_subgraph import build_sql_subgraph
 from app.graph.progress import wrap_node_with_stream_progress as wrap
 from app.graph.state import AgentState
+
+logger = logging.getLogger(__name__)
 
 
 def build_main_graph(deps: GraphDeps):
@@ -95,7 +95,7 @@ def build_main_graph(deps: GraphDeps):
     g.add_edge("agent_review", END)
     g.add_edge("chart_fail_message", END)
     g.add_edge("summarize_answer", END)
-    logger.info("graph_compile nodes=%s", list(g.nodes.keys()))
+    logger.debug("graph_compile nodes=%s", list(g.nodes.keys()))
     return g
 
 
@@ -108,9 +108,9 @@ def compile_agent_graph(
     main = build_main_graph(deps)
     if not use_checkpointer:
         compiled = main.compile()
-        logger.info("graph_compiled checkpointer=%s", use_checkpointer)
+        logger.debug("graph_compiled checkpointer=%s", use_checkpointer)
         return compiled
     ck = build_checkpointer(deps.settings)
     compiled = main.compile(checkpointer=ck)
-    logger.info("graph_compiled checkpointer=%s", use_checkpointer)
+    logger.debug("graph_compiled checkpointer=%s", use_checkpointer)
     return compiled

@@ -6,8 +6,6 @@ import logging
 
 from langgraph.graph import END, START, StateGraph
 
-logger = logging.getLogger(__name__)
-
 from app.graph.deps import GraphDeps
 from app.graph.nodes.chart_readiness import (
     make_chart_readiness_node,
@@ -30,6 +28,8 @@ from app.graph.progress import wrap_node_with_stream_progress as wrap
 from app.graph.state import AgentState
 from app.graph.verify_sql_intent import make_verify_sql_intent_node
 from app.graph.analyze_empty_result import make_analyze_empty_result_node
+
+logger = logging.getLogger(__name__)
 
 
 def _route_after_gen_sql(state: AgentState) -> str:
@@ -186,5 +186,5 @@ def build_sql_subgraph(deps: GraphDeps):
         },
     )
     g.add_edge("fail_max_attempts", END)
-    logger.info("sql_subgraph_compile nodes=%s", list(g.nodes.keys()))
+    logger.debug("sql_subgraph_compile nodes=%s", list(g.nodes.keys()))
     return g
