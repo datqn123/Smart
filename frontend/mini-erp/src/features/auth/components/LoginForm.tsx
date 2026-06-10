@@ -156,20 +156,20 @@ export function LoginForm() {
   }
 
   return (
-    <Card className="w-full max-w-md bg-white border-none shadow-[0px_10px_30px_rgba(43,52,55,0.06)] rounded-lg lg:rounded-xl">
+    <Card className="w-full max-w-md bg-white shadow-sm border border-border rounded-lg lg:rounded-xl">
       <CardHeader className="space-y-1 pb-8">
-        <CardTitle className="text-2xl font-medium text-foreground tracking-tight" style={{ letterSpacing: "-0.02em" }}>
+        <CardTitle className="text-xl font-semibold text-foreground tracking-tight">
           Chào mừng trở lại
         </CardTitle>
         <CardDescription className="text-muted-foreground font-normal leading-relaxed">
-          Hãy nhập thông tin để quản lý doanh nghiệp của bạn
+          Nhập thông tin tài khoản để đăng nhập
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+      <CardContent className="space-y-4">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           {/* Email Field */}
           <div className="space-y-2">
-            <Label htmlFor="email" className="text-sm font-medium text-foreground">
+            <Label htmlFor="email" className="text-sm font-semibold text-foreground">
               Email
             </Label>
             <Input
@@ -177,8 +177,8 @@ export function LoginForm() {
               type="email"
               placeholder="ten@vi-du.com"
               {...register("email")}
-              className={`h-11 bg-muted border-none transition-all duration-200 ease-in-out
-                focus-visible:ring-0 focus-visible:bg-white focus-visible:shadow-[0_0_0_2px_rgba(100,116,139,0.2)]
+              className={`h-10 bg-white border border-border shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)] transition-all duration-200 ease-in-out
+                focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:border-primary focus-visible:bg-white focus-visible:shadow-none
                 ${errors.email ? "bg-alert-light text-alert" : ""}`}
             />
             {errors.email && (
@@ -188,7 +188,7 @@ export function LoginForm() {
 
           {/* Password Field */}
           <div className="space-y-2">
-            <Label htmlFor="password" className="text-sm font-medium text-foreground">
+            <Label htmlFor="password" className="text-sm font-semibold text-foreground">
               Mật khẩu
             </Label>
             <div className="relative">
@@ -196,15 +196,15 @@ export function LoginForm() {
                 id="password"
                 type={showPassword ? "text" : "password"}
                 {...register("password")}
-                className={`h-11 bg-muted border-none pr-12 transition-all duration-200 ease-in-out
-                  focus-visible:ring-0 focus-visible:bg-white focus-visible:shadow-[0_0_0_2px_rgba(100,116,139,0.2)]
+                className={`h-10 bg-white border border-border shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)] pr-12 transition-all duration-200 ease-in-out
+                  focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:border-primary focus-visible:bg-white focus-visible:shadow-none
                   ${errors.password ? "bg-alert-light text-alert" : ""}`}
               />
               {/* Show/Hide password toggle - 44px touch target */}
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-0 top-0 h-11 w-11 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors duration-200 ease-in-out"
+                className="absolute right-0 top-0 h-10 w-10 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors duration-200 ease-in-out"
                 aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
               >
                 {showPassword ? (
@@ -222,10 +222,10 @@ export function LoginForm() {
 
           {submitError ? <p className="text-sm text-alert">{submitError}</p> : null}
 
-          {/* [A] Login Button - 44px height, gradient per Login.md spec */}
+          {/* Login Button */}
           <Button
             type="submit"
-            className="w-full h-11 bg-gradient-to-br from-primary to-primary-hover text-white font-medium rounded-[0.5rem] transition-all duration-200 ease-in-out mt-4 hover:opacity-95 active:scale-[0.98]"
+            className="w-full h-10 bg-primary text-white font-medium rounded-lg hover:bg-primary-hover active:scale-[0.98] transition-colors mt-4"
             disabled={isLoading}
           >
             {isLoading ? (
@@ -239,7 +239,7 @@ export function LoginForm() {
             <button
               type="button"
               onClick={() => setOwnerResetOpen(true)}
-              className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+              className="text-sm text-muted-foreground hover:text-foreground font-medium"
             >
               Yêu cầu mật khẩu
             </button>
