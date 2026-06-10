@@ -13,7 +13,13 @@ def execute(state: ToolState, *, llm, **_) -> dict:
     raw = llm.complete(system=state["skill"], user=user, role="default").strip()
     if raw.startswith("```"):
         raw = raw.strip("`"); raw = raw[raw.find("{"):]
-    return {"answer": json.loads(raw).get("answer", "")}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        parsed = None
+    # answer="" -> self_validate fail -> SM retry (khong sap run_session).
+    answer = parsed.get("answer", "") if isinstance(parsed, dict) else ""
+    return {"answer": answer}
 
 
 def self_validate(state: ToolState):

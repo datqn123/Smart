@@ -42,3 +42,21 @@ def test_self_validate_rejects_unknown_verdict():
     st["output"] = {"verdict": "maybe", "reason": "?"}
     ok, err = self_validate(st)
     assert ok is False
+
+
+class _BadJsonLLM:
+    def complete(self, *, system, user, role="default", temperature=None):
+        return "khong phai JSON"
+
+
+def test_validator_handles_malformed_llm_json():  # resilience
+    # LLM tra output khong parse duoc -> execute KHONG raise; verdict=None
+    # -> self_validate fail -> SM retry.
+    st = new_tool_state(tool_name="data_validator", raw_require="x",
+                        upstream_data={"rows": []})
+    st["skill"] = "S"
+    out = execute(st, llm=_BadJsonLLM())
+    assert out["verdict"] is None
+    st["output"] = out
+    ok, _ = self_validate(st)
+    assert ok is False

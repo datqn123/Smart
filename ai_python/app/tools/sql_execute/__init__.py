@@ -18,7 +18,14 @@ def _parse_sql(raw: str) -> str:
 def execute(state: ToolState, *, llm, executor, row_limit: int = 100, **_) -> dict:
     user = _PROMPT.format(skill=state["skill"], raw_require=state["raw_require"],
                           upstream=json.dumps(state["upstream_data"], ensure_ascii=False))
-    sql = _parse_sql(llm.complete(system=state["skill"], user=user, role="default"))
+    raw = llm.complete(system=state["skill"], user=user, role="default")
+    try:
+        sql = _parse_sql(raw)
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        # LLM tra output khong phai JSON hop le -> loi tool, self_validate fail,
+        # SM se retry (khong de exception lam sap ca run_session).
+        return {"sql": "", "columns": [], "rows": [],
+                "error": f"LLM output khong hop le: {exc}"}
     try:
         assert_read_only(sql)                                  # guard TRUOC khi cham executor
         result = executor.run(sql, row_limit=row_limit)

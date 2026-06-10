@@ -41,3 +41,22 @@ def test_self_validate_fails_when_error_present():
     st["output"] = {"sql": "", "rows": [], "columns": [], "error": "guard blocked"}
     ok, err = self_validate(st)
     assert ok is False and "guard" in err
+
+
+class _BadJsonLLM:
+    def complete(self, *, system, user, role="default", temperature=None):
+        return "Xin loi, toi khong the giup."  # khong phai JSON
+
+
+def test_execute_handles_malformed_llm_json(stub_sql):  # resilience
+    # LLM tra output khong phai JSON -> execute KHONG raise, tra error,
+    # khong cham executor; self_validate fail -> SM retry.
+    st = new_tool_state(tool_name="sql_execute", raw_require="x")
+    st["skill"] = "S"
+    out = execute(st, llm=_BadJsonLLM(), executor=stub_sql, row_limit=100)
+    assert out["error"] is not None
+    assert out["rows"] == []
+    assert stub_sql.executed == []
+    st["output"] = out
+    ok, _ = self_validate(st)
+    assert ok is False

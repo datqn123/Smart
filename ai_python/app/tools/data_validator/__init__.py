@@ -13,7 +13,13 @@ def execute(state: ToolState, *, llm, **_) -> dict:
     raw = llm.complete(system=state["skill"], user=user, role="default").strip()
     if raw.startswith("```"):
         raw = raw.strip("`"); raw = raw[raw.find("{"):]
-    parsed = json.loads(raw)
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        parsed = None
+    if not isinstance(parsed, dict):
+        # verdict=None -> self_validate fail -> SM retry (khong sap run_session).
+        return {"verdict": None, "reason": "LLM output khong hop le (khong parse duoc JSON)"}
     return {"verdict": parsed.get("verdict"), "reason": parsed.get("reason", "")}
 
 

@@ -29,3 +29,21 @@ def test_self_validate_passes_with_marker():
     st["output"] = {"answer": "Tra loi.\nGợi ý: lam tiep X?"}
     ok, err = self_validate(st)
     assert ok is True
+
+
+class _BadJsonLLM:
+    def complete(self, *, system, user, role="default", temperature=None):
+        return "oops not json"
+
+
+def test_composer_handles_malformed_llm_json():  # resilience
+    # LLM tra output khong parse duoc -> execute KHONG raise; answer=""
+    # -> self_validate fail -> SM retry.
+    st = new_tool_state(tool_name="answer_composer", raw_require="x",
+                        upstream_data={})
+    st["skill"] = "S"
+    out = execute(st, llm=_BadJsonLLM())
+    assert out["answer"] == ""
+    st["output"] = out
+    ok, _ = self_validate(st)
+    assert ok is False
