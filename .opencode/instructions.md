@@ -8,6 +8,7 @@ Dùng MCP CodeGraph (`codegraph`) cho mọi truy vấn tìm kiếm trong codebas
 
 - `docs/reference/` — Tài liệu active, agent **PHẢI đọc** trước khi làm việc
   - `ai-knowledge/` (K1-K15 knowledge base)
+  - `ai-knowledge/tools/` (Tool reference docs — auto-update khi code thay đổi)
   - `guides/` (GUID_ERP, Custom Builder guide)
   - `api-contracts/` (API contracts từng module)
   - `tables/` (DB schema — auto-generated)
