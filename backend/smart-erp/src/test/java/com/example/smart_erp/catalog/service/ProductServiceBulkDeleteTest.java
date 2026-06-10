@@ -284,4 +284,26 @@ class ProductServiceBulkDeleteTest {
 					assertThat(Set.of("2", "3")).contains(failedId);
 				});
 	}
+
+	@Test
+	void bulkDelete_propagatesToctouConflictFromBatchLock() {
+		// I3: khi race xảy ra (id bị xóa giữa check và lock), BusinessException(CONFLICT)
+		// từ lockProductsForUpdateBatch phải được propagate lên service
+		List<Integer> ids = List.of(1, 2, 3);
+		when(productJdbcRepository.findExistingProductIds(ids)).thenReturn(new HashSet<>(ids));
+		when(productJdbcRepository.findBulkDeleteBlockReasons(ids)).thenReturn(Map.of());
+		org.mockito.Mockito.doThrow(new BusinessException(ApiErrorCode.CONFLICT,
+				"Sản phẩm đã bị xóa bởi người dùng khác", Map.of("id", "2")))
+				.when(productJdbcRepository).lockProductsForUpdate(ids);
+
+		assertThatThrownBy(() -> service.bulkDelete(new ProductsBulkDeleteRequest(ids), ownerJwt()))
+				.isInstanceOfSatisfying(BusinessException.class, ex -> {
+					assertThat(ex.getCode()).isEqualTo(ApiErrorCode.CONFLICT);
+					assertThat(ex.getMessage()).contains("Sản phẩm đã bị xóa bởi người dùng khác");
+					assertThat(ex.getDetails()).containsEntry("id", "2");
+				});
+
+		// deleteProducts không được gọi vì lock thất bại
+		verify(productJdbcRepository, never()).deleteProducts(anyList());
+	}
 }

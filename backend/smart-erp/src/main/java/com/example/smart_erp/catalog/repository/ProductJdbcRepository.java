@@ -26,6 +26,8 @@ import org.springframework.stereotype.Repository;
 import com.example.smart_erp.catalog.response.ProductGalleryImageData;
 import com.example.smart_erp.catalog.response.ProductListItemData;
 import com.example.smart_erp.catalog.response.ProductUnitRow;
+import com.example.smart_erp.common.api.ApiErrorCode;
+import com.example.smart_erp.common.exception.BusinessException;
 
 @SuppressWarnings("null")
 @Repository
@@ -218,11 +220,50 @@ public class ProductJdbcRepository {
 	}
 
 	public void lockProductsForUpdate(List<Integer> ids) {
-		List<Integer> sorted = new ArrayList<>(new HashSet<>(ids));
-		Collections.sort(sorted);
-		for (int id : sorted) {
-			lockProductForUpdate(id).orElseThrow(() -> new IllegalStateException("Sản phẩm id=" + id + " biến mất khi khóa"));
+		lockProductsForUpdateBatch(ids);
+	}
+
+	/**
+	 * Khóa nhiều products trong 1 query bằng {@code SELECT ... FOR UPDATE} kèm {@code ORDER BY id} để tránh
+	 * deadlock giữa các tiến trình đồng thời. Dùng thay cho vòng lặp per-row nhằm giảm N+1.
+	 *
+	 * <p>Trả về danh sách {@link ProductLockSnapshot} thực sự bị khóa; nếu số row trả về &lt; số id đầu vào,
+	 * tức là có id bị xóa mất giữa lúc check existence và lúc lock (TOCTOU) — phương thức sẽ ném
+	 * {@link BusinessException} với {@link ApiErrorCode#CONFLICT} để client nhận lỗi rõ ràng.
+	 *
+	 * @param ids danh sách id cần khóa; nếu rỗng trả về list rỗng
+	 * @return danh sách snapshot của các sản phẩm đã khóa
+	 * @throws BusinessException nếu một trong các id không tồn tại khi lock (TOCTOU)
+	 */
+	public List<ProductLockSnapshot> lockProductsForUpdateBatch(List<Integer> ids) {
+		if (ids == null || ids.isEmpty()) {
+			return Collections.emptyList();
 		}
+		String sql = """
+				SELECT p.id, p.sku_code, p.barcode, p.name, p.category_id, p.description, p.weight, p.status, p.image_url
+				FROM products p WHERE p.id IN (:ids) ORDER BY p.id FOR UPDATE
+				""";
+		Integer[] idArray = ids.toArray(new Integer[0]);
+		List<ProductLockSnapshot> rows = namedJdbc.query(sql, Map.of("ids", idArray), (rs, rn) -> {
+			Integer categoryId = (Integer) rs.getObject("category_id");
+			BigDecimal w = (BigDecimal) rs.getObject("weight");
+			return new ProductLockSnapshot(rs.getInt("id"), rs.getString("sku_code"), rs.getString("barcode"),
+					rs.getString("name"), categoryId, rs.getString("description"), w, rs.getString("status"),
+					rs.getString("image_url"));
+		});
+		if (rows.size() < idArray.length) {
+			Set<Integer> lockedIds = new HashSet<>();
+			for (ProductLockSnapshot s : rows) {
+				lockedIds.add(s.id());
+			}
+			for (Integer id : ids) {
+				if (!lockedIds.contains(id)) {
+					throw new BusinessException(ApiErrorCode.CONFLICT, "Sản phẩm đã bị xóa bởi người dùng khác",
+							Map.of("id", id.toString()));
+				}
+			}
+		}
+		return rows;
 	}
 
 	public Optional<ProductLockSnapshot> lockProductForUpdate(int productId) {
