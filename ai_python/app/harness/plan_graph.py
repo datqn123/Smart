@@ -16,7 +16,6 @@ from app.harness.observation import ObservationEnvelope, build_observation
 from app.harness.policy import HarnessPolicy
 from app.harness.runtime import AgentHarness, ToolCallContext
 from app.harness.tool_registry import (
-    ToolInput,
     ToolRegistry,
     ToolResult,
     TurnContext,
@@ -121,6 +120,7 @@ class PlanExecutor:
         # Outputs of completed nodes, addressable by downstream input_spec refs
         # of the form ``${node_id.path}`` (data-flow binding between DAG nodes).
         outputs: dict[str, dict[str, Any]] = {}
+        layer_idx = 0
         while pending:
             # FR-6 / guardrail (P1-1): a node whose dependency HARD-FAILED must never
             # run — otherwise a write/draft tool could execute after a failed lookup.
@@ -171,12 +171,13 @@ class PlanExecutor:
                 break
             # Resolve each ready node's args against already-succeeded node outputs
             # BEFORE launching the layer (every dependency is guaranteed complete).
-            layer = [(node, _resolve_refs(dict(node.input_spec or {}), outputs)) for node in ready]
+            layer = [(node, _resolve_refs(dict(node.input_spec or {}), outputs, node_id=node.id)) for node in ready]
             logger.info(
                 "plan_exec_layer_start layer=%s nodes=%s",
-                len(results),
+                layer_idx,
                 [n.id for n in ready],
             )
+            layer_idx += 1
             layer_results = await asyncio.gather(
                 *(self._execute_node(node, args, ctx, result_store=result_store) for node, args in layer)
             )
@@ -295,7 +296,7 @@ _REF_FULL = re.compile(r"^\$\{([^}]+)\}$")
 _REF_EMBED = re.compile(r"\$\{([^}]+)\}")
 
 
-def _resolve_refs(value: Any, outputs: dict[str, dict[str, Any]]) -> Any:
+def _resolve_refs(value: Any, outputs: dict[str, dict[str, Any]], *, node_id: str = "") -> Any:
     """Resolve ``${node_id.path}`` references in a node's input_spec against the
     outputs of already-completed nodes. Non-reference values pass through unchanged,
     so a static input_spec keeps working exactly as before.
@@ -305,15 +306,15 @@ def _resolve_refs(value: Any, outputs: dict[str, dict[str, Any]]) -> Any:
         if full:
             resolved = _lookup(full.group(1), outputs)
             if resolved is None:
-                logger.warning("plan_ref_unresolved ref=%s", full.group(1))
+                logger.warning("plan_ref_unresolved ref=%s node=%s", full.group(1), node_id)
             return resolved
         if "${" in value:
             return _REF_EMBED.sub(lambda m: str(_lookup(m.group(1), outputs) or ""), value)
         return value
     if isinstance(value, dict):
-        return {key: _resolve_refs(item, outputs) for key, item in value.items()}
+        return {key: _resolve_refs(item, outputs, node_id=node_id) for key, item in value.items()}
     if isinstance(value, list):
-        return [_resolve_refs(item, outputs) for item in value]
+        return [_resolve_refs(item, outputs, node_id=node_id) for item in value]
     return value
 
 
@@ -462,7 +463,7 @@ async def run_planner_owned_plan(
         if not failing:
             return ReplanOutcome(results, observations, replan_count, "ok", False)
         logger.info(
-            "v3_plan_replan attempt=%s/%s observations=%s",
+            "v3_plan_replan attempt=%s max=%s observations=%s",
             replan_count + 1,
             max_replans,
             len(observations),
