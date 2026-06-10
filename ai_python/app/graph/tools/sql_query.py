@@ -79,8 +79,8 @@ class SqlQueryTool:
         system_prompt = f"{skill_prompt}\n\n## SCHEMA\n{schema_block}"
 
         # 3. Call LLM to generate SQL
+        sql = ""
         try:
-
             client = self._deps.llm_registry.get("sql_gen")
             llm_result = await asyncio.to_thread(
                 client.structured_predict,
@@ -94,7 +94,7 @@ class SqlQueryTool:
             logger.exception("LLM generation failed")
             return ToolResult(
                 ok=False,
-                output={"generated_sql": sql if "sql" in dir() else ""},
+                output={"generated_sql": sql},
                 observation_text=f"LLM generation failed: {exc}",
                 error_message=f"LLM generation failed: {exc}",
             )
