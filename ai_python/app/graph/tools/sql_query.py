@@ -7,6 +7,8 @@ import logging
 import time
 from typing import Any
 
+from langchain_core.messages import HumanMessage, SystemMessage
+
 from app.graph.deps import GraphDeps
 from app.graph.pg_schema_context import build_schema_artifact_from_postgres
 from app.graph.sql_prompts import format_schema_block
@@ -86,9 +88,8 @@ class SqlQueryTool:
             client = self._deps.llm_registry.get("sql_gen")
             llm_result = await asyncio.to_thread(
                 client.structured_predict,
-                [{"role": "user", "content": question}],
+                [SystemMessage(content=system_prompt), HumanMessage(content=question)],
                 SqlGenerationOutput,
-                system=system_prompt,
             )
             sql = (llm_result.sql or "").strip()
             explanation = llm_result.explanation or ""
