@@ -25,7 +25,6 @@ class AgentState(TypedDict, total=False):
     user_id: str | None
     tenant_id: str | None
     thread_id: str | None
-    sql_review_ok: bool | None
     sql_valid: bool | None
     verify_intent_ok: bool | None
     verify_intent_action: str | None
@@ -114,7 +113,6 @@ _TRANSIENT_KEYS = frozenset(
         "error_payload",
         "intent",
         "route_source",
-        "sql_review_ok",
         "sql_valid",
         "verify_intent_ok",
         "verify_intent_action",
