@@ -1,5 +1,9 @@
 # Agent Instructions — Docs Management
 
+## Quy tắc tìm kiếm bắt buộc
+
+Dùng MCP CodeGraph (`codegraph`) cho mọi truy vấn tìm kiếm trong codebase. Không dùng grep thuần (bash rg/grep) khi cần phân tích dependency, call graph, hoặc structure.
+
 ## Cấu trúc docs
 
 - `docs/reference/` — Tài liệu active, agent **PHẢI đọc** trước khi làm việc
@@ -19,6 +23,26 @@
    - Cập nhật `docs/reference/guides/` tương ứng
 3. **API endpoints**:
    - Cập nhật file tương ứng trong `docs/reference/api-contracts/`
+
+## Quy tắc cập nhật reference khi code thay đổi
+
+Khi bạn thay đổi code trong `ai_python/`:
+
+1. **Tool thay đổi** (thêm/sửa/xóa tool trong `app/graph/tools/` hoặc `app/harness/tool_registry.py`):
+   - Cập nhật file tương ứng trong `docs/reference/ai-knowledge/tools/`
+   - Nếu thêm tool mới: tạo file mới + cập nhật `index.md`
+   - Nếu xóa tool: xóa file + cập nhật `index.md`
+
+2. **Prompt thay đổi** (sửa file trong `app/prompts/agents/`):
+   - Cập nhật section "Prompt" trong file tool tương ứng
+
+3. **Graph structure thay đổi** (sửa `app/graph/main_graph.py`, `app/graph/sql_subgraph.py`, v.v.):
+   - Cập nhật section "LangGraph (Legacy)" trong file tool tương ứng
+
+4. **Harness integration thay đổi** (sửa `app/harness/orchestrator.py`, `app/harness/plan_graph.py`):
+   - Cập nhật section "Harness (v3.0)" trong file tool tương ứng
+
+Mọi conversation đều PHẢI tuân thủ rule này. Không được bỏ qua.
 
 ## Cách chạy
 
