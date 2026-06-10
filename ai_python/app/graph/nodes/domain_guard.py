@@ -11,7 +11,6 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from app.graph.agent_trace import emit_agent_trace
 from app.graph.answer_quality import finalize_answer
-from app.graph.business_scope import build_followup_detail_clarify_advice
 from app.graph.deps import GraphDeps
 from app.graph.erp_guide.load_index import format_index_for_prompt, load_domain_index
 from app.graph.erp_guide.retrieve import detect_heuristic_misnomers, retrieve_guide_snippets
@@ -39,6 +38,29 @@ logger = logging.getLogger(__name__)
 
 _DOMAIN_GUARD_SYSTEM = load_agent_prompt("domain_guard")
 _DOMAIN_GUARD_CONTRACT = load_agent_json_contract("domain_guard") or ""
+
+
+def build_followup_detail_clarify_advice(
+    *,
+    user_question: str,
+    intent: str,
+    previous_scope: dict | None = None,
+    previous_data_answer: dict | None = None,
+) -> dict | None:
+    """Check if user asks for detail drill-down after a scalar data answer."""
+    qlow = (user_question or "").lower()
+    detail_keywords = ("chi tiết", "chi tiet", "theo", "liệt kê", "liet ke", "breakdown")
+    if not any(kw in qlow for kw in detail_keywords):
+        return None
+    if intent != "system_data_query":
+        return None
+    if not isinstance(previous_data_answer, dict) and not isinstance(previous_scope, dict):
+        return None
+    return {
+        "suggested_rewrite": user_question,
+        "questions": ["Bạn muốn xem chi tiết theo chiều nào?"],
+        "scope": previous_scope or {},
+    }
 
 _CLARIFY_BUBBLE_INTRO = (
     "Cần làm rõ thêm — xem chi tiết và câu đề xuất trong khung bên dưới."

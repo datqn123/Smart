@@ -10,9 +10,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from app.graph.agent_trace import emit_agent_trace
 from app.graph.chart_calendar import resolve_month_calendar
 from app.graph.chart_data_profile import build_query_result_profile, profile_for_prompt
-from app.graph.chart_sql_shape import sql_has_time_grouping
 from app.graph.deps import GraphDeps
-from app.graph.feedback import append_feedback
 from app.graph.message_utils import latest_human_question
 from app.graph.progress import emit_progress
 from app.graph.retry_policy import (
@@ -23,6 +21,29 @@ from app.graph.retry_policy import (
 from app.graph.state import AgentState
 from app.llm.schemas import ChartReadinessOutput
 from app.prompts.load import load_agent_json_contract, load_agent_prompt
+
+
+def sql_has_time_grouping(sql: str) -> bool:
+    import re
+    low = sql.lower()
+    return any(
+        kw in low
+        for kw in (
+            "date_trunc",
+            "to_char(",
+            "extract(",
+            "date_part",
+            "generate_series",
+        )
+    )
+
+
+def append_feedback(state: dict, category: str, message: str) -> dict:
+    fb = dict(state.get("validation_feedback") or {"policy": [], "exec": [], "result": [], "extras": {}})
+    bucket = list(fb.get(category) or [])
+    bucket.append(message)
+    fb[category] = bucket
+    return fb
 
 logger = logging.getLogger(__name__)
 

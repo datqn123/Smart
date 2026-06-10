@@ -4,17 +4,21 @@
     "type": "split",
     "children": [
       {
-        "id": "3c17e99e912b8d3e",
+        "id": "b5edf0c422659dc2",
         "type": "tabs",
         "children": [
           {
-            "id": "b35f9c2d5b1079b5",
+            "id": "44d7bd22a1adfc6f",
             "type": "leaf",
             "state": {
-              "type": "empty",
-              "state": {},
+              "type": "markdown",
+              "state": {
+                "file": "reference/ai-knowledge/tools/answer_composer.md",
+                "mode": "source",
+                "source": false
+              },
               "icon": "lucide-file",
-              "title": "Tab mới"
+              "title": "answer_composer"
             }
           }
         ]
@@ -179,8 +183,28 @@
       "bases:Tạo cơ sở mới": false
     }
   },
-  "active": "4a42ad8245f0b892",
+  "active": "44d7bd22a1adfc6f",
   "lastOpenFiles": [
+    "reference/ai-knowledge/tools/answer_composer.md",
+    "reference/ai-knowledge/agentic-ai-supporting-assets/001_index.md",
+    "reference/ai-knowledge/agentic-ai-supporting-assets/005_K4_real_catalog_embedding_index.md",
+    "reference/ai-knowledge/agentic-ai-supporting-assets/004_K3_enum_status_dictionary.md",
+    "reference/ai-knowledge/agentic-ai-supporting-assets/003_K2_vi_synonym_to_column_dictionary.md",
+    "reference/api-contracts/ai.md",
+    "superpowers/plans/2026-06-10-sql-tool-simplification.md",
+    "reference/ai-knowledge/tools/index.md",
+    "reference/ai-knowledge/tools/erp_guide.md",
+    "reference/ai-knowledge/tools/data_validator.md",
+    "reference/ai-knowledge/tools/data_table_builder.md",
+    "reference/ai-knowledge/tools/build_chart.md",
+    "superpowers/specs/2026-06-10-sql-tool-simplification-design.md",
+    "reference/ai-knowledge/tools/inventory_draft.md",
+    "reference/ai-knowledge/tools/catalog_draft.md",
+    "reference/ai-knowledge/tools/schema_explore.md",
+    "reference/ai-knowledge/tools/sql_query.md",
+    "reference/ai-knowledge/tools",
+    "superpowers/plans/2026-06-10-agentic-tools-reference.md",
+    "superpowers/specs/2026-06-10-agentic-tools-reference-design.md",
     "superpowers/specs/2026-06-10-sql-entity-context-design.md",
     "archive/dev-common/008_custom-builder-phase7-ai-custom-draft.md",
     "archive/dev-common/007_custom-builder-phase6-ai-custom-query.md",
@@ -188,34 +212,15 @@
     "archive/dev-common/005_custom-builder-phase4-inventory-effect.md",
     "archive/dev-common/004_custom-builder-phase3-logic-connector.md",
     "archive/dev-common/003_custom-builder-phase2-workflow.md",
-    "archive/dev-common/002_custom-builder-phase1-entity-record-foundation.md",
-    "archive/dev-common/001_custom-builder-program-overview.md",
     "archive/dev-common",
-    "archive/fix-bug/002_tech-spec-ui-rendering-bottlenecks.md",
-    "archive/fix-bug/003_qa-spec-ui-rendering-bottlenecks.md",
-    "archive/fix-bug/004_code-review-ui-rendering-bottlenecks.md",
-    "archive/fix-bug/ai-python/plans/PROGRESS_BAR_FIX_PLAN.md",
     "archive/fix-bug/ai-python/plans",
     "archive/fix-bug/ai-python",
-    "archive/fix-bug/backend/bugs/Bug_Task021.md",
     "archive/fix-bug/backend/bugs",
     "archive/fix-bug/backend",
-    "archive/dev-requires/Design Agentic AI.md",
     "archive/dev-requires",
-    "archive/fix-bug/001_srs-ui-rendering-bottlenecks.md",
-    "archive/fix-bug/frontend/ba/change-requests/CR_Task030_fix-inbound-page-parse-error.md",
-    "archive/fix-bug/frontend/sync_reports/SYNC_REPORT_Task079.md",
-    "archive/fix-bug/frontend/sync_reports/SYNC_REPORT_Task030.md",
-    "archive/fix-bug/frontend/srs/SRS_Task083_frontend-quality-gate-fixes.md",
-    "archive/fix-bug/frontend/srs/SRS_Task079_fix-transactions-white-screen.md",
-    "archive/fix-bug/frontend/srs/SRS_Task030_fix-inbound-page-parse-error.md",
-    "archive/fix-bug/frontend/srs/SRS_Task016_fix-stock-status-dropdown-visibility.md",
-    "archive/fix-bug/frontend/qa/QA_Task083_frontend-quality-gate-fixes.md",
-    "archive/fix-bug/frontend/bugs/Bug_Task025_Elicitation.md",
     "archive/fix-bug/frontend/bugs/Bug_TASK025_3.png",
     "archive/fix-bug/frontend/bugs/Bug_TASK025_2.png",
     "archive/fix-bug/frontend/bugs/Bug_TASK025_1.png",
-    "archive/fix-bug/frontend/bugs/Bug_Task025_05_Visual_Shadow.md",
     "archive/fix-bug/frontend/bugs/BUG_TASK025.png",
     "archive/fix-bug/frontend/bugs/Bug_Task016._01.png",
     "archive/fix-bug/frontend/bugs/Bug_Task016.png",
@@ -223,7 +228,6 @@
     "archive/fix-bug/frontend/ba/change-requests",
     "archive/fix-bug/frontend/sync_reports",
     "archive/fix-bug/frontend/srs",
-    "archive/fix-bug/frontend/qa",
     "fix-bug/frontend/bugs/Bug_TASK025_3.png",
     "fix-bug/frontend/bugs/Bug_TASK025_2.png",
     "fix-bug/frontend/bugs/Bug_TASK025_1.png"

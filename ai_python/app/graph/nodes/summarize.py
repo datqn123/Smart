@@ -9,12 +9,6 @@ from langchain_core.messages import AIMessage
 from app.graph.agent_trace import emit_agent_trace
 from app.graph.answer_fallbacks import SQL_EMPTY_VI
 from app.graph.answer_quality import finalize_answer
-from app.graph.business_scope import (
-    is_followup_detail_reconciled,
-    is_raw_sql_alias,
-    scalar_label_from_scope,
-    scope_effective_question,
-)
 from app.graph.datetime_display import localize_query_result_for_display
 from app.graph.deps import GraphDeps
 from app.graph.display_format import format_display_for_chat_ui
@@ -25,6 +19,32 @@ from app.graph.message_utils import (
 from app.graph.progress import emit_progress
 from app.graph.state import AgentState
 from app.prompts.load import load_agent_prompt
+
+
+def scope_effective_question(user_q: str, business_scope: dict | None) -> str:
+    if not isinstance(business_scope, dict):
+        return user_q
+    rewritten = business_scope.get("effective_question") or business_scope.get("normalized_question")
+    return str(rewritten) if rewritten else user_q
+
+
+def scalar_label_from_scope(business_scope: dict | None) -> str | None:
+    if not isinstance(business_scope, dict):
+        return None
+    return business_scope.get("scalar_label")
+
+
+def is_raw_sql_alias(key: str) -> bool:
+    return any(
+        key.lower().startswith(p)
+        for p in ("sum_", "total_", "count_", "avg_", "min_", "max_")
+    ) or key.lower() in ("total", "count", "sum", "value", "amount")
+
+
+def is_followup_detail_reconciled(business_scope: dict | None) -> bool:
+    if not isinstance(business_scope, dict):
+        return False
+    return bool(business_scope.get("reconciled"))
 
 logger = logging.getLogger(__name__)
 

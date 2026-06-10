@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import time
 from typing import Any
 
 from app.graph.deps import GraphDeps
-from app.graph.nodes.schema_explore import make_schema_explore_node
+from app.graph.pg_schema_context import build_schema_artifact_from_postgres
+from app.graph.sql_prompts import format_schema_block
 from app.graph.tools._state import build_tool_state
 from app.harness.tool_registry import ToolManifest, ToolResult, TurnContext
 
@@ -33,24 +33,28 @@ class SchemaExploreTool:
 
     def __init__(self, deps: GraphDeps) -> None:
         self._deps = deps
-        self._node_fn = make_schema_explore_node(deps)
 
     async def invoke(self, args: dict[str, Any], ctx: TurnContext) -> ToolResult:
         _invoke_start = time.monotonic()
         logger.info("tool_invoke_start tool=schema_explore topic=%s", args.get("topic", ""))
         topic = str(args.get("topic") or args.get("query") or "").strip()
-        state = build_tool_state(topic, ctx, self._deps.settings)
-        out = await asyncio.to_thread(self._node_fn, state)
-        plan = out.get("schema_plan") if isinstance(out, dict) else None
-        artifact = out.get("runtime_schema_artifact") if isinstance(out, dict) else None
-        if isinstance(plan, dict):
-            obs = f"Schema plan: {json.dumps(plan, ensure_ascii=False, default=str)[:800]}"
-        elif isinstance(artifact, dict):
-            obs = "Schema artifact loaded."
-        else:
-            obs = "Schema exploration did not return additional schema context."
+        artifact, err = await asyncio.to_thread(
+            build_schema_artifact_from_postgres, self._deps.settings, topic
+        )
+        if err:
+            _latency_ms = (time.monotonic() - _invoke_start) * 1000
+            logger.info("tool_invoke_end tool=schema_explore ok=False latency_ms=%.0f", _latency_ms)
+            return ToolResult(
+                ok=False,
+                output={"schema": {}},
+                observation_text=f"Schema load failed: {err}",
+                error_message=str(err),
+            )
+        schema_block = format_schema_block(artifact, selected_tables=None, enriched=True)
+        schema = artifact.model_dump(mode="json") if hasattr(artifact, "model_dump") else {}
+        obs = f"Schema artifact loaded. {len(schema.get('tables', []))} tables."
         _latency_ms = (time.monotonic() - _invoke_start) * 1000
-        result = ToolResult(ok=not bool(out.get("error_payload")), output=dict(out or {}), observation_text=obs)
+        result = ToolResult(ok=True, output={"schema": schema, "schema_text": schema_block}, observation_text=obs)
         logger.info("tool_invoke_end tool=schema_explore ok=%s latency_ms=%.0f tables=%s",
-                    result.ok, _latency_ms, len(result.output.get("schema", {}).get("tables", [])))
+                    result.ok, _latency_ms, len(schema.get("tables", [])))
         return result

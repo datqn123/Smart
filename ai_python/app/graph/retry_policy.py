@@ -8,10 +8,32 @@ from enum import Enum
 from typing import Literal
 
 from app.graph.chart_data_profile import build_query_result_profile
-from app.graph.chart_sql_shape import sql_has_time_grouping
 from app.graph.constants import MAX_SQL_ATTEMPTS
 from app.graph.state import AgentState
-from app.graph.validate_sql import normalize_llm_sql_output, strip_trailing_semicolons
+
+
+def strip_trailing_semicolons(text: str) -> str:
+    return re.sub(r";+\s*$", "", text)
+
+
+def normalize_llm_sql_output(sql: str | None) -> str:
+    if not sql:
+        return ""
+    return strip_trailing_semicolons(sql).strip()
+
+
+def sql_has_time_grouping(sql: str) -> bool:
+    low = sql.lower()
+    return any(
+        kw in low
+        for kw in (
+            "date_trunc",
+            "to_char(",
+            "extract(",
+            "date_part",
+            "generate_series",
+        )
+    )
 
 FailureKind = Literal["policy", "intent_review", "exec", "result", "chart_shape"]
 

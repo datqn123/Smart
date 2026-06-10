@@ -6,9 +6,12 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage
 
-from app.graph.feedback import empty_feedback
 from app.graph.state import default_initial_state, fresh_turn_overlay
 from app.harness.tool_registry import TurnContext
+
+
+def empty_feedback() -> dict:
+    return {"policy": [], "exec": [], "result": [], "extras": {}}
 
 
 def build_tool_state(question: str, ctx: TurnContext, settings: Any) -> dict[str, Any]:

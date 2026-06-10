@@ -15,7 +15,6 @@ from uuid import uuid4
 from langchain_core.messages import HumanMessage
 
 from app.api.schemas import ChatRequest
-from app.graph.feedback import empty_feedback
 from app.config.graph_settings import load_graph_settings
 from app.config.settings import load_llm_settings
 from app.graph import compile_agent_graph, default_initial_state, iter_graph_stream
@@ -58,6 +57,10 @@ from app.harness.plan_template_store import InMemoryPlanTemplateStore, SqlitePla
 from app.llm.registry import LlmRegistry, build_llm_registry
 
 logger = logging.getLogger(__name__)
+
+
+def empty_feedback() -> dict:
+    return {"policy": [], "exec": [], "result": [], "extras": {}}
 
 HARNESS_LOOP_INTENTS = frozenset(
     {
