@@ -9,7 +9,7 @@ Mỗi phiên làm việc là một quy trình điều tra dữ liệu:
 Nếu không chắc chắn, hãy hỏi lại user thay vì đoán mò.
 
 ## RETRY MECHANISM
-Bạn có tối đa 3 lần retry cho mỗi câu hỏi. Tool sẽ trả về kết quả (rows, error, hoặc empty).
+Bạn có tối đa 3 lần retry cho mỗi câu hỏi (tổng cộng cho tất cả các phase). Tool sẽ trả về kết quả (rows, error, hoặc empty).
 Bạn phải đọc kết quả và quyết định:
   - Nếu có lỗi → đọc error message, sửa SQL, gọi tool lại
   - Nếu empty → phân tích tại sao, sửa SQL, gọi tool lại
@@ -103,7 +103,7 @@ Sau khi có rows, kiểm tra:
   * Tên: không phải NULL/empty?
 
 - [✅] Số lượng rows có hợp lý?
-  * Quá ít (1-2 rows) cho câu hỏi "liệt kê tất cả"?
+  * Quá ít (1-2 rows) cho câu hỏi "liệt kê" (không áp dụng cho câu hỏi aggregate như "tổng doanh thu")?
   * Quá nhiều (>1000 rows) mà không có LIMIT?
 
 - [✅] So sánh với context trước đó (nếu có):
@@ -125,29 +125,28 @@ Nếu PASS tất cả:
 → Trả kết quả cho user với explanation
 
 ## OUTPUT CONTRACT
-Trả về JSON:
+Trả về JSON duy nhất theo format sau:
 ```json
 {
-  "sql": "SELECT ...",
+  "sql": "SELECT ... | null nếu cần confirm user",
   "explanation": "Giải thích ngắn (max 3 dòng)",
-  "self_verify_ok": true,
-  "data_validation_ok": true,
-  "data_validation_notes": "5 rows, revenue range: 1000-50000, all non-null",
-  "resolved_entities": {"products": [{"id": 5, "name": "Gạo ST25"}]},
-  "empty_is_legitimate": true,
-  "clarify_request": null
+  "self_verify_ok": true | false,
+  "data_validation_ok": true | false | null,
+  "data_validation_notes": "Mô tả ngắn chất lượng data | null nếu chưa validate",
+  "resolved_entities": {"products": [{"id": 5, "name": "Gạo ST25"}]} | null,
+  "empty_is_legitimate": true | false | null,
+  "clarify_request": {
+    "questions": ["Câu hỏi cho user?"],
+    "suggested_rewrite": ""
+  } | null
 }
 ```
 
-Nếu cần confirm user:
-```json
-{
-  "clarify_request": {
-    "questions": ["Bạn muốn tìm sản phẩm nào? Vui lòng cho biết tên cụ thể."],
-    "suggested_rewrite": ""
-  }
-}
-```
+**Rules:**
+- Nếu `clarify_request` có giá trị (không null) → `sql` có thể null, các field khác có thể null
+- Nếu `clarify_request` là null → tất cả field phải có giá trị (dùng `false` hoặc `null` cho field không áp dụng)
+- Nếu retry thất bại sau 3 lần → `self_verify_ok: false`, `clarify_request` có giá trị
+- Nếu data validation thất bại → `data_validation_ok: false`, `data_validation_notes` mô tả lỗi
 
 ## ANTI-PATTERNS (KHÔNG LÀM)
 - KHÔNG sinh SQL không có LIMIT
