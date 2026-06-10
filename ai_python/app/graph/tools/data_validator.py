@@ -38,7 +38,7 @@ class DataValidatorTool:
 
     async def invoke(self, args: dict[str, Any], ctx: TurnContext) -> ToolResult:
         logger.info("tool_invoke_start tool=data_validator rows=%s required=%s",
-                    len(args.get("rows", [])), args.get("required_data"))
+                    len(args.get("rows") or []), args.get("required_data"))
         _start = time.monotonic()
         rows, error = rows_from_args_or_ref(args, ctx)
         if error:

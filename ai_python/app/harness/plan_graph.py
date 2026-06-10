@@ -393,6 +393,8 @@ def _results_to_observations(
     observations: list[ObservationEnvelope] = []
     for r in results:
         if r.observation is not None:
+            if not r.observation.node_id:
+                r.observation.node_id = r.node_id
             observations.append(r.observation)
             continue
         tool_name = node_tool.get(r.node_id, r.node_id)
@@ -409,6 +411,7 @@ def _results_to_observations(
                 ctx=ctx,
                 result_store=result_store,
                 output_meets_expect=bool(r.output_meets_expect),
+                node_id=r.node_id,
             )
         )
     return observations

@@ -36,6 +36,7 @@ class ObservationEnvelope(BaseModel):
 
     tool_name: str
     ok: bool
+    node_id: str = ""
     error_kind: str | None = None
     message: str = ""
     schema_fields: list[dict[str, str]] = Field(default_factory=list)
@@ -152,6 +153,7 @@ def build_observation(
     result_store: Any | None = None,
     sample_limit: int = SAMPLE_LIMIT_DEFAULT,
     output_meets_expect: bool = True,
+    node_id: str = "",
 ) -> ObservationEnvelope:
     """Convert a ``ToolResult`` into a safe :class:`ObservationEnvelope`."""
     ok = bool(getattr(tool_result, "ok", False))
@@ -166,6 +168,7 @@ def build_observation(
             message=_safe_error_message(kind),
             replan_required=True,
             failure_fingerprint=failure_fingerprint(tool_name, raw_error),
+            node_id=node_id,
         )
         logger.warning("observation_error tool=%s kind=%s fingerprint=%s", envelope.tool_name, envelope.error_kind, envelope.failure_fingerprint)
         return envelope
@@ -179,6 +182,7 @@ def build_observation(
             ok=True,
             message=_truncate(str(getattr(tool_result, "observation_text", "") or "")),
             replan_required=not output_meets_expect,
+            node_id=node_id,
         )
         logger.info("observation_built tool=%s ok=%s rows=%s truncated=%s masked=%s ref=%s", envelope.tool_name, envelope.ok, envelope.row_count, envelope.truncated, envelope.masked, envelope.result_ref)
         return envelope
@@ -205,6 +209,7 @@ def build_observation(
         result_ref=result_ref,
         message=_truncate(str(getattr(tool_result, "observation_text", "") or "")),
         replan_required=not output_meets_expect,
+        node_id=node_id,
     )
     logger.info("observation_built tool=%s ok=%s rows=%s truncated=%s masked=%s ref=%s", envelope.tool_name, envelope.ok, envelope.row_count, envelope.truncated, envelope.masked, envelope.result_ref)
     return envelope
