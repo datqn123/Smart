@@ -181,5 +181,5 @@ def route_after_intent(state: AgentState) -> str:
     if intent == "system_data_chart":
         return "agent_idea"
     if intent == "system_data_query":
-        return "sql_branch"
+        return "chat_normal"
     return "chat_normal"

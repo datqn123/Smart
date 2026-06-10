@@ -1,4 +1,4 @@
-"""Main LangGraph: intent → chat | chart (idea→SQL→chart→review) | SQL → summarize."""
+"""Main LangGraph: intent → chat | chart (idea→chart→review) | catalog/inventory drafts."""
 
 from __future__ import annotations
 
@@ -15,13 +15,11 @@ from app.graph.nodes.chart_report import (
     make_agent_review_node,
     make_chart_fail_message_node,
 )
-from app.graph.nodes.query_table import make_emit_query_table_node
 from app.graph.nodes.chat_normal import make_chat_normal_node
 from app.graph.nodes.context_compact import make_context_compact_node
 from app.graph.nodes.domain_guard import make_domain_guard_node, route_after_domain_guard
 from app.graph.nodes.planner import make_agent_planner_node
 from app.graph.nodes.intent import make_intent_node, route_after_intent
-from app.graph.nodes.summarize import make_summarize_answer_node
 from app.graph.catalog_draft_subgraph import build_catalog_draft_subgraph
 from app.graph.inventory_draft_subgraph import build_inventory_draft_subgraph
 from app.graph.progress import wrap_node_with_stream_progress as wrap
@@ -45,8 +43,6 @@ def build_main_graph(deps: GraphDeps):
     g.add_node("agent_chart", wrap("agent_chart", make_agent_chart_node(deps)))
     g.add_node("agent_review", wrap("agent_review", make_agent_review_node(deps)))
     g.add_node("chart_fail_message", wrap("chart_fail_message", make_chart_fail_message_node(deps)))
-    g.add_node("emit_query_table", wrap("emit_query_table", make_emit_query_table_node(deps)))
-    g.add_node("summarize_answer", wrap("summarize_answer", make_summarize_answer_node(deps)))
 
     g.add_edge(START, "domain_guard")
     g.add_conditional_edges(
@@ -73,10 +69,8 @@ def build_main_graph(deps: GraphDeps):
     g.add_edge("catalog_draft_branch", END)
     g.add_edge("inventory_draft_branch", END)
     g.add_edge("agent_idea", "chat_normal")
-    g.add_edge("emit_query_table", "summarize_answer")
     g.add_edge("agent_review", END)
     g.add_edge("chart_fail_message", END)
-    g.add_edge("summarize_answer", END)
     logger.debug("graph_compile nodes=%s", list(g.nodes.keys()))
     return g
 
