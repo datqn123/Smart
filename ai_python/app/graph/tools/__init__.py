@@ -8,7 +8,7 @@ from app.graph.tools.data_table_builder import DataTableBuilderTool
 from app.graph.tools.erp_guide import ErpGuideTool
 from app.graph.tools.inventory_draft import InventoryDraftTool
 from app.graph.tools.schema_explore import SchemaExploreTool
-from app.graph.tools.sql_query import SelfCorrectingSqlRunner, SqlQueryTool
+from app.graph.tools.sql_query import SqlQueryTool
 
 __all__ = [
     "CatalogDraftTool",
@@ -19,6 +19,5 @@ __all__ = [
     "ErpGuideTool",
     "InventoryDraftTool",
     "SchemaExploreTool",
-    "SelfCorrectingSqlRunner",
     "SqlQueryTool",
 ]

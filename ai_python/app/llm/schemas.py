@@ -73,6 +73,13 @@ class DomainGuardOutput(BaseModel):
     assistant_message: str = ""
 
 
+class SqlGenerationOutput(BaseModel):
+    """LLM SQL generation — single-shot structured output."""
+
+    sql: str = Field(description="The generated SQL query (SELECT only).")
+    explanation: str = Field(default="", description="Brief explanation of what the SQL does.")
+
+
 class SqlReviewOutput(BaseModel):
     ok: bool
     issues: list[str] = Field(default_factory=list)
