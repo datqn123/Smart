@@ -1,8 +1,6 @@
 package com.example.smart_erp.catalog.service;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -20,7 +18,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.example.smart_erp.catalog.dto.CategoryCreateRequest;
 import com.example.smart_erp.catalog.repository.CategoryJdbcRepository;
 import com.example.smart_erp.catalog.repository.CategoryJdbcRepository.CategoryFlatRow;
-import com.example.smart_erp.catalog.repository.CategoryParentEdgeRow;
 import com.example.smart_erp.catalog.response.CategoryDeleteData;
 import com.example.smart_erp.catalog.response.CategoryDetailData;
 import com.example.smart_erp.catalog.response.CategoryListPageData;
@@ -210,8 +207,7 @@ public class CategoryService {
 					throw new BusinessException(ApiErrorCode.BAD_REQUEST, "Danh mục cha không tồn tại",
 							Map.of("parentId", "parentId không khớp bản ghi categories đang hiệu lực"));
 				}
-				List<CategoryParentEdgeRow> edges = categoryJdbcRepository.loadAllActiveParentEdges();
-				if (wouldPutParentInDescendantSubtree(id, pid, edges)) {
+				if (categoryJdbcRepository.wouldCreateCycle(id, pid)) {
 					throw new BusinessException(ApiErrorCode.CONFLICT, "Không thể đặt danh mục cha vì tạo vòng lặp phân cấp");
 				}
 				newParent = pid;
@@ -258,29 +254,6 @@ public class CategoryService {
 		}
 		categoryJdbcRepository.softDelete(id);
 		return new CategoryDeleteData(id, true);
-	}
-
-	private static boolean wouldPutParentInDescendantSubtree(long categoryId, long newParentId,
-			List<CategoryParentEdgeRow> edges) {
-		Map<Long, List<Long>> byParent = new HashMap<>();
-		for (CategoryParentEdgeRow e : edges) {
-			if (e.parentId() != null) {
-				byParent.computeIfAbsent(e.parentId(), k -> new ArrayList<>()).add(e.id());
-			}
-		}
-		Deque<Long> dq = new ArrayDeque<>(byParent.getOrDefault(categoryId, List.of()));
-		Set<Long> seen = new HashSet<>();
-		while (!dq.isEmpty()) {
-			Long u = dq.poll();
-			if (u == null || !seen.add(u)) {
-				continue;
-			}
-			if (u == newParentId) {
-				return true;
-			}
-			dq.addAll(byParent.getOrDefault(u, List.of()));
-		}
-		return false;
 	}
 
 	private static List<CategoryFlatRow> applySearchFilter(List<CategoryFlatRow> rows, String searchRaw) {

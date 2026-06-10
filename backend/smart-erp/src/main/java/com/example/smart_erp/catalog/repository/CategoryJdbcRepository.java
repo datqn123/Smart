@@ -263,15 +263,34 @@ public class CategoryJdbcRepository {
 		return children;
 	}
 
-	public List<CategoryParentEdgeRow> loadAllActiveParentEdges() {
-		return namedJdbc.query(
-				"SELECT id, parent_id FROM categories WHERE deleted_at IS NULL ORDER BY id",
-				Map.of(), (rs, rn) -> {
-					long id = rs.getLong("id");
-					long pid = rs.getLong("parent_id");
-					Long parentId = rs.wasNull() ? null : pid;
-					return new CategoryParentEdgeRow(id, parentId);
-				});
+	/**
+	 * Kiểm tra nếu đặt {@code newParentId} làm cha của {@code categoryId} có tạo vòng lặp phân cấp
+	 * hay không. Trả về true nếu {@code newParentId} hiện là descendant (hậu duệ) của
+	 * {@code categoryId} trong cây đang hiệu lực — tức là việc gán này sẽ đóng một vòng lặp.
+	 *
+	 * <p>Dùng PostgreSQL recursive CTE với depth limit (defense in depth) để tránh infinite loop
+	 * trong trường hợp dữ liệu hiện có đã chứa cycle. Phương pháp này thay thế việc load toàn bộ
+	 * edges (O(E)) bằng một truy vấy con theo độ sâu (O(depth)).
+	 */
+	public boolean wouldCreateCycle(long categoryId, long newParentId) {
+		String sql = """
+				WITH RECURSIVE descendants(id, parent_id, depth) AS (
+				  SELECT id, parent_id, 1 AS depth
+				  FROM categories
+				  WHERE parent_id = :categoryId AND deleted_at IS NULL
+				  UNION ALL
+				  SELECT c.id, c.parent_id, d.depth + 1
+				  FROM categories c
+				  INNER JOIN descendants d ON c.parent_id = d.id
+				  WHERE c.deleted_at IS NULL AND d.depth < 1000
+				)
+				SELECT EXISTS(
+				  SELECT 1 FROM descendants WHERE id = :newParentId
+				) AS would_create_cycle
+				""";
+		Map<String, Object> params = Map.of("categoryId", categoryId, "newParentId", newParentId);
+		Boolean result = namedJdbc.queryForObject(sql, params, Boolean.class);
+		return result != null && result;
 	}
 
 	private static void appendStatus(StringBuilder sql, String statusFilter) {
