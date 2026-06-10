@@ -8,6 +8,8 @@ import time
 from typing import Any
 
 from app.graph.deps import GraphDeps
+from app.graph.pg_schema_context import build_schema_artifact_from_postgres
+from app.graph.sql_prompts import format_schema_block
 from app.graph.sql_safety import enforce_read_only_sql, SqlSafetyError
 from app.harness.tool_registry import ToolManifest, ToolResult, TurnContext
 
@@ -41,14 +43,13 @@ class SqlQueryTool:
         if not question:
             return ToolResult(
                 ok=False,
-                output={},
+                output={"generated_sql": ""},
                 observation_text="Question is required",
                 error_message="Question is required",
             )
 
         # 1. Load schema from Postgres
         try:
-            from app.graph.pg_schema_context import build_schema_artifact_from_postgres
             artifact, err = await asyncio.to_thread(
                 build_schema_artifact_from_postgres, self._deps.settings, question
             )
@@ -56,7 +57,7 @@ class SqlQueryTool:
                 logger.warning("schema load failed: %s", err)
                 return ToolResult(
                     ok=False,
-                    output={},
+                    output={"generated_sql": ""},
                     observation_text=f"Schema load failed: {err}",
                     error_message=f"Schema load failed: {err}",
                 )
@@ -64,14 +65,14 @@ class SqlQueryTool:
             logger.exception("schema load exception")
             return ToolResult(
                 ok=False,
-                output={},
+                output={"generated_sql": ""},
                 observation_text=f"Schema load exception: {exc}",
                 error_message=f"Schema load exception: {exc}",
             )
 
         # 2. Build system prompt with gen_sql.md skill + schema block
+        # Lazy imports to avoid circular dependency
         from app.prompts.load import load_agent_prompt
-        from app.graph.sql_prompts import format_schema_block
 
         skill_prompt = load_agent_prompt("gen_sql")
         schema_block = format_schema_block(artifact, selected_tables=None, enriched=True)
@@ -80,8 +81,10 @@ class SqlQueryTool:
         # 3. Call LLM to generate SQL
         try:
             from app.llm.schemas import SqlGenerationOutput
+
             client = self._deps.llm_registry.get("sql_gen")
-            llm_result = client.structured_predict(
+            llm_result = await asyncio.to_thread(
+                client.structured_predict,
                 [{"role": "user", "content": question}],
                 SqlGenerationOutput,
                 system=system_prompt,
@@ -92,7 +95,7 @@ class SqlQueryTool:
             logger.exception("LLM generation failed")
             return ToolResult(
                 ok=False,
-                output={},
+                output={"generated_sql": sql if "sql" in dir() else ""},
                 observation_text=f"LLM generation failed: {exc}",
                 error_message=f"LLM generation failed: {exc}",
             )
@@ -128,8 +131,7 @@ class SqlQueryTool:
             )
 
         # 6. Return result
-        _latency_ms = (time.monotonic() - _invoke_start) * 1000
-        logger.info("tool_invoke_end tool=sql_query latency_ms=%.0f rows=%s", _latency_ms, len(rows))
+        logger.info("tool_invoke_end tool=sql_query latency_ms=%.0f rows=%s", (time.monotonic() - _invoke_start) * 1000, len(rows))
 
         observation = f"SQL rows: {len(rows)} rows returned" if rows else "No rows returned"
 
