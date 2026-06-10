@@ -11,13 +11,13 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
-logger = logging.getLogger(__name__)
-
 from app.graph.deps import GraphDeps
 from app.graph.tools._state import build_tool_state
 from app.graph.validate_sql import is_llm_select_sql_shape
 from app.harness.capability import CapabilityMatrix, sanitize_user_data
 from app.harness.tool_registry import ToolManifest, ToolResult, TurnContext
+
+logger = logging.getLogger(__name__)
 
 
 def _format_rows_observation(rows: list[Any], *, sql: str = "") -> str:
