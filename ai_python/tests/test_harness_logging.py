@@ -5,7 +5,13 @@ import pytest
 from app.harness.eval_gate import EvalCase, evaluate_case, route_accuracy, v3_rollout_allowed
 from app.harness.history_store import InMemoryIntentHistoryStore, build_history_event
 from app.harness.memory_store import InMemoryConversationMemoryStore, MemoryTurnRecord
-from app.harness.plan_template_store import InMemoryPlanTemplateStore, PlanTemplateRecord
+from app.harness.plan_graph import PlanGraph, PlanNode
+from app.harness.plan_template_store import (
+    PLANNER_GENERATED,
+    InMemoryPlanTemplateStore,
+    PlanTemplateRecord,
+    plan_graph_hash,
+)
 
 
 def test_template_store_init_logs(caplog):
@@ -108,3 +114,72 @@ def test_eval_rollout_logs(caplog):
         allowed = v3_rollout_allowed(0.9, 0.8)
     assert "eval_rollout" in caplog.text
     assert "allowed=True" in caplog.text
+
+
+def _make_plan() -> PlanGraph:
+    return PlanGraph(nodes=[PlanNode(id="n1", tool="sql_query", needs=[], input_spec={}, output_expect="rows")])
+
+
+def _make_record(**overrides) -> PlanTemplateRecord:
+    plan = overrides.pop("plan_graph", _make_plan())
+    base = dict(
+        normalized_intent_key="test intent",
+        plan_graph_hash=plan_graph_hash(plan),
+        plan_graph=plan,
+        manifest_version="mv1",
+        policy_version="pv1",
+        asset_versions={"K12": "1.0"},
+        role_scope="owner",
+        source=PLANNER_GENERATED,
+    )
+    base.update(overrides)
+    return PlanTemplateRecord(**base)
+
+
+def test_template_promoted_logs(caplog):
+    store = InMemoryPlanTemplateStore()
+    record = _make_record()
+    with caplog.at_level(logging.INFO):
+        store.promote(record)
+    assert "template_promoted" in caplog.text
+    assert "intent=test intent" in caplog.text
+    assert "role=owner" in caplog.text
+
+
+def test_template_promotion_blocked_logs(caplog):
+    store = InMemoryPlanTemplateStore()
+    record = _make_record()
+    with caplog.at_level(logging.INFO):
+        store.consider_promotion(record, promote_after=3)
+    assert "template_promotion_blocked" in caplog.text
+    assert "accuracy=0.33" in caplog.text
+    assert "below_threshold=1.00" in caplog.text
+
+
+def test_template_candidate_streak_logs(caplog):
+    store = InMemoryPlanTemplateStore()
+    record = _make_record()
+    with caplog.at_level(logging.INFO):
+        store.consider_promotion(record, promote_after=3)
+    assert "template_candidate_streak" in caplog.text
+    assert "success_count=1/3" in caplog.text
+
+
+def test_template_streak_broken_logs(caplog):
+    store = InMemoryPlanTemplateStore()
+    record = _make_record()
+    store.promote(record)
+    with caplog.at_level(logging.WARNING):
+        store.record_outcome("test intent", role_scope="owner", status="failure")
+    assert "template_streak_broken" in caplog.text
+    assert "status=failure" in caplog.text
+
+
+def test_template_demoted_logs(caplog):
+    store = InMemoryPlanTemplateStore()
+    record = _make_record()
+    store.promote(record)
+    with caplog.at_level(logging.WARNING):
+        store.record_outcome("test intent", role_scope="owner", status="degraded")
+    assert "template_demoted" in caplog.text
+    assert "status=degraded" in caplog.text
