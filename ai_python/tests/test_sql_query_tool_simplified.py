@@ -92,7 +92,7 @@ async def test_sql_query_tool_success(mock_deps, mock_ctx, mock_artifact):
         assert result.ok is True
         assert len(result.output["rows"]) == 1
         assert result.output["generated_sql"] == "SELECT * FROM products LIMIT 10"
-        assert "rows returned" in result.observation_text.lower()
+        assert "trả về" in result.observation_text.lower()
     finally:
         _stop_patches(patches)
 
@@ -117,7 +117,7 @@ async def test_sql_query_tool_empty_result(mock_deps, mock_ctx, mock_artifact):
 
         assert result.ok is True
         assert len(result.output["rows"]) == 0
-        assert "rows returned" in result.observation_text.lower()
+        assert "dữ liệu" in result.observation_text.lower()
     finally:
         _stop_patches(patches)
 

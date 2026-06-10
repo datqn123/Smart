@@ -11,6 +11,7 @@ from app.graph.deps import GraphDeps
 from app.graph.pg_schema_context import build_schema_artifact_from_postgres
 from app.graph.sql_prompts import format_schema_block
 from app.graph.sql_safety import enforce_read_only_sql, SqlSafetyError
+from app.harness.capability import CapabilityMatrix
 from app.harness.tool_registry import ToolManifest, ToolResult, TurnContext
 from app.llm.schemas import SqlGenerationOutput
 from app.prompts.load import load_agent_prompt
@@ -36,6 +37,7 @@ class SqlQueryTool:
 
     def __init__(self, deps: GraphDeps) -> None:
         self._deps = deps
+        self._capability = CapabilityMatrix()
 
     async def invoke(self, args: dict[str, Any], ctx: TurnContext) -> ToolResult:
         _invoke_start = time.monotonic()
@@ -88,7 +90,7 @@ class SqlQueryTool:
                 SqlGenerationOutput,
                 system=system_prompt,
             )
-            sql = llm_result.sql.strip()
+            sql = (llm_result.sql or "").strip()
             explanation = llm_result.explanation or ""
         except Exception as exc:
             logger.exception("LLM generation failed")
@@ -129,10 +131,15 @@ class SqlQueryTool:
                 error_message=f"SQL execution failed: {exc}",
             )
 
-        # 6. Return result
+        # 6. Mask sensitive columns for non-owner roles
+        guard_on = bool(getattr(self._deps.settings, "agentic_capability_guard_enabled", False))
+        if guard_on and rows:
+            rows = self._capability.mask_columns(ctx.role, rows)
+
+        # 7. Return result
         logger.info("tool_invoke_end tool=sql_query latency_ms=%.0f rows=%s", (time.monotonic() - _invoke_start) * 1000, len(rows))
 
-        observation = f"SQL rows: {len(rows)} rows returned" if rows else "No rows returned"
+        observation = f"SQL trả về {len(rows)} dòng" if rows else "Không có dữ liệu (0 dòng)"
 
         return ToolResult(
             ok=True,
