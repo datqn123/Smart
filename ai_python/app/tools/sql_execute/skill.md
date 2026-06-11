@@ -81,6 +81,9 @@ Trả về JSON đúng một dòng:
 - Require: "Sản phẩm sắp hết hàng"
   → `{"sql": "SELECT p.name, i.quantity, i.min_quantity FROM inventory i JOIN products p ON i.product_id = p.id WHERE i.quantity < i.min_quantity AND p.status = 'Active' ORDER BY (i.quantity - i.min_quantity) ASC LIMIT 20"}`
 
+- Require: "dầu ăn nhập vào bao nhiêu" (lưu ý: ILIKE GIỮ NGUYÊN DẤU, lọc qua bảng master, group theo tên vì có thể khớp nhiều sản phẩm)
+  → `{"sql": "SELECT p.name, COALESCE(SUM(srd.quantity), 0) AS tong_nhap FROM products p LEFT JOIN stockreceiptdetails srd ON srd.product_id = p.id LEFT JOIN stockreceipts sr ON sr.id = srd.receipt_id AND sr.status = 'Approved' WHERE p.name ILIKE '%dầu ăn%' GROUP BY p.id, p.name ORDER BY tong_nhap DESC LIMIT 20"}`
+
 ---
 
 ## Few-shot examples — khi RETRY (upstream_data.error có giá trị)

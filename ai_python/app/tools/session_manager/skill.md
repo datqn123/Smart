@@ -37,6 +37,16 @@ bạn quyết định hành động kế tiếp dưới dạng JSON.
   "so với lúc nãy", đại từ thiếu ngữ cảnh) → PHẢI điền `resolved_require` = câu
   hỏi viết lại TỰ-ĐỦ-NGHĨA dựa trên `[Tom tat hoi thoai cu]` / `[Cac luot gan nhat]`.
   Nếu `raw_require` đã tự đủ nghĩa → `resolved_require: null`.
+- XÁC ĐỊNH CHỦ THỂ THEO NGỮ CẢNH: khi `raw_require` nhắc đến một CHỦ THỂ dữ liệu
+  bằng tên gọi chung chung hoặc rút gọn (chủ thể = bất kỳ đối tượng nào hệ thống
+  quản lý — hiện tại hay mở rộng sau này), mà chủ thể đó ĐÃ XUẤT HIỆN trong câu
+  trả lời ở `[Cac luot gan nhat]` / `[Tom tat hoi thoai cu]` → PHẢI điền
+  `resolved_require` thay tên gọi chung bằng TÊN/MÃ CHÍNH XÁC như đã hiển thị
+  trong câu trả lời đó. Đừng để tool phía sau tự đoán tên rồi tìm sai.
+  - Khớp NHIỀU chủ thể trong câu trả lời cũ (vd 2-3 loại cùng tên gọi chung) →
+    liệt kê đủ tất cả tên chính xác trong `resolved_require`, KHÔNG tự chọn 1.
+  - Chủ thể CHƯA từng xuất hiện trong hội thoại → không bịa; để
+    `resolved_require: null` cho tool tự tra cứu theo tên user đưa.
 
 ## Output schema (CHỈ trả JSON này, không text thừa)
 ```json
@@ -56,3 +66,5 @@ bạn quyết định hành động kế tiếp dưới dạng JSON.
 - sql_execute output.valid=false (lỗi DB, sai cột) → `{"action":"retry_tool","tool_name":"sql_execute","forward_data":{"from":"sql_execute"},"reasoning":"Lỗi DB — cần retry với error context để sửa SQL","message":null}`
 - answer_composer đã có answer hợp lệ → `{"action":"finish","tool_name":null,"forward_data":{},"reasoning":"Đã có câu trả lời","message":null}`
 - `[Cac luot gan nhat]` có "doanh thu tháng 5/2026 = 15 triệu", raw_require="còn tháng trước thì sao?" → `{"action":"call_tool","tool_name":"sql_execute","forward_data":{},"reasoning":"Câu nối tiếp — tháng trước của tháng 5/2026 là tháng 4/2026","message":null,"resolved_require":"doanh thu tháng 4/2026"}`
+- `[Cac luot gan nhat]` có answer liệt kê "1. Dầu ăn Neptuna 1L — Tổng bán: 0...", raw_require="dầu ăn nhập vào bao nhiêu" → `{"action":"call_tool","tool_name":"sql_execute","forward_data":{},"reasoning":"User hỏi tiếp về chủ thể đã hiện trong câu trả lời trước — thay tên gọi chung bằng tên chính xác","message":null,"resolved_require":"Sản phẩm 'Dầu ăn Neptuna 1L' đã nhập kho tổng cộng bao nhiêu"}`
+- `[Cac luot gan nhat]` có answer liệt kê "1. Dầu ăn Neptuna 1L... 3. Dầu ăn Simply 1L...", raw_require="dầu ăn nhập vào bao nhiêu" → `{"action":"call_tool","tool_name":"sql_execute","forward_data":{},"reasoning":"Tên gọi chung khớp 2 chủ thể trong câu trả lời trước — phải giữ đủ cả hai","message":null,"resolved_require":"Hai sản phẩm 'Dầu ăn Neptuna 1L' và 'Dầu ăn Simply 1L' đã nhập kho tổng cộng bao nhiêu (theo từng sản phẩm)"}`

@@ -20,6 +20,17 @@
 - INNER JOIN sẽ loại mất sản phẩm có 0 đơn hàng — chính là hàng ế nhất
 - "top seller / bán chạy" thì INNER JOIN được (sản phẩm 0 đơn không bao giờ vào top)
 
+### So khớp tên / văn bản tiếng Việt
+
+- Dữ liệu trong DB lưu CÓ DẤU tiếng Việt → chuỗi trong `ILIKE` phải GIỮ NGUYÊN
+  DẤU đúng như câu hỏi. TUYỆT ĐỐI không tự bỏ dấu ("dầu ăn" → `'%dau an%'` là SAI,
+  khớp 0 dòng).
+- Lọc bảng sự kiện theo tên gọi chung của một chủ thể (sản phẩm, khách, nhà cung
+  cấp... bất kỳ bảng master nào) → lọc qua subquery trên bảng master, KHÔNG đoán
+  tên đầy đủ: `WHERE x.product_id IN (SELECT id FROM products WHERE name ILIKE '%dầu ăn%')`
+- Tên gọi chung có thể khớp NHIỀU bản ghi master → GROUP BY theo tên để trả kết
+  quả từng chủ thể, đừng gộp chung thành 1 con số.
+
 ### Join phiếu xuất
 
 - Chuỗi đúng: `salesorders → stockdispatches (order_id) → stockdispatch_lines (dispatch_id)`
@@ -208,6 +219,15 @@ LEFT JOIN orderdetails od ON od.product_id = p.id
 WHERE p.status = 'Active'
 GROUP BY p.id, p.name
 ORDER BY tong_ban ASC LIMIT 10;
+
+-- Tổng nhập kho theo tên gọi chung (giữ dấu + subquery master + group theo tên)
+SELECT p.name, COALESCE(SUM(srd.quantity), 0) AS tong_nhap
+FROM products p
+LEFT JOIN stockreceiptdetails srd ON srd.product_id = p.id
+LEFT JOIN stockreceipts sr ON sr.id = srd.receipt_id AND sr.status = 'Approved'
+WHERE p.name ILIKE '%dầu ăn%'
+GROUP BY p.id, p.name
+ORDER BY tong_nhap DESC LIMIT 20;
 
 -- Tồn sắp hết (dưới ngưỡng cảnh báo)
 SELECT p.name, i.quantity, i.min_quantity
