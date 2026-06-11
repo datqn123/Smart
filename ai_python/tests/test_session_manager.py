@@ -47,7 +47,10 @@ def test_analyze_parses_into_decision():
     assert isinstance(d, Decision) and d.action == "finish"
 
 
-def test_analyze_injects_memory_blocks():
+def test_analyze_injects_memory_blocks(monkeypatch):
+    # skill.md that gio co nhac ten cac khoi memory (Input contract) -> stub
+    # skill de assert chi bat khoi do _memory_blocks() inject.
+    monkeypatch.setattr("app.tools.session_manager.load_skill", lambda name: "SM-SKILL")
     llm = _LLM({"action": "finish", "tool_name": None, "forward_data": {},
                 "reasoning": "x", "message": "ok"})
     st = new_session_state(raw_require="con thang truoc thi sao?", thread_id="t")
@@ -60,7 +63,8 @@ def test_analyze_injects_memory_blocks():
     assert "doanh thu thang 5?" in user
 
 
-def test_analyze_no_memory_blocks_when_absent():
+def test_analyze_no_memory_blocks_when_absent(monkeypatch):
+    monkeypatch.setattr("app.tools.session_manager.load_skill", lambda name: "SM-SKILL")
     llm = _LLM({"action": "finish", "tool_name": None, "forward_data": {},
                 "reasoning": "x", "message": "ok"})
     st = new_session_state(raw_require="doanh thu quy 1", thread_id="t")
