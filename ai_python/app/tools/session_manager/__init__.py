@@ -1,9 +1,12 @@
 from __future__ import annotations
 import json
+import logging
 from typing import Any, Literal
 from pydantic import BaseModel, field_validator
 from app.graph.state import SessionState
 from app.registry.registry import load_skill, render_tool_catalog, is_registered
+
+log = logging.getLogger(__name__)
 
 Action = Literal["call_tool", "retry_tool", "replan", "request_clarification", "finish"]
 
@@ -42,17 +45,25 @@ def analyze(state: SessionState, *, llm) -> Decision:
     role 'sm' (Qwen, temperature thap — R5). Reparse co bound 2 lan."""
     skill = load_skill("session_manager")
     last = state["history"][-1] if state["history"] else None
+    log.debug("SM analyze step=%d history_len=%d raw_require=%.100s",
+              state["step_count"], len(state["history"]), state["raw_require"])
     user = _PROMPT.format(skill=skill, catalog=render_tool_catalog(),
                           raw_require=state["raw_require"],
                           history=json.dumps(state["history"], ensure_ascii=False)[:4000],
                           last=json.dumps(last, ensure_ascii=False))
     last_err = None
-    for _ in range(2):
+    for attempt in range(2):
         raw = llm.complete(system=skill, user=user, role="sm")
         try:
-            return Decision.model_validate(_coerce_json(raw))
+            decision = Decision.model_validate(_coerce_json(raw))
+            log.info("SM decision action=%s tool=%s reasoning=%.120s",
+                     decision.action, decision.tool_name, decision.reasoning)
+            return decision
         except Exception as exc:
             last_err = exc
+            log.warning("SM JSON parse failed attempt=%d err=%s raw_preview=%.200s",
+                        attempt + 1, exc, raw[:200])
             user += f"\n\n[Loi parse JSON truoc: {exc}. Tra lai dung JSON schema.]"
+    log.error("SM falling back to finish after 2 parse attempts last_err=%s", last_err)
     return Decision(action="finish", reasoning=f"SM decision loi parse: {last_err}",
                     message="Xin loi, he thong chua xu ly duoc yeu cau luc nay.")

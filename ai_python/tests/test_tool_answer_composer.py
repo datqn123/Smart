@@ -47,3 +47,28 @@ def test_composer_handles_malformed_llm_json():  # resilience
     st["output"] = out
     ok, _ = self_validate(st)
     assert ok is False
+
+
+class _RecLLM:
+    def __init__(self, answer): self._a = answer; self.seen = []
+    def complete(self, *, system, user, role="default", temperature=None):
+        self.seen.append(user)
+        return json.dumps({"answer": self._a})
+
+
+def test_prompt_has_memory_block_when_summary():
+    llm = _RecLLM("X.\nGợi ý: tiep?")
+    st = new_tool_state(tool_name="answer_composer", raw_require="con thang truoc?",
+                        upstream_data={"rows": []},
+                        memory_summary="User dang xem doanh thu thang 5/2026")
+    st["skill"] = "S"
+    execute(st, llm=llm)
+    assert "[Boi canh hoi thoai truoc]: User dang xem doanh thu thang 5/2026" in llm.seen[0]
+
+
+def test_prompt_no_memory_block_when_none():
+    llm = _RecLLM("X.\nGợi ý: tiep?")
+    st = new_tool_state(tool_name="answer_composer", raw_require="x")
+    st["skill"] = "S"
+    execute(st, llm=llm)
+    assert "[Boi canh hoi thoai truoc]" not in llm.seen[0]

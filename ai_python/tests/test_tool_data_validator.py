@@ -60,3 +60,22 @@ def test_validator_handles_malformed_llm_json():  # resilience
     st["output"] = out
     ok, _ = self_validate(st)
     assert ok is False
+
+
+def test_prompt_has_memory_block_when_summary():
+    llm = _LLM("pass")
+    st = new_tool_state(tool_name="data_validator", raw_require="con thang truoc?",
+                        upstream_data={"rows": [{"id": 1}]},
+                        memory_summary="User dang xem doanh thu thang 5/2026")
+    st["skill"] = "S"
+    execute(st, llm=llm)
+    assert "[Boi canh hoi thoai truoc]: User dang xem doanh thu thang 5/2026" in llm.seen[0]
+
+
+def test_prompt_no_memory_block_when_none():
+    llm = _LLM("pass")
+    st = new_tool_state(tool_name="data_validator", raw_require="x",
+                        upstream_data={"rows": []})
+    st["skill"] = "S"
+    execute(st, llm=llm)
+    assert "[Boi canh hoi thoai truoc]" not in llm.seen[0]
