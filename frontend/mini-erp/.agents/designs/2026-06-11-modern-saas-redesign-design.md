@@ -92,7 +92,7 @@ Nền trang `bg-surface`, padding `p-6`. Card chuẩn: `bg-white border border-s
 | Cảnh báo tồn kho | Amber theme đậm cả card | Card trắng chuẩn; amber chỉ ở icon + con số |
 | Shortcut | Icon box màu + shadow | Nút phẳng border; icon trần `text-slate-600`; hover `bg-slate-50 border-slate-300` |
 
-Map màu status cho dot: Pending → amber-500, Processing → indigo-500, Delivered/Completed → emerald-500, Cancelled → red-500, khác → slate-400.
+Map màu status cho dot: Pending → amber-500, Processing → indigo-500, Shipped/Partial → blue-500, Delivered/Completed → emerald-500, Cancelled → red-500, khác → slate-400.
 
 ---
 
