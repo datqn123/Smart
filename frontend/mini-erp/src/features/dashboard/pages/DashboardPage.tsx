@@ -345,9 +345,13 @@ export function DashboardPage() {
             <div className="flex items-start justify-between mb-4">
               <div>
                 <h2 className="text-sm font-medium text-slate-900">Xu hướng doanh thu</h2>
-                <p className="text-2xl font-semibold text-foreground tracking-tight tabular-nums mt-1">
-                  {formatCurrency(revenueTrend.reduce((s, p) => s + p.revenue, 0))}
-                </p>
+                {ordersLoading ? (
+                  <div className="h-8 w-28 mt-1 bg-slate-100 rounded animate-pulse" />
+                ) : (
+                  <p className="text-2xl font-semibold text-foreground tracking-tight tabular-nums mt-1">
+                    {formatCurrency(revenueTrend.reduce((s, p) => s + p.revenue, 0))}
+                  </p>
+                )}
                 <p className="text-xs text-slate-400 mt-0.5">{trendDays} ngày gần nhất</p>
               </div>
               <div className="flex items-center gap-0.5 bg-slate-100 rounded-md p-0.5">
