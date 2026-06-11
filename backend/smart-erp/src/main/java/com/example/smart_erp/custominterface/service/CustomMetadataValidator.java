@@ -88,12 +88,8 @@ public class CustomMetadataValidator {
 
 	private void validateView(CustomViewRequest view, Set<String> fieldKeys, List<CustomFieldRequest> activeFields,
 			List<ValidationSummaryData.Item> errors) {
-		if (view == null || view.listColumns() == null || !(view.listColumns().isArray() || view.listColumns().isObject())
-				|| view.listColumns().isEmpty()) {
+		if (view == null || view.listColumns() == null || !view.listColumns().isArray() || view.listColumns().isEmpty()) {
 			errors.add(new ValidationSummaryData.Item("view", "List view cần tối thiểu một cột."));
-		}
-		if (view != null && view.listColumns() != null && view.listColumns().isObject()) {
-			validateListColumn(view.listColumns(), fieldKeys, errors);
 		}
 		if (view != null && view.listColumns() != null && view.listColumns().isArray()) {
 			for (JsonNode column : view.listColumns()) {
@@ -101,8 +97,8 @@ public class CustomMetadataValidator {
 			}
 		}
 		Set<String> formFieldKeys = new HashSet<>();
-		if (view != null && view.formSections() != null && view.formSections().isObject()) {
-			collectFormFieldKeys(view.formSections(), formFieldKeys);
+		if (view == null || view.formSections() == null || !view.formSections().isArray()) {
+			errors.add(new ValidationSummaryData.Item("view", "Form view cần cấu hình sections dạng array."));
 		}
 		if (view != null && view.formSections() != null && view.formSections().isArray()) {
 			for (JsonNode section : view.formSections()) {

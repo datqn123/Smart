@@ -33,8 +33,10 @@ class CustomMetadataValidatorTest {
 
 	@Test
 	void validateDraft_acceptsMinimalValidEntity() {
-		var columns = mapper.createArrayNode().addObject().put("fieldKey", "name").put("label", "Tên");
-		var sections = mapper.createArrayNode().addObject().put("id", "main").put("title", "Thông tin")
+		var columns = mapper.createArrayNode();
+		columns.addObject().put("fieldKey", "name").put("label", "Tên");
+		var sections = mapper.createArrayNode();
+		sections.addObject().put("id", "main").put("title", "Thông tin")
 				.set("fieldKeys", mapper.createArrayNode().add("name"));
 		var view = new CustomViewRequest(columns, mapper.createArrayNode().add("name"), "name asc", sections, "desktop");
 
@@ -50,8 +52,10 @@ class CustomMetadataValidatorTest {
 		var reference = mapper.createObjectNode().put("refType", "core").put("refEntityKey", "unknown_table");
 		var field = new CustomFieldRequest(null, "Ref", "ref_key", "reference", true, false, false, false, 0,
 				null, mapper.createArrayNode(), reference, mapper.createObjectNode(), null, false, false, "Active");
-		var columns = mapper.createArrayNode().addObject().put("fieldKey", "ref_key").put("label", "Ref");
-		var sections = mapper.createArrayNode().addObject().put("id", "main").put("title", "Thông tin")
+		var columns = mapper.createArrayNode();
+		columns.addObject().put("fieldKey", "ref_key").put("label", "Ref");
+		var sections = mapper.createArrayNode();
+		sections.addObject().put("id", "main").put("title", "Thông tin")
 				.set("fieldKeys", mapper.createArrayNode().add("ref_key"));
 
 		var summary = validator.validateDraft("custom_page", "custom_entity", List.of(field),
@@ -60,6 +64,21 @@ class CustomMetadataValidatorTest {
 
 		assertThat(summary.valid()).isFalse();
 		assertThat(summary.errors()).anySatisfy(error -> assertThat(error.message()).contains("reference"));
+	}
+
+	@Test
+	void validateDraft_rejectsObjectShapedListColumns() {
+		var columns = mapper.createObjectNode().put("fieldKey", "name").put("label", "Tên");
+		var sections = mapper.createArrayNode();
+		sections.addObject().put("id", "main").put("title", "Thông tin")
+				.set("fieldKeys", mapper.createArrayNode().add("name"));
+		var view = new CustomViewRequest(columns, mapper.createArrayNode().add("name"), "name asc", sections, "desktop");
+
+		var summary = validator.validateDraft("custom_page", "custom_entity", List.of(field("name", "Tên", "text", true)),
+				view, new CustomPermissionRequest(List.of("Owner"), List.of("Owner"), List.of("Owner"), List.of("Owner")));
+
+		assertThat(summary.valid()).isFalse();
+		assertThat(summary.errors()).anySatisfy(error -> assertThat(error.message()).contains("List view"));
 	}
 
 	private CustomFieldRequest field(String key, String label, String type, boolean required) {
