@@ -19,11 +19,16 @@ def is_registered(tool_name: str) -> bool:
 
 
 def load_skill(tool_name: str) -> str:
-    """Doc skill.md MOI LAN goi (khong cache) — nen tang cho reload-on-retry."""
+    """Doc skill.md MOI LAN goi (khong cache) — nen tang cho reload-on-retry.
+    Neu co schema.md cung thu muc, tu dong concat vao sau skill.md."""
     if tool_name not in TOOL_NAMES:
         raise KeyError(f"unknown tool: {tool_name}")
-    path = _TOOLS_DIR / tool_name / "skill.md"
-    return path.read_text(encoding="utf-8")
+    tool_dir = _TOOLS_DIR / tool_name
+    content = (tool_dir / "skill.md").read_text(encoding="utf-8")
+    schema_path = tool_dir / "schema.md"
+    if schema_path.exists():
+        content = content + "\n\n" + schema_path.read_text(encoding="utf-8")
+    return content
 
 
 def render_tool_catalog() -> str:
