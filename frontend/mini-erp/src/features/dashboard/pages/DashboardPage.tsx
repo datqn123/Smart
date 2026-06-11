@@ -341,24 +341,24 @@ export function DashboardPage() {
       {canSeeFinancials && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Revenue trend chart */}
-          <div className="lg:col-span-2 bg-white rounded-xl border border-border shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
-            <div className="flex items-center justify-between mb-4">
+          <div className="lg:col-span-2 bg-white rounded-lg border border-slate-200 shadow-xs p-5">
+            <div className="flex items-start justify-between mb-4">
               <div>
-                <h2 className="text-sm font-semibold text-foreground">Xu hướng doanh thu</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Tổng {formatCurrency(revenueTrend.reduce((s, p) => s + p.revenue, 0))} ·{" "}
-                  {trendDays} ngày gần nhất
+                <h2 className="text-sm font-medium text-slate-900">Xu hướng doanh thu</h2>
+                <p className="text-2xl font-semibold text-foreground tracking-tight tabular-nums mt-1">
+                  {formatCurrency(revenueTrend.reduce((s, p) => s + p.revenue, 0))}
                 </p>
+                <p className="text-xs text-slate-400 mt-0.5">{trendDays} ngày gần nhất</p>
               </div>
-              <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
+              <div className="flex items-center gap-0.5 bg-slate-100 rounded-md p-0.5">
                 {([7, 30] as const).map((d) => (
                   <button
                     key={d}
                     onClick={() => setTrendDays(d)}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                    className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
                       trendDays === d
-                        ? "bg-white text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
+                        ? "bg-white border border-slate-200 shadow-xs text-slate-900"
+                        : "border border-transparent text-slate-500 hover:text-slate-900"
                     }`}
                   >
                     {d} ngày
@@ -376,12 +376,11 @@ export function DashboardPage() {
                   <AreaChart data={revenueTrend} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
                     <defs>
                       <linearGradient id="dashRevenue" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.5} />
-                        <stop offset="50%" stopColor="#0ea5e9" stopOpacity={0.2} />
-                        <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0.02} />
+                        <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.08} />
+                        <stop offset="95%" stopColor="#4f46e5" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#f1f5f9" />
                     <XAxis
                       dataKey="label"
                       axisLine={false}
@@ -400,9 +399,9 @@ export function DashboardPage() {
                     />
                     <Tooltip
                       contentStyle={{
-                        borderRadius: "12px",
-                        border: "none",
-                        boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)",
+                        borderRadius: "8px",
+                        border: "1px solid #e2e8f0",
+                        boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.05)",
                         fontSize: "12px",
                       }}
                       labelFormatter={(label) => `Ngày ${label}`}
@@ -411,8 +410,8 @@ export function DashboardPage() {
                     <Area
                       type="monotone"
                       dataKey="revenue"
-                      stroke="#0ea5e9"
-                      strokeWidth={2}
+                      stroke="#4f46e5"
+                      strokeWidth={1.5}
                       fill="url(#dashRevenue)"
                     />
                   </AreaChart>
@@ -422,8 +421,8 @@ export function DashboardPage() {
           </div>
 
           {/* Channel breakdown */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex flex-col">
-            <h2 className="text-sm font-semibold text-slate-900">Cơ cấu doanh thu theo kênh</h2>
+          <div className="bg-white rounded-lg border border-slate-200 shadow-xs p-5 flex flex-col">
+            <h2 className="text-sm font-medium text-slate-900">Cơ cấu doanh thu theo kênh</h2>
             <p className="text-xs text-slate-400 mt-0.5">{trendDays} ngày gần nhất</p>
             <div className="flex-1 flex flex-col justify-center gap-4 mt-4">
               {ordersLoading ? (
@@ -438,7 +437,7 @@ export function DashboardPage() {
                 <>
                   {(
                     [
-                      { label: "Bán lẻ", value: channels.retail, color: "bg-blue-500", text: "text-blue-600" },
+                      { label: "Bán lẻ", value: channels.retail, color: "bg-indigo-500", text: "text-indigo-600" },
                       { label: "Bán sỉ", value: channels.wholesale, color: "bg-emerald-500", text: "text-emerald-600" },
                     ] as const
                   ).map((ch) => {
@@ -447,15 +446,11 @@ export function DashboardPage() {
                       <div key={ch.label}>
                         <div className="flex items-center justify-between mb-1.5">
                           <span className="text-xs font-medium text-slate-600">{ch.label}</span>
-                          <span className={`text-xs font-bold ${ch.text}`}>{pct.toFixed(0)}%</span>
+                          <span className={`text-xs font-semibold tabular-nums ${ch.text}`}>{pct.toFixed(0)}%</span>
                         </div>
-                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
                           <div
-                            className={`h-full rounded-full transition-all ${
-                              ch.label === "Bán lẻ"
-                                ? "bg-gradient-to-r from-blue-400 to-blue-600"
-                                : "bg-gradient-to-r from-emerald-400 to-emerald-600"
-                            }`}
+                            className={`h-full rounded-full transition-all ${ch.color}`}
                             style={{ width: `${pct}%` }}
                           />
                         </div>
@@ -466,8 +461,8 @@ export function DashboardPage() {
                     )
                   })}
                   <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                    <span className="text-sm font-semibold text-muted-foreground">Tổng cộng</span>
-                    <span className="text-base font-bold text-foreground tabular-nums">
+                    <span className="text-[13px] font-medium text-slate-500">Tổng cộng</span>
+                    <span className="text-base font-semibold text-foreground tabular-nums">
                       {formatCurrency(channels.total)}
                     </span>
                   </div>
