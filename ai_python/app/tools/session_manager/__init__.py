@@ -5,7 +5,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, field_validator
 from app.graph.state import SessionState
 from app.harness.think_log import think
-from app.registry.registry import load_skill, render_tool_catalog, is_registered
+from app.registry.registry import load_skill, is_dispatchable
 
 log = logging.getLogger(__name__)
 
@@ -25,12 +25,12 @@ class Decision(BaseModel):
     def _tool_registered(cls, v, info):
         action = info.data.get("action")
         if action in ("call_tool", "retry_tool"):
-            if not v or not is_registered(v):
+            if not v or not is_dispatchable(v):
                 raise ValueError(f"tool_name khong hop le/khong dang ky: {v!r}")
         return v
 
 
-_PROMPT = ("{skill}\n\n{catalog}\n\n{memory}raw_require: {raw_require}\n"
+_PROMPT = ("{skill}\n\n{memory}raw_require: {raw_require}\n"
            "history: {history}\nlast_result: {last}\n\n"
            "Tra ve DUY NHAT JSON theo Output schema.")
 
@@ -71,7 +71,7 @@ def analyze(state: SessionState, *, llm, memory_context: dict | None = None) -> 
     else:
         think("SM", 'nhan yeu cau moi: "%.100s" — chua co buoc nao, '
               "bat dau phan tich xem can tool gi", state["raw_require"])
-    user = _PROMPT.format(skill=skill, catalog=render_tool_catalog(),
+    user = _PROMPT.format(skill=skill,
                           memory=_memory_blocks(memory_context),
                           raw_require=state["raw_require"],
                           history=json.dumps(state["history"], ensure_ascii=False)[:4000],

@@ -1,7 +1,7 @@
 from __future__ import annotations
 import logging
 from typing import Any
-from app.registry.registry import is_registered
+from app.registry.registry import is_dispatchable
 from app.graph.subgraph import build_tool_subgraph
 from app.graph.state import new_tool_state
 
@@ -37,7 +37,7 @@ def dispatch(tool_name: str, *, raw_require: str, upstream_data: dict[str, Any],
     """Map tool_name -> subgraph; payload LUON {raw_require, upstream_data}
     (fact-dispatcher) + memory_summary (boi canh hoi thoai, co the None).
     Chan answer_composer neu validator chua pass (fact-validator-before)."""
-    if not is_registered(tool_name):
+    if not is_dispatchable(tool_name):
         raise DispatchError(f"tool chua dang ky: {tool_name}")
     if tool_name == "answer_composer" and not validator_passed:
         raise DispatchError("answer_composer khong duoc chay truoc data_validator pass")
