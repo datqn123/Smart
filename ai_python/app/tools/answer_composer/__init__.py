@@ -1,15 +1,22 @@
 from __future__ import annotations
 import json
 import logging
+from pydantic import BaseModel
+from app.config.llm_client import StructuredOutputError
 from app.graph.state import ToolState
 from app.harness.think_log import think
 from app.tools import memory_block
 
 log = logging.getLogger(__name__)
 
+
+class ComposerAnswer(BaseModel):
+    """Cau tra loi cuoi cho user, ket thuc bang dong bat dau 'Gợi ý:'."""
+    answer: str
+
+
 _PROMPT = ("{skill}\n\n--- SOAN TRA LOI ---\nraw_require: {raw_require}\n"
-           "data: {data}\n{memory}\nTra ve JSON {{\"answer\":\"...\"}}, "
-           "ket thuc bang dong bat dau 'Gợi ý:'.")
+           "data: {data}\n{memory}\nKet thuc answer bang dong bat dau 'Gợi ý:'.")
 
 
 def execute(state: ToolState, *, llm, **_) -> dict:
@@ -18,23 +25,18 @@ def execute(state: ToolState, *, llm, **_) -> dict:
     user = _PROMPT.format(skill=state["skill"], raw_require=state["raw_require"],
                           data=json.dumps(state["upstream_data"], ensure_ascii=False)[:4000],
                           memory=memory_block(state))
-    raw = llm.complete(system=state["skill"], user=user, role="default").strip()
-    log.debug("answer_composer LLM raw: %.300s", raw)
-    if raw.startswith("```"):
-        raw = raw.strip("`"); raw = raw[raw.find("{"):]
     try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError:
-        parsed = None
-    answer = parsed.get("answer", "") if isinstance(parsed, dict) else ""
+        out = llm.complete_structured(system=state["skill"], user=user,
+                                      output_model=ComposerAnswer)
+        answer = out.answer.strip()
+    except StructuredOutputError as exc:
+        log.warning("answer_composer structured output failed: %s", exc)
+        answer = ""
     if not answer:
-        log.warning("answer_composer empty answer malformed=%s", parsed is None)
         think("answer_composer", "-> LLM tra answer rong/khong doc duoc, de SM thu lai")
     else:
         think("answer_composer", "-> soan xong cau tra loi %d ky tu", len(answer))
-        has_goi_y = "gợi ý:" in answer.lower()
-        log.info("answer_composer answer_len=%d has_goi_y=%s", len(answer), has_goi_y)
-        if not has_goi_y:
+        if "gợi ý:" not in answer.lower():
             log.warning("answer_composer missing 'Gợi ý:' marker — self_validate will fail")
     return {"answer": answer}
 
