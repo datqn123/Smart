@@ -212,7 +212,7 @@ export function Header() {
   }
 
   return (
-    <header className="h-14 bg-white/80 backdrop-blur border-b border-slate-200 flex items-center px-4 md:px-6 sticky top-0 z-50">
+    <header className="h-14 bg-white/80 backdrop-blur-sm border-b border-slate-200 flex items-center px-4 md:px-6 sticky top-0 z-50">
       <div className="flex items-center justify-between w-full">
         <div className="flex items-center space-x-2 text-[13px] text-slate-500">
           <button
@@ -247,7 +247,7 @@ export function Header() {
             >
               <Bell className="h-[18px] w-[18px] text-slate-600" />
               {isAuthenticated && unreadTotal > 0 && (
-                <span className="absolute top-1 right-1 min-w-4 h-4 px-1 flex items-center justify-center text-[10px] font-semibold bg-red-500 text-white rounded-full">
+                <span className="absolute top-1 right-1 min-w-4 h-4 px-1 flex items-center justify-center text-[10px] font-semibold bg-red-500 text-white rounded-full border border-white/60">
                   {unreadTotal > 99 ? "99+" : unreadTotal}
                 </span>
               )}
