@@ -17,38 +17,29 @@ def _token():
                       SECRET, algorithm="HS256")
 
 
-# Moi request: SM goi 3 lan (sql -> validator -> composer; sau composer valid
-# orchestrator tu finish, khong goi SM nua).
-_SM_SCRIPT = [
-    {"action": "call_tool", "tool_name": "sql_execute", "forward_data": {},
-     "reasoning": "can data", "message": None},
-    {"action": "call_tool", "tool_name": "data_validator",
-     "forward_data": {"from": "sql_execute"}, "reasoning": "validate", "message": None},
-    {"action": "call_tool", "tool_name": "answer_composer",
-     "forward_data": {"from": "sql_execute"}, "reasoning": "soan", "message": None},
+# Moi request: SM chon tool 3 lan (sql -> validator -> composer; sau composer
+# valid orchestrator tu finish, khong goi SM nua).
+_SM_SELECTS = [
+    ("sql_execute", {"reasoning": "can data", "require": "doanh thu thang 5/2026"}),
+    ("data_validator", {"reasoning": "validate"}),
+    ("answer_composer", {"reasoning": "soan"}),
 ]
 
 
 class _LLM:
     def __init__(self):
-        self._sm = [json.dumps(d) for d in _SM_SCRIPT]
+        self._selects = list(_SM_SELECTS)
         self.sm_prompts = []
 
-    def complete(self, *, system, user, role="default", temperature=None):
-        if role == "sm":
-            self.sm_prompts.append(user)
-            return self._sm.pop(0)
-        if "Skill: sql_execute" in system:
-            return json.dumps({"sql": "SELECT SUM(final_amount) AS doanh_thu FROM orders"})
-        if "Skill: answer_composer" in system:
-            return json.dumps(
-                {"answer": "Doanh thu thang 5/2026 la 15 trieu.\nGợi ý: xem theo kenh?"})
-        raise AssertionError(f"LLM call khong mong doi: {system[:80]}")
+    def complete_tool_select(self, *, system, user, tools,
+                             role="default", temperature=None):
+        self.sm_prompts.append(user)
+        name, args = self._selects.pop(0)
+        return name, json.dumps(args, ensure_ascii=False)
 
     def complete_structured(self, *, system, user, output_model,
                             role="default", temperature=None):
-        # Route theo output model — on dinh khi cac tool lan luot chuyen sang
-        # structured channel (Task 4-6 plan native tool-calling).
+        # Route theo output model (structured channel cua 4 tool).
         payloads = {
             "SqlDraft": {"sql": "SELECT SUM(final_amount) AS doanh_thu FROM orders"},
             "SemanticCheck": {"ok": True},
@@ -57,6 +48,10 @@ class _LLM:
                                          "\nGợi ý: xem theo kenh?"},
         }
         return output_model.model_validate(payloads[output_model.__name__])
+
+    def complete(self, *, system, user, role="default", temperature=None):
+        # Chi con memory compact dung complete() — tra tom tat ngan.
+        return "User dang xem doanh thu thang 5/2026."
 
 
 class _StubExecutor:

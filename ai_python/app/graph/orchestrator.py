@@ -14,20 +14,14 @@ def _event(type_: str, data: dict) -> dict:
     return {"type": type_, "data": data}
 
 
-def _build_upstream(state, forward_data: dict) -> dict:
-    """SM chi ra lay data tu tool nao ('from'); orchestrator dung payload.
-
-    Luon merge TAT CA tool_results lam nen, roi overlay source SM chi dinh
-    len tren (key cua source thang khi trung). Truoc day 'from' thay the
-    toan bo upstream → SM forward tu data_validator lam answer_composer
-    mat rows cua sql_execute va tra loi 'khong co du lieu'."""
+def _build_upstream(state) -> dict:
+    """Merge TAT CA tool_results lam upstream cho tool ke tiep (key sau de
+    len key truoc theo thu tu insert). Bai hoc cu: forward chi 1 nguon lam
+    answer_composer mat rows cua sql_execute -> tra loi 'khong co du lieu'."""
     merged: dict[str, Any] = {}
     for out in state["tool_results"].values():
         if isinstance(out, dict):
             merged.update(out)
-    src = forward_data.get("from")
-    if src and src in state["tool_results"]:
-        merged.update(state["tool_results"][src])
     return merged
 
 
@@ -87,13 +81,6 @@ async def run_session(ctx: TurnContext, *, llm_sm, llm_tool, deps: dict,
                                      "thread_id": ctx.thread_id})
             break
 
-        if action == "replan":
-            log.info("[%s] replan step=%d reasoning=%.120s",
-                     ctx.thread_id, state["step_count"], decision.reasoning)
-            state["history"].append({"action": "replan", "reasoning": decision.reasoning})
-            state["step_count"] += 1
-            continue
-
         tool = decision.tool_name
         if action == "retry_tool":
             current_retries = state["retry_counts"].get(tool, 0)
@@ -112,7 +99,7 @@ async def run_session(ctx: TurnContext, *, llm_sm, llm_tool, deps: dict,
         require = decision.resolved_require or state["raw_require"]
         if decision.resolved_require:
             log.info("[%s] resolved_require: %.120s", ctx.thread_id, decision.resolved_require)
-        upstream = _build_upstream(state, decision.forward_data)
+        upstream = _build_upstream(state)
         log.info("[%s] step=%d dispatch tool=%s", ctx.thread_id, state["step_count"], tool)
         think("orchestrator", "buoc %d/%d: giao viec cho tool %s",
               state["step_count"] + 1, max_steps, tool)
