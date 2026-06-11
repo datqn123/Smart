@@ -17,6 +17,7 @@ class Decision(BaseModel):
     forward_data: dict[str, Any] = {}
     reasoning: str
     message: str | None = None
+    resolved_require: str | None = None   # SM viet lai cau hoi noi tiep tu-du-nghia
 
     @field_validator("tool_name")
     @classmethod
@@ -28,9 +29,22 @@ class Decision(BaseModel):
         return v
 
 
-_PROMPT = ("{skill}\n\n{catalog}\n\nraw_require: {raw_require}\n"
+_PROMPT = ("{skill}\n\n{catalog}\n\n{memory}raw_require: {raw_require}\n"
            "history: {history}\nlast_result: {last}\n\n"
            "Tra ve DUY NHAT JSON theo Output schema.")
+
+
+def _memory_blocks(memory_context) -> str:
+    """SM la noi duy nhat thay du cac luot verbatim (spec) — tool chi nhan summary."""
+    if not memory_context:
+        return ""
+    parts = []
+    if memory_context.get("summary"):
+        parts.append(f"[Tom tat hoi thoai cu]: {memory_context['summary']}")
+    if memory_context.get("turns"):
+        parts.append("[Cac luot gan nhat]: "
+                     + json.dumps(memory_context["turns"], ensure_ascii=False)[:6000])
+    return "\n".join(parts) + "\n" if parts else ""
 
 
 def _coerce_json(raw: str) -> dict:
@@ -40,7 +54,7 @@ def _coerce_json(raw: str) -> dict:
     return json.loads(raw)
 
 
-def analyze(state: SessionState, *, llm) -> Decision:
+def analyze(state: SessionState, *, llm, memory_context: dict | None = None) -> Decision:
     """SM doc LAI skill.md moi lan phan tich (fact-sm-reanalyze) va dung
     role 'sm' (Qwen, temperature thap — R5). Reparse co bound 2 lan."""
     skill = load_skill("session_manager")
@@ -48,6 +62,7 @@ def analyze(state: SessionState, *, llm) -> Decision:
     log.debug("SM analyze step=%d history_len=%d raw_require=%.100s",
               state["step_count"], len(state["history"]), state["raw_require"])
     user = _PROMPT.format(skill=skill, catalog=render_tool_catalog(),
+                          memory=_memory_blocks(memory_context),
                           raw_require=state["raw_require"],
                           history=json.dumps(state["history"], ensure_ascii=False)[:4000],
                           last=json.dumps(last, ensure_ascii=False))

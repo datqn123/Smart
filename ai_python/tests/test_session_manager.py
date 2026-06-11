@@ -45,3 +45,42 @@ def test_analyze_parses_into_decision():
     st = new_session_state(raw_require="R", thread_id="t")
     d = analyze(st, llm=llm)
     assert isinstance(d, Decision) and d.action == "finish"
+
+
+def test_analyze_injects_memory_blocks():
+    llm = _LLM({"action": "finish", "tool_name": None, "forward_data": {},
+                "reasoning": "x", "message": "ok"})
+    st = new_session_state(raw_require="con thang truoc thi sao?", thread_id="t")
+    mem = {"summary": "User xem doanh thu thang 5/2026",
+           "turns": [{"user": "doanh thu thang 5?", "answer": "15 trieu"}]}
+    analyze(st, llm=llm, memory_context=mem)
+    user = llm.calls[0]["user"]
+    assert "[Tom tat hoi thoai cu]: User xem doanh thu thang 5/2026" in user
+    assert "[Cac luot gan nhat]:" in user
+    assert "doanh thu thang 5?" in user
+
+
+def test_analyze_no_memory_blocks_when_absent():
+    llm = _LLM({"action": "finish", "tool_name": None, "forward_data": {},
+                "reasoning": "x", "message": "ok"})
+    st = new_session_state(raw_require="doanh thu quy 1", thread_id="t")
+    analyze(st, llm=llm)
+    user = llm.calls[0]["user"]
+    assert "[Tom tat hoi thoai cu]" not in user
+    assert "[Cac luot gan nhat]" not in user
+
+
+def test_decision_parses_resolved_require():
+    llm = _LLM({"action": "call_tool", "tool_name": "sql_execute", "forward_data": {},
+                "reasoning": "noi tiep", "message": None,
+                "resolved_require": "doanh thu thang 4/2026"})
+    st = new_session_state(raw_require="con thang truoc thi sao?", thread_id="t")
+    d = analyze(st, llm=llm)
+    assert d.resolved_require == "doanh thu thang 4/2026"
+
+
+def test_decision_resolved_require_default_none():
+    llm = _LLM({"action": "finish", "tool_name": None, "forward_data": {},
+                "reasoning": "x", "message": "ok"})
+    d = analyze(new_session_state(raw_require="x", thread_id="t"), llm=llm)
+    assert d.resolved_require is None
