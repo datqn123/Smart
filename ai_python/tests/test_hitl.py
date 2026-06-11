@@ -23,6 +23,16 @@ async def test_load_missing_returns_none(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_save_without_explicit_init(tmp_path):
+    # Regression: production pause-lan-dau goi save() truoc khi bat ky
+    # init() nao chay -> tung crash 'no such table: pending'.
+    store = PendingStore(db_path=str(tmp_path / "hitl.sqlite"))
+    await store.save("t1", {"raw_require": "liet ke di"})
+    loaded = await store.load("t1")
+    assert loaded["raw_require"] == "liet ke di"
+
+
+@pytest.mark.asyncio
 async def test_clear_removes_pending(tmp_path):
     store = PendingStore(db_path=str(tmp_path / "hitl.sqlite"))
     await store.init()
