@@ -13,6 +13,16 @@ def test_new_tool_state_defaults():
     assert st["attempt"] == 0
 
 
+def test_new_tool_state_memory_summary_default_none():
+    st = new_tool_state(tool_name="x", raw_require="r")
+    assert st["memory_summary"] is None
+
+
+def test_new_tool_state_memory_summary_set():
+    st = new_tool_state(tool_name="x", raw_require="r", memory_summary="tom tat")
+    assert st["memory_summary"] == "tom tat"
+
+
 def test_new_session_state_defaults():
     st = new_session_state(raw_require="R", thread_id="t1")
     assert st["raw_require"] == "R"

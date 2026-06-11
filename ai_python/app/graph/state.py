@@ -6,6 +6,7 @@ class ToolState(TypedDict):
     tool_name: str
     raw_require: str
     upstream_data: dict[str, Any]
+    memory_summary: str | None       # summary hoi thoai cu (None = khong co)
     skill: str                       # noi dung skill.md da nap o node load_skill
     output: dict[str, Any] | None    # ket qua execute
     valid: bool                      # verdict cua self_validate
@@ -27,9 +28,11 @@ class SessionState(TypedDict):
 
 
 def new_tool_state(*, tool_name: str, raw_require: str,
-                   upstream_data: dict | None = None) -> ToolState:
+                   upstream_data: dict | None = None,
+                   memory_summary: str | None = None) -> ToolState:
     return ToolState(tool_name=tool_name, raw_require=raw_require,
-                     upstream_data=upstream_data or {}, skill="", output=None,
+                     upstream_data=upstream_data or {},
+                     memory_summary=memory_summary, skill="", output=None,
                      valid=False, validation_error=None, attempt=0)
 
 
