@@ -259,7 +259,7 @@ export function Header() {
                   <div className="flex items-center gap-2">
                     <span className="text-[13px] font-semibold text-slate-900">Thông báo</span>
                     {unreadTotal > 0 ? (
-                      <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                      <span className="text-[10px] font-medium text-brand bg-brand-light px-2 py-0.5 rounded-full">
                         {unreadTotal} chưa đọc
                       </span>
                     ) : null}
@@ -268,7 +268,7 @@ export function Header() {
                     type="button"
                     disabled={!isAuthenticated || unreadTotal === 0 || markAllRead.isPending}
                     onClick={() => markAllRead.mutate()}
-                    className="text-[11px] font-medium text-slate-500 hover:text-accent flex items-center gap-1 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                    className="text-[11px] font-medium text-slate-500 hover:text-brand flex items-center gap-1 transition-colors disabled:opacity-40 disabled:pointer-events-none"
                   >
                     {markAllRead.isPending ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />

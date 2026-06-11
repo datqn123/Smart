@@ -33,8 +33,8 @@ Không thay đổi API, store, routing, phân quyền, cấu trúc component.
 
 | Token | Giá trị | Dùng cho |
 | ------- | --------- | ---------- |
-| `--color-accent` | `#4f46e5` (indigo-600) | Active nav, link, chart line, focus ring |
-| `--color-accent-light` | `#eef2ff` (indigo-50) | Nền active state nhạt |
+| `--color-brand` | `#4f46e5` (indigo-600) | Active nav, link, chart line, focus ring |
+| `--color-brand-light` | `#eef2ff` (indigo-50) | Nền active state nhạt |
 | `--color-surface` | `#fafafa` | Nền vùng content; card trắng nổi trên nền này |
 | `--shadow-xs` | `0 1px 2px rgba(0,0,0,0.04)` | Bóng duy nhất cho card |
 
