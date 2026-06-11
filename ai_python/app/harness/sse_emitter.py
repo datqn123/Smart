@@ -17,3 +17,16 @@ def sse_format(event_type: str, data: dict) -> str:
     body = json.dumps({"harness": {"type": event_type, "data": data}},
                       ensure_ascii=False)
     return f"data: {body}\n\n"
+
+
+def sse_frontend(event_name: str, data: str) -> str:
+    """SSE frame cho Spring relay / browser: event: + data: line(s).
+    data phai la string (plain text hoac JSON-encoded string).
+
+    Data nhieu dong PHAI tach thanh nhieu 'data:' line theo spec SSE —
+    EventSource phia client tu noi lai bang '\\n'. Truoc day nhet nguyen
+    chuoi sau 1 'data:' lam moi dong sau dong dau bi parser SSE bo qua
+    (answer danh sach bi cat cut o dong dau tien)."""
+    lines = data.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    body = "\n".join(f"data: {ln}" for ln in lines)
+    return f"event: {event_name}\n{body}\n\n"

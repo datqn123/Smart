@@ -245,7 +245,15 @@ public class AiChatRelayController {
 						if (line.isEmpty()) {
 							if (event != null) {
 								String payload = data.toString();
-								emitter.send(SseEmitter.event().name(event).data(payload));
+								// Payload nhieu dong: goi .data() tung dong de Spring sinh
+								// nhieu "data:" line dung spec SSE. Truyen nguyen chuoi co
+								// '\n' se ghi raw newline vao frame → browser cat mat moi
+								// dong sau dong dau (answer dang danh sach bi cut).
+								SseEmitter.SseEventBuilder builder = SseEmitter.event().name(event);
+								for (String dataLine : payload.split("\n", -1)) {
+									builder = builder.data(dataLine);
+								}
+								emitter.send(builder);
 								if ("done".equals(event)) {
 									emitter.complete();
 									return;
