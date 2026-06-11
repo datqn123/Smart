@@ -14,7 +14,14 @@
 - KHÔNG dùng `salesorders.final_amount` để tính tổng doanh thu đã hạch toán
 - Phân tích theo kênh/khách: JOIN `financeledger fl JOIN salesorders so ON fl.reference_type='SalesOrder' AND fl.reference_id=so.id`
 
+### Sản phẩm ế / bán chậm / chưa bán được
+
+- BẮT BUỘC `LEFT JOIN` từ `products` sang `orderdetails` + `COALESCE(SUM(od.quantity), 0)`
+- INNER JOIN sẽ loại mất sản phẩm có 0 đơn hàng — chính là hàng ế nhất
+- "top seller / bán chạy" thì INNER JOIN được (sản phẩm 0 đơn không bao giờ vào top)
+
 ### Join phiếu xuất
+
 - Chuỗi đúng: `salesorders → stockdispatches (order_id) → stockdispatch_lines (dispatch_id)`
 - `stockdispatch_lines.dispatch_id` là FK của `stockdispatches.id`, KHÔNG phải `salesorders.id`
 
@@ -193,6 +200,14 @@ JOIN salesorders so ON fl.reference_type = 'SalesOrder'
                    AND fl.reference_id = so.id
 WHERE fl.transaction_type = 'SalesRevenue'
 GROUP BY so.order_channel;
+
+-- Sản phẩm ế / bán chậm (LEFT JOIN để giữ sản phẩm 0 đơn)
+SELECT p.name, COALESCE(SUM(od.quantity), 0) AS tong_ban
+FROM products p
+LEFT JOIN orderdetails od ON od.product_id = p.id
+WHERE p.status = 'Active'
+GROUP BY p.id, p.name
+ORDER BY tong_ban ASC LIMIT 10;
 
 -- Tồn sắp hết (dưới ngưỡng cảnh báo)
 SELECT p.name, i.quantity, i.min_quantity
