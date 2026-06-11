@@ -324,13 +324,13 @@ def get_settings() -> Settings:
 ```dotenv
 # ===== Agentic AI Rebuild (.env mới — bỏ http_spring + AGENTIC_V3) =====
 AUTH_DEV_BYPASS=0
-JWT_HS256_SECRET=VdpK6nba2XQ3wtBa0vIRwzVYSVtX0tYn8xxgrZielww
+JWT_HS256_SECRET=<REDACTED-rotate-before-use>
 JWT_ISSUER=
 JWT_AUDIENCE=
 
 # LLM (Qwen via FPT Cloud, OpenAI-compatible)
 LLM_BASE_URL=https://mkp-api.fptcloud.com
-LLM_API_KEY=sk-lpPxkzr-oQwbHfKSY4vasm-qKin3ftx33WWq63VCfys=
+LLM_API_KEY=<REDACTED-rotate-before-use>
 LLM_MODEL=Qwen3.6-27B
 LLM_TEMPERATURE=0.2
 LLM_SM_TEMPERATURE=0.0
