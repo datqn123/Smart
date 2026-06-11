@@ -45,3 +45,6 @@ Thumbs.db
 
 # Ad-hoc diff dumps
 diff.txt
+
+# Agentic AI runtime state (sqlite checkpoints/pending)
+ai_python/var/
