@@ -72,12 +72,13 @@ function statusLabel(s: string) {
   return map[s] ?? s
 }
 
-function statusColor(s: string) {
-  if (s === "Pending") return "bg-amber-100 text-amber-800"
-  if (s === "Processing") return "bg-indigo-100 text-indigo-700"
-  if (s === "Delivered" || s === "Completed") return "bg-green-100 text-green-700"
-  if (s === "Cancelled") return "bg-red-100 text-red-700"
-  return "bg-slate-100 text-slate-700"
+/** Màu chấm trạng thái cho style dot + text (Linear-style). */
+function statusDot(s: string) {
+  if (s === "Pending") return "bg-amber-500"
+  if (s === "Processing") return "bg-indigo-500"
+  if (s === "Delivered" || s === "Completed") return "bg-emerald-500"
+  if (s === "Cancelled") return "bg-red-500"
+  return "bg-slate-400"
 }
 
 function channelLabel(c: string) {
@@ -201,10 +202,10 @@ export function DashboardPage() {
   ].filter((k) => k.show)
 
   const shortcuts = [
-    { label: "Bán lẻ (POS)", icon: ShoppingBag, to: "/orders/retail", color: "bg-blue-600" },
-    { label: "Nhập kho", icon: Warehouse, to: "/inventory/inbound", color: "bg-emerald-600" },
-    { label: "Tồn kho", icon: Package, to: "/inventory/stock", color: "bg-orange-600" },
-    { label: "Báo cáo", icon: BarChart3, to: "/analytics/revenue", color: "bg-purple-600" },
+    { label: "Bán lẻ (POS)", icon: ShoppingBag, to: "/orders/retail" },
+    { label: "Nhập kho", icon: Warehouse, to: "/inventory/inbound" },
+    { label: "Tồn kho", icon: Package, to: "/inventory/stock" },
+    { label: "Báo cáo", icon: BarChart3, to: "/analytics/revenue" },
   ]
 
   const ordersLoading = dashboardLoading
@@ -480,7 +481,7 @@ export function DashboardPage() {
       {/* Lists: Recent orders + Pending approvals */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent Orders */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-lg border border-slate-200 shadow-xs overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
             <h2 className="text-sm font-semibold text-slate-900">Đơn hàng gần đây</h2>
             <Button
@@ -492,7 +493,7 @@ export function DashboardPage() {
               Xem tất cả <ArrowRight className="h-3 w-3 ml-1" />
             </Button>
           </div>
-          <div className="divide-y divide-slate-50">
+          <div className="divide-y divide-slate-100">
             {ordersLoading ? (
               <div className="flex items-center justify-center py-10 text-slate-300">
                 <Loader2 className="h-5 w-5 animate-spin" />
@@ -520,9 +521,8 @@ export function DashboardPage() {
                     <p className="text-sm font-semibold text-slate-900 tabular-nums">
                       {formatCurrency(Number(order.finalAmount))}
                     </p>
-                    <span
-                      className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${statusColor(order.status)}`}
-                    >
+                    <span className="inline-flex items-center gap-1.5 text-xs text-slate-600">
+                      <span className={`h-1.5 w-1.5 rounded-full ${statusDot(order.status)}`} />
                       {statusLabel(order.status)}
                     </span>
                   </div>
@@ -533,7 +533,7 @@ export function DashboardPage() {
         </div>
 
         {/* Pending Approvals */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-lg border border-slate-200 shadow-xs overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-semibold text-slate-900">Cần phê duyệt</h2>
@@ -552,7 +552,7 @@ export function DashboardPage() {
               Xem tất cả <ArrowRight className="h-3 w-3 ml-1" />
             </Button>
           </div>
-          <div className="divide-y divide-slate-50">
+          <div className="divide-y divide-slate-100">
             {dashboardLoading ? (
               <div className="flex items-center justify-center py-10 text-slate-300">
                 <Loader2 className="h-5 w-5 animate-spin" />
@@ -594,7 +594,7 @@ export function DashboardPage() {
       {/* Top khách hàng + Dòng tiền tháng này */}
       <div className={`grid grid-cols-1 gap-6 ${canSeeFinancials ? "lg:grid-cols-2" : ""}`}>
         {/* Top khách hàng */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-lg border border-slate-200 shadow-xs overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
             <div className="flex items-center gap-2">
               <Users className="h-4 w-4 text-slate-400" />
@@ -609,7 +609,7 @@ export function DashboardPage() {
               Xem tất cả <ArrowRight className="h-3 w-3 ml-1" />
             </Button>
           </div>
-          <div className="divide-y divide-slate-50">
+          <div className="divide-y divide-slate-100">
             {dashboardLoading ? (
               <div className="flex items-center justify-center py-10 text-slate-300">
                 <Loader2 className="h-5 w-5 animate-spin" />
@@ -624,14 +624,8 @@ export function DashboardPage() {
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div
-                      className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                        idx === 0
-                          ? "bg-amber-100 text-amber-700"
-                          : idx === 1
-                            ? "bg-slate-200 text-slate-600"
-                            : idx === 2
-                              ? "bg-orange-100 text-orange-700"
-                              : "bg-slate-100 text-slate-400"
+                      className={`h-7 w-7 rounded-full bg-slate-100 flex items-center justify-center text-xs font-medium shrink-0 ${
+                        idx === 0 ? "text-slate-900" : "text-slate-500"
                       }`}
                     >
                       {idx === 0 ? <Crown className="h-3.5 w-3.5" /> : idx + 1}
@@ -641,7 +635,7 @@ export function DashboardPage() {
                       <p className="text-xs text-slate-400">{c.orderCount} đơn hàng</p>
                     </div>
                   </div>
-                  <p className="text-sm font-bold text-slate-900 tabular-nums shrink-0 ml-3">
+                  <p className="text-sm font-semibold text-slate-900 tabular-nums shrink-0 ml-3">
                     {formatCurrency(c.totalSpent)}
                   </p>
                 </div>
@@ -652,7 +646,7 @@ export function DashboardPage() {
 
         {/* Dòng tiền tháng này — chỉ role tài chính */}
         {canSeeFinancials && (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex flex-col">
+          <div className="bg-white rounded-lg border border-slate-200 shadow-xs p-5 flex flex-col">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Wallet className="h-4 w-4 text-slate-400" />
@@ -672,9 +666,9 @@ export function DashboardPage() {
               <div className="rounded-lg bg-emerald-50 p-4">
                 <div className="flex items-center gap-1.5 text-emerald-600">
                   <ArrowDownLeft className="h-4 w-4" />
-                  <span className="text-[10px] font-bold uppercase tracking-wider">Tổng thu</span>
+                  <span className="text-xs font-medium">Tổng thu</span>
                 </div>
-                <p className="text-lg font-black text-emerald-700 mt-2 tabular-nums truncate">
+                <p className="text-lg font-semibold text-emerald-700 mt-2 tabular-nums truncate">
                   {dashboardLoading ? "…" : formatCurrency(cashflow?.income ?? 0)}
                 </p>
               </div>
@@ -682,18 +676,18 @@ export function DashboardPage() {
               <div className="rounded-lg bg-red-50 p-4">
                 <div className="flex items-center gap-1.5 text-red-600">
                   <ArrowUpLeft className="h-4 w-4" />
-                  <span className="text-[10px] font-bold uppercase tracking-wider">Tổng chi</span>
+                  <span className="text-xs font-medium">Tổng chi</span>
                 </div>
-                <p className="text-lg font-black text-red-700 mt-2 tabular-nums truncate">
+                <p className="text-lg font-semibold text-red-700 mt-2 tabular-nums truncate">
                   {dashboardLoading ? "…" : formatCurrency(cashflow?.expense ?? 0)}
                 </p>
               </div>
             </div>
             {/* Số dư ròng */}
             <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500">Số dư ròng</span>
+              <span className="text-[13px] font-medium text-slate-500">Số dư ròng</span>
               <span
-                className={`text-base font-black tabular-nums ${
+                className={`text-base font-semibold tabular-nums ${
                   (cashflow?.net ?? 0) >= 0 ? "text-emerald-600" : "text-red-600"
                 }`}
               >
@@ -708,14 +702,14 @@ export function DashboardPage() {
 
       {/* Low Stock Alert */}
       {((lowStockData?.items.length ?? 0) > 0 || dashboardLoading) && (
-        <div className="bg-white rounded-xl border border-amber-200 overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-amber-100 bg-amber-50/60">
+        <div className="bg-white rounded-lg border border-slate-200 shadow-xs overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-amber-500" />
-              <h2 className="text-sm font-semibold text-amber-900">
+              <h2 className="text-sm font-medium text-slate-900">
                 Cảnh báo tồn kho thấp
                 {lowStockData && (
-                  <span className="text-amber-500 font-normal ml-1">
+                  <span className="text-amber-600 font-normal ml-1">
                     ({lowStockData.total} mặt hàng)
                   </span>
                 )}
@@ -724,7 +718,7 @@ export function DashboardPage() {
             <Button
               variant="ghost"
               size="sm"
-              className="text-xs text-amber-700 h-7 px-2 hover:bg-amber-100"
+              className="text-xs text-slate-500 h-7 px-2 hover:text-slate-900"
               onClick={() => navigate("/inventory/stock")}
             >
               Xem tất cả <ArrowRight className="h-3 w-3 ml-1" />
@@ -740,18 +734,18 @@ export function DashboardPage() {
                 <div
                   key={item.id}
                   onClick={() => navigate("/inventory/stock")}
-                  className={`px-4 py-3 cursor-pointer hover:bg-amber-50/40 transition-colors ${
+                  className={`px-4 py-3 cursor-pointer hover:bg-slate-50 transition-colors ${
                     idx < (lowStockData?.items.length ?? 0) - 1
-                      ? "border-b xl:border-b-0 xl:border-r border-amber-100"
+                      ? "border-b xl:border-b-0 xl:border-r border-slate-100"
                       : ""
                   }`}
                 >
-                  <p className="text-sm font-semibold text-slate-900 line-clamp-1">
+                  <p className="text-sm font-medium text-slate-900 line-clamp-1">
                     {item.productName}
                   </p>
                   <p className="text-[10px] text-slate-400 font-mono mt-0.5">{item.skuCode}</p>
                   <div className="flex items-baseline gap-1 mt-1.5">
-                    <span className="text-xl font-black text-amber-600 tabular-nums">
+                    <span className="text-xl font-semibold text-amber-600 tabular-nums">
                       {item.quantity}
                     </span>
                     <span className="text-xs text-slate-400">
@@ -767,7 +761,7 @@ export function DashboardPage() {
 
       {/* Quick Shortcuts */}
       <div>
-        <p className="text-xs font-medium text-muted-foreground mb-3">
+        <p className="text-[13px] font-medium text-slate-500 mb-3">
           Truy cập nhanh
         </p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -775,14 +769,10 @@ export function DashboardPage() {
             <button
               key={s.to}
               onClick={() => navigate(s.to)}
-              className="flex items-center gap-3 bg-white border border-border shadow-sm rounded-xl p-4 hover:shadow-md hover:border-slate-300 transition-all text-left group"
+              className="flex items-center gap-3 bg-white border border-slate-200 rounded-lg p-4 hover:bg-slate-50 hover:border-slate-300 transition-colors duration-150 text-left"
             >
-              <div
-                className={`h-10 w-10 rounded-xl ${s.color} flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform`}
-              >
-                <s.icon className="h-5 w-5 text-white" />
-              </div>
-              <span className="text-sm font-semibold text-slate-700 group-hover:text-foreground">
+              <s.icon className="h-5 w-5 text-slate-600 shrink-0" />
+              <span className="text-sm font-medium text-slate-700">
                 {s.label}
               </span>
             </button>
