@@ -1,0 +1,368 @@
+<h2>Phương án thiết kế Dashboard — Enterprise Classic + Data Viz</h2>
+<p class="subtitle">Dashboard hiện tại: 820-line monolithic, 8 sections, recharts AreaChart</p>
+
+<div class="section">
+  <h3>Current State</h3>
+  <div class="mockup">
+    <div class="mockup-header">Dashboard hiện tại</div>
+    <div class="mockup-body" style="padding:1rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+        <div>
+          <h3 style="font-size:1.1rem;font-weight:600;">Chào buổi sáng, Admin</h3>
+          <p style="font-size:0.75rem;color:#64748b;">Thứ Tư, 11/06/2026</p>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.75rem;margin-bottom:1rem;">
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:0.75rem;">
+          <p style="font-size:0.7rem;color:#64748b;">Doanh thu hôm nay</p>
+          <p style="font-size:1rem;font-weight:700;">₫12.5M</p>
+          <p style="font-size:0.65rem;color:#15803d;">+15% vs hôm qua</p>
+        </div>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:0.75rem;">
+          <p style="font-size:0.7rem;color:#64748b;">Đơn hàng</p>
+          <p style="font-size:1rem;font-weight:700;">45</p>
+        </div>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:0.75rem;">
+          <p style="font-size:0.7rem;color:#64748b;">Giá trị TB</p>
+          <p style="font-size:1rem;font-weight:700;">₫278K</p>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:2fr 1fr;gap:0.75rem;margin-bottom:1rem;">
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:0.75rem;">
+          <p style="font-size:0.75rem;font-weight:600;margin-bottom:0.5rem;">Xu hướng doanh thu</p>
+          <div style="height:120px;background:linear-gradient(180deg,#f0f9ff,#fff);border-radius:4px;display:flex;align-items:flex-end;padding:0.5rem;">
+            <div style="width:100%;height:60%;background:linear-gradient(180deg,rgba(14,165,233,0.3),rgba(14,165,233,0.05));border-radius:2px;"></div>
+          </div>
+        </div>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:0.75rem;">
+          <p style="font-size:0.75rem;font-weight:600;margin-bottom:0.5rem;">Kênh bán hàng</p>
+          <div style="display:flex;gap:0.25rem;align-items:flex-end;height:80px;">
+            <div style="flex:1;background:#0ea5e9;border-radius:2px 2px 0 0;height:70%;"></div>
+            <div style="flex:1;background:#0ea5e9;border-radius:2px 2px 0 0;height:40%;"></div>
+          </div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:0.75rem;">
+          <p style="font-size:0.75rem;font-weight:600;">Đơn hàng gần đây</p>
+          <div style="margin-top:0.5rem;font-size:0.7rem;color:#64748b;">Đang tải...</div>
+        </div>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:0.75rem;">
+          <p style="font-size:0.75rem;font-weight:600;">Chờ duyệt</p>
+          <div style="margin-top:0.5rem;font-size:0.7rem;color:#64748b;">Đang tải...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Phương án A: Refined Cards + Enhanced Charts</h3>
+  <p class="subtitle">Giữ layout hiện tại, nâng cấp visual cards + charts</p>
+  <div class="mockup">
+    <div class="mockup-header">Preview A</div>
+    <div class="mockup-body" style="padding:1rem;background:#f8fafc;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;">
+        <div>
+          <h3 style="font-size:1.25rem;font-weight:700;color:#0f172a;">Chào buổi sáng, Admin</h3>
+          <p style="font-size:0.8rem;color:#64748b;margin-top:0.15rem;">Thứ Tư, 11/06/2026</p>
+        </div>
+        <div style="display:flex;gap:0.5rem;">
+          <button style="padding:0.4rem 0.75rem;background:#fff;border:1px solid #e2e8f0;border-radius:6px;font-size:0.75rem;color:#64748b;">7 ngày</button>
+          <button style="padding:0.4rem 0.75rem;background:#0f172a;border:none;border-radius:6px;font-size:0.75rem;color:#fff;">30 ngày</button>
+        </div>
+      </div>
+      
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.25rem;">
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+          <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
+            <div style="width:32px;height:32px;background:#f0fdf4;border-radius:8px;display:flex;align-items:center;justify-content:center;">
+              <span style="font-size:0.9rem;">💰</span>
+            </div>
+            <span style="font-size:0.75rem;color:#64748b;font-weight:500;">Doanh thu hôm nay</span>
+          </div>
+          <p style="font-size:1.5rem;font-weight:700;color:#0f172a;letter-spacing:-0.02em;">₫12.5M</p>
+          <div style="display:flex;align-items:center;gap:0.25rem;margin-top:0.35rem;">
+            <span style="font-size:0.7rem;color:#15803d;font-weight:600;">↑ 15%</span>
+            <span style="font-size:0.65rem;color:#94a3b8;">vs hôm qua</span>
+          </div>
+        </div>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+          <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
+            <div style="width:32px;height:32px;background:#eff6ff;border-radius:8px;display:flex;align-items:center;justify-content:center;">
+              <span style="font-size:0.9rem;">📦</span>
+            </div>
+            <span style="font-size:0.75rem;color:#64748b;font-weight:500;">Đơn hàng</span>
+          </div>
+          <p style="font-size:1.5rem;font-weight:700;color:#0f172a;letter-spacing:-0.02em;">45</p>
+          <div style="display:flex;align-items:center;gap:0.25rem;margin-top:0.35rem;">
+            <span style="font-size:0.7rem;color:#15803d;font-weight:600;">↑ 8%</span>
+            <span style="font-size:0.65rem;color:#94a3b8;">vs hôm qua</span>
+          </div>
+        </div>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+          <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
+            <div style="width:32px;height:32px;background:#fef3c7;border-radius:8px;display:flex;align-items:center;justify-content:center;">
+              <span style="font-size:0.9rem;">💎</span>
+            </div>
+            <span style="font-size:0.75rem;color:#64748b;font-weight:500;">Giá trị TB</span>
+          </div>
+          <p style="font-size:1.5rem;font-weight:700;color:#0f172a;letter-spacing:-0.02em;">₫278K</p>
+          <div style="display:flex;align-items:center;gap:0.25rem;margin-top:0.35rem;">
+            <span style="font-size:0.7rem;color:#b91c1c;font-weight:600;">↓ 3%</span>
+            <span style="font-size:0.65rem;color:#94a3b8;">vs hôm qua</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:2fr 1fr;gap:1rem;margin-bottom:1.25rem;">
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+            <p style="font-size:0.85rem;font-weight:600;color:#0f172a;">Xu hướng doanh thu</p>
+            <div style="display:flex;gap:0.25rem;">
+              <button style="padding:0.25rem 0.5rem;background:#f1f5f9;border:none;border-radius:4px;font-size:0.65rem;color:#64748b;">7N</button>
+              <button style="padding:0.25rem 0.5rem;background:#0f172a;border:none;border-radius:4px;font-size:0.65rem;color:#fff;">30N</button>
+            </div>
+          </div>
+          <div style="height:140px;background:linear-gradient(180deg,#f0f9ff 0%,#fff 100%);border-radius:8px;position:relative;overflow:hidden;">
+            <svg style="position:absolute;bottom:0;left:0;width:100%;height:80%;" viewBox="0 0 100 40" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="grad1" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" style="stop-color:#0ea5e9;stop-opacity:0.4"/>
+                  <stop offset="100%" style="stop-color:#0ea5e9;stop-opacity:0.05"/>
+                </linearGradient>
+              </defs>
+              <path d="M0,30 Q20,25 40,20 T80,15 L100,10 L100,40 L0,40 Z" fill="url(#grad1)"/>
+              <path d="M0,30 Q20,25 40,20 T80,15 L100,10" fill="none" stroke="#0ea5e9" stroke-width="1.5"/>
+            </svg>
+          </div>
+        </div>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+          <p style="font-size:0.85rem;font-weight:600;color:#0f172a;margin-bottom:0.75rem;">Kênh bán hàng</p>
+          <div style="display:flex;gap:0.5rem;align-items:flex-end;height:100px;padding:0.5rem 0;">
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:0.25rem;">
+              <div style="width:100%;background:linear-gradient(180deg,#0ea5e9,#0284c7);border-radius:4px 4px 0 0;height:70%;"></div>
+              <span style="font-size:0.6rem;color:#64748b;">Retail</span>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:0.25rem;">
+              <div style="width:100%;background:linear-gradient(180deg,#8b5cf6,#7c3aed);border-radius:4px 4px 0 0;height:40%;"></div>
+              <span style="font-size:0.6rem;color:#64748b;">Wholesale</span>
+            </div>
+          </div>
+          <div style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid #f1f5f9;">
+            <div style="display:flex;justify-content:space-between;font-size:0.7rem;">
+              <span style="color:#64748b;">Tổng:</span>
+              <span style="font-weight:600;color:#0f172a;">₫18.2M</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="pros-cons">
+    <div class="pros"><h4>Pros</h4><ul>
+      <li>Icon badges cho mỗi stat card — dễ scan</li>
+      <li>Chart có gradient fill + trend indicator</li>
+      <li>Card có shadow tinh tế, rounded corners lớn hơn</li>
+      <li>Toggle buttons inline với chart title</li>
+    </ul></div>
+    <div class="cons"><h4>Cons</h4><ul>
+      <li>Thay đổi nhiều CSS, cần test kỹ</li>
+      <li>Emoji icons — có thể thay bằng Lucide icons</li>
+    </ul></div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Phương án B: Minimal Data-First</h3>
+  <p class="subtitle">Tập trung vào data, giảm decoration, typography-driven</p>
+  <div class="mockup">
+    <div class="mockup-header">Preview B</div>
+    <div class="mockup-body" style="padding:1rem;background:#fff;">
+      <div style="margin-bottom:1.5rem;">
+        <h3 style="font-size:1.5rem;font-weight:700;color:#0f172a;letter-spacing:-0.02em;">Dashboard</h3>
+        <p style="font-size:0.8rem;color:#94a3b8;margin-top:0.15rem;">Tổng quan hoạt động kinh doanh</p>
+      </div>
+      
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-bottom:1.5rem;">
+        <div style="padding:1rem;border-right:1px solid #e2e8f0;">
+          <p style="font-size:0.7rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;">Doanh thu</p>
+          <p style="font-size:1.75rem;font-weight:700;color:#0f172a;margin-top:0.25rem;">₫12.5M</p>
+          <div style="display:inline-flex;align-items:center;gap:0.2rem;margin-top:0.35rem;padding:0.15rem 0.4rem;background:#f0fdf4;border-radius:4px;">
+            <span style="font-size:0.65rem;color:#15803d;font-weight:600;">+15%</span>
+          </div>
+        </div>
+        <div style="padding:1rem;border-right:1px solid #e2e8f0;">
+          <p style="font-size:0.7rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;">Đơn hàng</p>
+          <p style="font-size:1.75rem;font-weight:700;color:#0f172a;margin-top:0.25rem;">45</p>
+          <div style="display:inline-flex;align-items:center;gap:0.2rem;margin-top:0.35rem;padding:0.15rem 0.4rem;background:#f0fdf4;border-radius:4px;">
+            <span style="font-size:0.65rem;color:#15803d;font-weight:600;">+8%</span>
+          </div>
+        </div>
+        <div style="padding:1rem;border-right:1px solid #e2e8f0;">
+          <p style="font-size:0.7rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;">Giá trị TB</p>
+          <p style="font-size:1.75rem;font-weight:700;color:#0f172a;margin-top:0.25rem;">₫278K</p>
+          <div style="display:inline-flex;align-items:center;gap:0.2rem;margin-top:0.35rem;padding:0.15rem 0.4rem;background:#fef2f2;border-radius:4px;">
+            <span style="font-size:0.65rem;color:#b91c1c;font-weight:600;">-3%</span>
+          </div>
+        </div>
+        <div style="padding:1rem;">
+          <p style="font-size:0.7rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;">Tồn kho</p>
+          <p style="font-size:1.75rem;font-weight:700;color:#0f172a;margin-top:0.25rem;">1,234</p>
+          <div style="display:inline-flex;align-items:center;gap:0.2rem;margin-top:0.35rem;padding:0.15rem 0.4rem;background:#f8fafc;border-radius:4px;">
+            <span style="font-size:0.65rem;color:#64748b;font-weight:600;">SKU</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:1.25rem;margin-bottom:1.5rem;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+          <div>
+            <p style="font-size:0.9rem;font-weight:600;color:#0f172a;">Doanh thu 30 ngày</p>
+            <p style="font-size:0.75rem;color:#94a3b8;margin-top:0.1rem;">Tổng: ₫18.2M</p>
+          </div>
+          <div style="display:flex;gap:0.25rem;background:#f8fafc;padding:0.2rem;border-radius:6px;">
+            <button style="padding:0.3rem 0.6rem;background:transparent;border:none;border-radius:4px;font-size:0.7rem;color:#64748b;">7N</button>
+            <button style="padding:0.3rem 0.6rem;background:#fff;border:none;border-radius:4px;font-size:0.7rem;color:#0f172a;font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,0.05);">30N</button>
+          </div>
+        </div>
+        <div style="height:160px;background:#fafafa;border-radius:8px;display:flex;align-items:flex-end;padding:0.75rem;gap:0.25rem;">
+          <div style="flex:1;background:#e2e8f0;border-radius:2px;height:30%;"></div>
+          <div style="flex:1;background:#e2e8f0;border-radius:2px;height:45%;"></div>
+          <div style="flex:1;background:#e2e8f0;border-radius:2px;height:35%;"></div>
+          <div style="flex:1;background:#e2e8f0;border-radius:2px;height:55%;"></div>
+          <div style="flex:1;background:#e2e8f0;border-radius:2px;height:65%;"></div>
+          <div style="flex:1;background:#e2e8f0;border-radius:2px;height:50%;"></div>
+          <div style="flex:1;background:#0f172a;border-radius:2px;height:80%;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="pros-cons">
+    <div class="pros"><h4>Pros</h4><ul>
+      <li>Clean, data-focused — không có decoration thừa</li>
+      <li>Stats dạng unified bar — tiết kiệm không gian</li>
+      <li>Typography-driven — premium feel</li>
+      <li>Badge-style trend indicators</li>
+    </ul></div>
+    <div class="cons"><h4>Cons</h4><ul>
+      <li>Ít visual interest hơn phương án A</li>
+      <li>Cần typography tốt để trông đẹp</li>
+    </ul></div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Phương án C: Hybrid — Cards + Charts Enhanced</h3>
+  <p class="subtitle">Kết hợp icon badges + refined charts + gradient accents</p>
+  <div class="mockup">
+    <div class="mockup-header">Preview C (Recommended)</div>
+    <div class="mockup-body" style="padding:1rem;background:#f8fafc;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;">
+        <div>
+          <h3 style="font-size:1.25rem;font-weight:700;color:#0f172a;">Chào buổi sáng, Admin 👋</h3>
+          <p style="font-size:0.8rem;color:#64748b;margin-top:0.15rem;">Đây là tổng quan hôm nay của bạn</p>
+        </div>
+      </div>
+      
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.25rem;">
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);position:relative;overflow:hidden;">
+          <div style="position:absolute;top:0;right:0;width:60px;height:60px;background:linear-gradient(135deg,rgba(34,197,94,0.1),transparent);border-radius:0 0 0 60px;"></div>
+          <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;">
+            <div style="width:36px;height:36px;background:linear-gradient(135deg,#22c55e,#16a34a);border-radius:10px;display:flex;align-items:center;justify-content:center;">
+              <span style="color:#fff;font-size:0.9rem;">₫</span>
+            </div>
+            <span style="font-size:0.75rem;color:#64748b;font-weight:500;">Doanh thu</span>
+          </div>
+          <p style="font-size:1.5rem;font-weight:700;color:#0f172a;letter-spacing:-0.02em;">₫12.5M</p>
+          <div style="display:flex;align-items:center;gap:0.35rem;margin-top:0.5rem;">
+            <div style="display:flex;align-items:center;gap:0.15rem;padding:0.15rem 0.4rem;background:#f0fdf4;border-radius:4px;">
+              <svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 2L8 6H2L5 2Z" fill="#15803d"/></svg>
+              <span style="font-size:0.65rem;color:#15803d;font-weight:600;">15%</span>
+            </div>
+            <span style="font-size:0.65rem;color:#94a3b8;">vs hôm qua</span>
+          </div>
+        </div>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);position:relative;overflow:hidden;">
+          <div style="position:absolute;top:0;right:0;width:60px;height:60px;background:linear-gradient(135deg,rgba(59,130,246,0.1),transparent);border-radius:0 0 0 60px;"></div>
+          <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;">
+            <div style="width:36px;height:36px;background:linear-gradient(135deg,#3b82f6,#2563eb);border-radius:10px;display:flex;align-items:center;justify-content:center;">
+              <span style="color:#fff;font-size:0.9rem;">📦</span>
+            </div>
+            <span style="font-size:0.75rem;color:#64748b;font-weight:500;">Đơn hàng</span>
+          </div>
+          <p style="font-size:1.5rem;font-weight:700;color:#0f172a;letter-spacing:-0.02em;">45</p>
+          <div style="display:flex;align-items:center;gap:0.35rem;margin-top:0.5rem;">
+            <div style="display:flex;align-items:center;gap:0.15rem;padding:0.15rem 0.4rem;background:#f0fdf4;border-radius:4px;">
+              <svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 2L8 6H2L5 2Z" fill="#15803d"/></svg>
+              <span style="font-size:0.65rem;color:#15803d;font-weight:600;">8%</span>
+            </div>
+            <span style="font-size:0.65rem;color:#94a3b8;">vs hôm qua</span>
+          </div>
+        </div>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);position:relative;overflow:hidden;">
+          <div style="position:absolute;top:0;right:0;width:60px;height:60px;background:linear-gradient(135deg,rgba(168,85,247,0.1),transparent);border-radius:0 0 0 60px;"></div>
+          <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;">
+            <div style="width:36px;height:36px;background:linear-gradient(135deg,#a855f7,#9333ea);border-radius:10px;display:flex;align-items:center;justify-content:center;">
+              <span style="color:#fff;font-size:0.9rem;">💎</span>
+            </div>
+            <span style="font-size:0.75rem;color:#64748b;font-weight:500;">Giá trị TB</span>
+          </div>
+          <p style="font-size:1.5rem;font-weight:700;color:#0f172a;letter-spacing:-0.02em;">₫278K</p>
+          <div style="display:flex;align-items:center;gap:0.35rem;margin-top:0.5rem;">
+            <div style="display:flex;align-items:center;gap:0.15rem;padding:0.15rem 0.4rem;background:#fef2f2;border-radius:4px;">
+              <svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 8L2 4H8L5 8Z" fill="#b91c1c"/></svg>
+              <span style="font-size:0.65rem;color:#b91c1c;font-weight:600;">3%</span>
+            </div>
+            <span style="font-size:0.65rem;color:#94a3b8;">vs hôm qua</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:1.25rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);margin-bottom:1.25rem;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+          <div>
+            <p style="font-size:0.9rem;font-weight:600;color:#0f172a;">Xu hướng doanh thu</p>
+            <p style="font-size:0.75rem;color:#94a3b8;margin-top:0.1rem;">30 ngày gần nhất</p>
+          </div>
+          <div style="display:flex;gap:0.25rem;background:#f1f5f9;padding:0.25rem;border-radius:8px;">
+            <button style="padding:0.35rem 0.7rem;background:transparent;border:none;border-radius:6px;font-size:0.7rem;color:#64748b;font-weight:500;">7 ngày</button>
+            <button style="padding:0.35rem 0.7rem;background:#fff;border:none;border-radius:6px;font-size:0.7rem;color:#0f172a;font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,0.06);">30 ngày</button>
+          </div>
+        </div>
+        <div style="height:180px;background:linear-gradient(180deg,#f0f9ff 0%,#fff 100%);border-radius:8px;position:relative;overflow:hidden;">
+          <svg style="position:absolute;bottom:0;left:0;width:100%;height:85%;" viewBox="0 0 100 50" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="grad2" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" style="stop-color:#0ea5e9;stop-opacity:0.5"/>
+                <stop offset="50%" style="stop-color:#0ea5e9;stop-opacity:0.2"/>
+                <stop offset="100%" style="stop-color:#0ea5e9;stop-opacity:0.02"/>
+              </linearGradient>
+            </defs>
+            <path d="M0,40 Q10,38 20,35 T40,28 T60,22 T80,18 L100,12 L100,50 L0,50 Z" fill="url(#grad2)"/>
+            <path d="M0,40 Q10,38 20,35 T40,28 T60,22 T80,18 L100,12" fill="none" stroke="#0ea5e9" stroke-width="2"/>
+            <circle cx="100" cy="12" r="3" fill="#0ea5e9"/>
+            <circle cx="100" cy="12" r="5" fill="none" stroke="#0ea5e9" stroke-width="1" opacity="0.3"/>
+          </svg>
+          <div style="position:absolute;top:0.5rem;right:0.5rem;background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:0.35rem 0.5rem;font-size:0.7rem;">
+            <span style="color:#64748b;">Tổng: </span>
+            <span style="font-weight:600;color:#0f172a;">₫18.2M</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="pros-cons">
+    <div class="pros"><h4>Pros</h4><ul>
+      <li>Gradient icon badges — premium, dễ nhận diện</li>
+      <li>Corner gradient accent trên mỗi card — tinh tế</li>
+      <li>Chart có gradient 3-stop + endpoint indicator</li>
+      <li>Pill-style toggle buttons</li>
+      <li>Trend badges với arrow icons</li>
+    </ul></div>
+    <div class="cons"><h4>Cons</h4><ul>
+      <li>Nhiều gradient — cần test performance</li>
+      <li>Phức tạp hơn phương án B</li>
+    </ul></div>
+  </div>
+</div>
