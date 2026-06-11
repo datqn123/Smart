@@ -149,9 +149,6 @@ export function DashboardPage() {
     sub: string | null
     subWarn: boolean
     icon: React.ElementType
-    iconBg: string
-    accentColor: string
-    cornerGradient: string
     onClick: () => void
     loading: boolean
     show: boolean
@@ -162,9 +159,6 @@ export function DashboardPage() {
       sub: invData ? `${invData.lowStockCount} mặt hàng tồn thấp` : null,
       subWarn: (invData?.lowStockCount ?? 0) > 0,
       icon: Package,
-      iconBg: "bg-gradient-to-br from-blue-500 to-blue-600",
-      accentColor: "text-white",
-      cornerGradient: "from-blue-100",
       onClick: () => navigate("/inventory/stock"),
       loading: dashboardLoading,
       show: true,
@@ -175,9 +169,6 @@ export function DashboardPage() {
       sub: invData ? `/ ${invData.allOrdersTotal} tổng đơn hàng` : null,
       subWarn: false,
       icon: ShoppingCart,
-      iconBg: "bg-gradient-to-br from-orange-500 to-orange-600",
-      accentColor: "text-white",
-      cornerGradient: "from-orange-100",
       onClick: () => navigate("/orders/wholesale"),
       loading: dashboardLoading,
       show: true,
@@ -193,9 +184,6 @@ export function DashboardPage() {
         : null,
       subWarn: (approvalData?.summary.totalPending ?? 0) > 0,
       icon: ClipboardCheck,
-      iconBg: "bg-gradient-to-br from-purple-500 to-purple-600",
-      accentColor: "text-white",
-      cornerGradient: "from-purple-100",
       onClick: () => navigate("/approvals/pending"),
       loading: dashboardLoading,
       show: true,
@@ -206,9 +194,6 @@ export function DashboardPage() {
       sub: invData ? `${invData.expiringSoonCount} sản phẩm sắp hết hạn` : null,
       subWarn: (invData?.expiringSoonCount ?? 0) > 0,
       icon: TrendingUp,
-      iconBg: "bg-gradient-to-br from-emerald-500 to-emerald-600",
-      accentColor: "text-white",
-      cornerGradient: "from-emerald-100",
       onClick: () => navigate("/inventory/stock"),
       loading: dashboardLoading,
       show: canSeeFinancials,
@@ -319,31 +304,26 @@ export function DashboardPage() {
           <div
             key={kpi.title}
             onClick={kpi.onClick}
-            className="group relative bg-white rounded-xl border border-border shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5 cursor-pointer hover:shadow-md hover:border-slate-300 transition-all duration-200 flex flex-col overflow-hidden"
+            className="bg-white rounded-lg border border-slate-200 shadow-xs p-5 cursor-pointer hover:border-slate-300 transition-colors duration-150 flex flex-col"
           >
-            <div className={`absolute top-0 right-0 w-16 h-16 bg-gradient-to-br ${kpi.cornerGradient} to-transparent rounded-bl-3xl opacity-60`} />
-            <div className="flex items-start justify-between relative z-10">
-              <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${kpi.iconBg}`}>
-                <kpi.icon className={`h-4 w-4 ${kpi.accentColor}`} />
-              </div>
+            <div className="flex items-center gap-2">
+              <kpi.icon className="h-4 w-4 text-slate-400" />
+              <p className="text-[13px] font-medium text-slate-500">{kpi.title}</p>
             </div>
-            <p className="text-xs font-medium text-muted-foreground mt-4 mb-1.5 relative z-10">
-              {kpi.title}
-            </p>
-            <div className="h-10 flex items-center relative z-10">
+            <div className="h-10 mt-3 flex items-center">
               {kpi.loading ? (
                 <Loader2 className="h-5 w-5 animate-spin text-slate-200" />
               ) : (
-                <p className="text-2xl font-bold text-foreground tracking-tight leading-none tabular-nums truncate">
+                <p className="text-2xl font-semibold text-foreground tracking-tight leading-none tabular-nums truncate">
                   {kpi.value ?? "—"}
                 </p>
               )}
             </div>
-            <div className="h-5 mt-2 flex items-center relative z-10">
+            <div className="h-5 mt-1.5 flex items-center">
               {!kpi.loading && kpi.sub ? (
                 <p
                   className={`text-xs leading-none ${
-                    kpi.subWarn ? "text-amber-600 font-semibold" : "text-muted-foreground"
+                    kpi.subWarn ? "text-amber-600 font-medium" : "text-slate-400"
                   }`}
                 >
                   {kpi.subWarn && (
