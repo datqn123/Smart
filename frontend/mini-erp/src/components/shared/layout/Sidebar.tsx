@@ -305,10 +305,8 @@ export function Sidebar({ isMobile = false }: SidebarProps) {
             >
               <CollapsibleTrigger asChild>
                 <button
-                  className={`w-full flex items-center justify-between px-3 rounded-md transition-colors duration-150 h-9 ${
-                    isParentActive(item)
-                      ? "text-slate-900"
-                      : "text-slate-600 hover:bg-slate-200/40"
+                  className={`w-full flex items-center justify-between px-3 rounded-md transition-colors duration-150 h-9 hover:bg-slate-200/40 ${
+                    isParentActive(item) ? "text-slate-900" : "text-slate-600"
                   }`}
                 >
                   <div className="flex items-center space-x-3 flex-1 min-w-0">
@@ -329,7 +327,7 @@ export function Sidebar({ isMobile = false }: SidebarProps) {
                 </button>
               </CollapsibleTrigger>
 
-              {/* Sub Items - No 1px borders, use whitespace */}
+              {/* Sub Items */}
               {item.subItems && (
                 <CollapsibleContent className="space-y-1 mt-1.5 pl-6 overflow-hidden">
                   {item.subItems.map((subItem) => (
@@ -338,7 +336,7 @@ export function Sidebar({ isMobile = false }: SidebarProps) {
                       onClick={() => handleNavigation(subItem.path)}
                       className={`w-full text-left px-3 rounded-md text-[13px] transition-colors duration-150 h-8 flex items-center truncate ${
                         isActiveRoute(subItem.path)
-                          ? "bg-white border border-slate-200 shadow-xs text-slate-900 font-medium"
+                          ? "bg-white border border-slate-200 shadow-xs text-slate-900 font-medium hover:bg-slate-50"
                           : "text-slate-600 hover:text-slate-900"
                       }`}
                     >
