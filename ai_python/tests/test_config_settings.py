@@ -15,6 +15,15 @@ def test_settings_load_from_env(monkeypatch):
     assert s.database_url_ro.startswith("postgresql://")
 
 
+def test_memory_settings_defaults(monkeypatch):
+    monkeypatch.setenv("LLM_BASE_URL", "http://x")
+    monkeypatch.setenv("LLM_API_KEY", "k")
+    monkeypatch.setenv("DATABASE_URL_RO", "postgresql://x")
+    s = Settings(_env_file=None)
+    assert s.memory_window_turns == 10
+    assert s.memory_summary_max_chars == 2000
+
+
 def test_settings_no_legacy_v3_flag():
     # R3: he moi khong doc AGENTIC_V3_ENABLED / SQL_EXECUTOR_MODE
     assert not hasattr(Settings, "agentic_v3_enabled")

@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     llm_sm_temperature: float = 0.0       # SM decision: deterministic structured (R5)
     llm_http_request_timeout: int = 120
     llm_structured_model: str = "gemma-4-26B-A4B-it"  # escape hatch, CHUA wire (R5)
+    llm_max_tokens: int = 1500            # bound generation -> nhanh hon
+    llm_disable_thinking: bool = True     # Qwen3 thinking mode rat cham; tat qua extra_body
 
     # --- SQL (direct read-only -- R1) ---
     database_url_ro: str
@@ -29,6 +31,10 @@ class Settings(BaseSettings):
     harness_max_steps: int = 6
     tool_retry_cap: int = 2
     hitl_checkpoint_db: str = "./var/hitl_checkpoints.sqlite"
+
+    # --- Conversation memory ---
+    memory_window_turns: int = 10
+    memory_summary_max_chars: int = 2000
 
     app_env: str = "dev"
 
