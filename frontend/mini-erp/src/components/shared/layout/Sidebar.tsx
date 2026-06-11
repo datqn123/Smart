@@ -272,7 +272,7 @@ export function Sidebar({ isMobile = false }: SidebarProps) {
 
   return (
     <aside
-      className={`relative bg-slate-100 flex flex-col flex-shrink-0 h-screen ${
+      className={`relative bg-surface flex flex-col flex-shrink-0 h-screen ${
         isMobile ? "w-full" : "border-r border-slate-200"
       } ${!isResizing.current ? "transition-[width] duration-300 ease-in-out" : ""}`}
       style={{ width: isMobile ? '100%' : sidebarWidth }}
@@ -287,8 +287,8 @@ export function Sidebar({ isMobile = false }: SidebarProps) {
 
       {/* Logo Section */}
       <div className="h-14 flex items-center justify-center border-b border-slate-200 px-4 flex-shrink-0">
-        <div className="h-8 w-8 bg-primary rounded-lg flex items-center justify-center shadow-sm flex-shrink-0">
-          <span className="text-white font-bold text-sm">M</span>
+        <div className="h-7 w-7 bg-slate-900 rounded-md flex items-center justify-center flex-shrink-0">
+          <span className="text-white font-semibold text-xs">M</span>
         </div>
         <span className="ml-3 font-semibold text-slate-900 text-sm whitespace-nowrap truncate overflow-hidden">
           Mini ERP
@@ -296,34 +296,32 @@ export function Sidebar({ isMobile = false }: SidebarProps) {
       </div>
 
       {/* Navigation Items - Scrollable */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-3">
+      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
         {filteredNavItems.map((item) => (
-          <div key={item.id} className="space-y-2">
+          <div key={item.id} className="space-y-1">
             <Collapsible
               open={expandedItems.has(item.id)}
               onOpenChange={() => toggleItem(item.id)}
             >
               <CollapsibleTrigger asChild>
-                <button 
-                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-md transition-all duration-200 h-11 ${
-                    isParentActive(item) 
-                      ? "text-slate-900 bg-slate-200/50" 
-                      : "text-slate-700 hover:bg-slate-200"
+                <button
+                  className={`w-full flex items-center justify-between px-3 rounded-md transition-colors duration-150 h-9 ${
+                    isParentActive(item)
+                      ? "text-slate-900"
+                      : "text-slate-600 hover:bg-slate-200/40"
                   }`}
                 >
                   <div className="flex items-center space-x-3 flex-1 min-w-0">
-                    <div className={`${isParentActive(item) ? "text-primary" : "text-slate-600"} flex-shrink-0`}>
+                    <div className={`${isParentActive(item) ? "text-slate-900" : "text-slate-500"} flex-shrink-0`}>
                       {item.icon}
                     </div>
-                    <span className={`text-sm ${isParentActive(item) ? "font-semibold" : "font-medium"} truncate`}>
+                    <span className="text-[13px] font-medium truncate">
                       {item.label}
                     </span>
                   </div>
                   {item.subItems && (
                     <ChevronDown
-                      className={`h-4 w-4 transition-transform duration-200 flex-shrink-0 ${
-                        isParentActive(item) ? "text-primary" : "text-slate-600"
-                      } ${
+                      className={`h-3.5 w-3.5 text-slate-400 transition-transform duration-150 flex-shrink-0 ${
                         expandedItems.has(item.id) ? "rotate-180" : ""
                       }`}
                     />
@@ -338,10 +336,10 @@ export function Sidebar({ isMobile = false }: SidebarProps) {
                     <button
                       key={subItem.path}
                       onClick={() => handleNavigation(subItem.path)}
-                      className={`w-full text-left px-3 py-2 rounded-md text-sm transition-all duration-200 h-10 flex items-center truncate ${
+                      className={`w-full text-left px-3 rounded-md text-[13px] transition-colors duration-150 h-8 flex items-center truncate ${
                         isActiveRoute(subItem.path)
-                          ? "relative bg-slate-200 text-slate-900 font-medium before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-primary overflow-hidden"
-                          : "text-slate-700 hover:bg-slate-200/50 hover:text-slate-900"
+                          ? "bg-white border border-slate-200 shadow-xs text-slate-900 font-medium"
+                          : "text-slate-600 hover:text-slate-900"
                       }`}
                     >
                       {subItem.label}
@@ -351,8 +349,6 @@ export function Sidebar({ isMobile = false }: SidebarProps) {
               )}
             </Collapsible>
 
-            {/* Reduced vertical whitespace between groups: 12px */}
-            {item.id !== "settings" && <div className="h-3" />}
           </div>
         ))}
       </nav>
@@ -374,7 +370,7 @@ export function Sidebar({ isMobile = false }: SidebarProps) {
               setLoggingOut(false)
             }
           }}
-          className="w-full h-11 justify-start space-x-3 text-alert hover:bg-alert-light rounded-md transition-all truncate"
+          className="w-full h-10 justify-start space-x-3 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors truncate"
         >
           <LogOut className="h-[18px] w-[18px] flex-shrink-0" />
           <span className="text-sm font-medium">{loggingOut ? "Đang đăng xuất…" : "Đăng xuất"}</span>
