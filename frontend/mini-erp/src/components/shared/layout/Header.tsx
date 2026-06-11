@@ -212,9 +212,9 @@ export function Header() {
   }
 
   return (
-    <header className="h-14 bg-white border-b border-slate-200 flex items-center px-4 md:px-6 shadow-sm sticky top-0 z-50">
+    <header className="h-14 bg-white/80 backdrop-blur border-b border-slate-200 flex items-center px-4 md:px-6 sticky top-0 z-50">
       <div className="flex items-center justify-between w-full">
-        <div className="flex items-center space-x-2 text-sm text-slate-600">
+        <div className="flex items-center space-x-2 text-[13px] text-slate-500">
           <button
             type="button"
             onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -228,7 +228,7 @@ export function Header() {
           </button>
 
           <Link to="/" className="flex items-center hover:text-slate-900 transition-colors">
-            <Home className="w-4 h-4 md:mr-2" />
+            <Home className="h-3.5 w-3.5 md:mr-2" />
             <span className="hidden md:inline">Trang chủ</span>
           </Link>
           <span className="text-slate-300">/</span>
@@ -241,23 +241,23 @@ export function Header() {
               type="button"
               variant="ghost"
               size="icon"
-              className="relative hover:bg-slate-100 rounded-full h-11 w-11 min-h-11 min-w-11"
+              className="relative hover:bg-slate-100 rounded-md h-9 w-9"
               onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
               aria-label="Thông báo"
             >
               <Bell className="h-[18px] w-[18px] text-slate-600" />
               {isAuthenticated && unreadTotal > 0 && (
-                <span className="absolute top-1.5 right-1.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold bg-red-500 text-white rounded-full border-2 border-white">
+                <span className="absolute top-1 right-1 min-w-4 h-4 px-1 flex items-center justify-center text-[10px] font-semibold bg-red-500 text-white rounded-full">
                   {unreadTotal > 99 ? "99+" : unreadTotal}
                 </span>
               )}
             </Button>
 
             {isNotificationsOpen && (
-              <div className="absolute right-0 mt-2 w-[400px] bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200 z-[100]">
+              <div className="absolute right-0 mt-2 w-[400px] bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200 z-[100]">
                 <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-white sticky top-0 z-10">
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-sm text-slate-900">Thông báo</span>
+                    <span className="text-[13px] font-semibold text-slate-900">Thông báo</span>
                     {unreadTotal > 0 ? (
                       <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
                         {unreadTotal} chưa đọc
@@ -268,7 +268,7 @@ export function Header() {
                     type="button"
                     disabled={!isAuthenticated || unreadTotal === 0 || markAllRead.isPending}
                     onClick={() => markAllRead.mutate()}
-                    className="text-[11px] font-bold text-slate-500 hover:text-blue-600 flex items-center gap-1 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                    className="text-[11px] font-medium text-slate-500 hover:text-accent flex items-center gap-1 transition-colors disabled:opacity-40 disabled:pointer-events-none"
                   >
                     {markAllRead.isPending ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -315,7 +315,7 @@ export function Header() {
                             <div className="absolute left-1 top-1/2 -translate-y-1/2 w-1 h-8 bg-blue-500 rounded-full" />
                           )}
                           <div className="flex justify-between items-start mb-1.5 gap-2 pl-3">
-                            <span className="font-bold text-sm text-slate-900 leading-snug">{n.title}</span>
+                            <span className="font-medium text-sm text-slate-900 leading-snug">{n.title}</span>
                             <span className="text-xs text-slate-400 whitespace-nowrap shrink-0 flex items-center gap-1">
                               {notifBusyId === n.id ? (
                                 <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" />
@@ -323,7 +323,7 @@ export function Header() {
                               {formatRelativePastVi(n.createdAt)}
                             </span>
                           </div>
-                          <p className="text-xs text-slate-500 leading-relaxed font-medium pl-3">{n.message}</p>
+                          <p className="text-xs text-slate-500 leading-relaxed pl-3">{n.message}</p>
                         </div>
                       ))
                     )}
@@ -342,12 +342,12 @@ export function Header() {
 
           <div className="flex items-center space-x-2 hidden md:flex cursor-pointer hover:opacity-80 transition-opacity">
             <div className="text-right">
-              <div className="text-sm font-medium text-slate-900 leading-none">
+              <div className="text-[13px] font-medium text-slate-900 leading-none">
                 {user?.fullName ?? "Người dùng"}
               </div>
-              <div className="text-xs text-slate-500 leading-none mt-1">{user?.email ?? ""}</div>
+              <div className="text-xs text-slate-400 leading-none mt-1">{user?.email ?? ""}</div>
             </div>
-            <Avatar className="h-9 w-9 border border-slate-200">
+            <Avatar className="h-8 w-8 border border-slate-200">
               <AvatarImage src={undefined} alt={user?.fullName ?? "User"} />
               <AvatarFallback className="bg-slate-100 text-slate-600 text-xs">
                 {initialsFromName(user?.fullName ?? user?.email ?? "?")}
