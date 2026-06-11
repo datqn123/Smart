@@ -2,6 +2,7 @@ from __future__ import annotations
 import json
 import logging
 from app.graph.state import ToolState
+from app.harness.think_log import think
 from app.tools import memory_block
 
 log = logging.getLogger(__name__)
@@ -12,6 +13,8 @@ _PROMPT = ("{skill}\n\n--- SOAN TRA LOI ---\nraw_require: {raw_require}\n"
 
 
 def execute(state: ToolState, *, llm, **_) -> dict:
+    think("answer_composer", 'du lieu da duoc duyet, soan cau tra loi tieng Viet cho "%.100s"',
+          state["raw_require"])
     user = _PROMPT.format(skill=state["skill"], raw_require=state["raw_require"],
                           data=json.dumps(state["upstream_data"], ensure_ascii=False)[:4000],
                           memory=memory_block(state))
@@ -26,7 +29,9 @@ def execute(state: ToolState, *, llm, **_) -> dict:
     answer = parsed.get("answer", "") if isinstance(parsed, dict) else ""
     if not answer:
         log.warning("answer_composer empty answer malformed=%s", parsed is None)
+        think("answer_composer", "-> LLM tra answer rong/khong doc duoc, de SM thu lai")
     else:
+        think("answer_composer", "-> soan xong cau tra loi %d ky tu", len(answer))
         has_goi_y = "gợi ý:" in answer.lower()
         log.info("answer_composer answer_len=%d has_goi_y=%s", len(answer), has_goi_y)
         if not has_goi_y:

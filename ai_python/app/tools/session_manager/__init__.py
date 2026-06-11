@@ -4,6 +4,7 @@ import logging
 from typing import Any, Literal
 from pydantic import BaseModel, field_validator
 from app.graph.state import SessionState
+from app.harness.think_log import think
 from app.registry.registry import load_skill, render_tool_catalog, is_registered
 
 log = logging.getLogger(__name__)
@@ -61,6 +62,15 @@ def analyze(state: SessionState, *, llm, memory_context: dict | None = None) -> 
     last = state["history"][-1] if state["history"] else None
     log.debug("SM analyze step=%d history_len=%d raw_require=%.100s",
               state["step_count"], len(state["history"]), state["raw_require"])
+    if last:
+        think("SM", 'doc lai tinh hinh: yeu cau "%.100s", da qua %d buoc, '
+              "buoc gan nhat: %s%s",
+              state["raw_require"], len(state["history"]),
+              last.get("tool") or last.get("action"),
+              "" if last.get("valid", True) else " (KHONG dat)")
+    else:
+        think("SM", 'nhan yeu cau moi: "%.100s" — chua co buoc nao, '
+              "bat dau phan tich xem can tool gi", state["raw_require"])
     user = _PROMPT.format(skill=skill, catalog=render_tool_catalog(),
                           memory=_memory_blocks(memory_context),
                           raw_require=state["raw_require"],
@@ -73,6 +83,18 @@ def analyze(state: SessionState, *, llm, memory_context: dict | None = None) -> 
             decision = Decision.model_validate(_coerce_json(raw))
             log.info("SM decision action=%s tool=%s reasoning=%.120s",
                      decision.action, decision.tool_name, decision.reasoning)
+            think("SM", "suy nghi: %s", decision.reasoning)
+            if decision.resolved_require:
+                think("SM", 'hieu lai cau hoi noi tiep thanh: "%.150s"',
+                      decision.resolved_require)
+            if decision.action in ("call_tool", "retry_tool"):
+                think("SM", "-> quyet dinh: %s %s",
+                      "goi tool" if decision.action == "call_tool" else "thu lai tool",
+                      decision.tool_name)
+            elif decision.action == "request_clarification":
+                think("SM", '-> quyet dinh: can hoi lai user — "%.150s"', decision.message)
+            else:
+                think("SM", "-> quyet dinh: %s", decision.action)
             return decision
         except Exception as exc:
             last_err = exc
@@ -80,5 +102,6 @@ def analyze(state: SessionState, *, llm, memory_context: dict | None = None) -> 
                         attempt + 1, exc, raw[:200])
             user += f"\n\n[Loi parse JSON truoc: {exc}. Tra lai dung JSON schema.]"
     log.error("SM falling back to finish after 2 parse attempts last_err=%s", last_err)
+    think("SM", "-> bo cuoc: 2 lan khong doc duoc quyet dinh tu LLM, ket thuc an toan")
     return Decision(action="finish", reasoning=f"SM decision loi parse: {last_err}",
                     message="Xin loi, he thong chua xu ly duoc yeu cau luc nay.")

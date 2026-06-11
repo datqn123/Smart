@@ -1,6 +1,7 @@
 from __future__ import annotations
 import logging
 from typing import Any, AsyncGenerator
+from app.harness.think_log import think
 from app.harness.turn_context import TurnContext
 from app.tools.session_manager import analyze
 from app.graph.dispatcher import dispatch, DispatchError
@@ -40,6 +41,8 @@ async def run_session(ctx: TurnContext, *, llm_sm, llm_tool, deps: dict,
     validator_passed = False
     log.info("[%s] session start user=%s raw_require=%.120s resume=%s",
              ctx.thread_id, ctx.user_id, ctx.raw_require, resume_snapshot is not None)
+    think("orchestrator", '=== phien moi cho "%.120s" (toi da %d buoc) ===',
+          ctx.raw_require, max_steps)
 
     if resume_snapshot is not None:
         # Khoi phuc cau hoi goc — ctx.raw_require luc resume chi la cau tra loi
@@ -50,6 +53,8 @@ async def run_session(ctx: TurnContext, *, llm_sm, llm_tool, deps: dict,
         state["retry_counts"] = resume_snapshot.get("retry_counts", {})
         validator_passed = False  # re-validate sau clarify
         log.info("[%s] HITL resume history_len=%d", ctx.thread_id, len(state["history"]))
+        think("orchestrator", "user da tra loi cau hoi lam ro — khoi phuc phien cu "
+              "(%d buoc truoc do) va chay tiep", len(state["history"]))
     if ctx.clarification_response:
         state["raw_require"] = (f"{state['raw_require']}\n"
                                 f"[Bo sung tu user]: {ctx.clarification_response}")
@@ -70,6 +75,7 @@ async def run_session(ctx: TurnContext, *, llm_sm, llm_tool, deps: dict,
             state["pending_clarification"] = {"message": decision.message or ""}
             state["status"] = "paused"
             log.info("[%s] HITL clarify: %.200s", ctx.thread_id, decision.message)
+            think("orchestrator", "tam dung phien, luu trang thai cho user tra loi")
             if pending_store is not None:
                 await pending_store.save(ctx.thread_id, {
                     "raw_require": ctx.raw_require, "thread_id": ctx.thread_id,
@@ -94,6 +100,8 @@ async def run_session(ctx: TurnContext, *, llm_sm, llm_tool, deps: dict,
             if current_retries >= retry_cap:
                 log.warning("[%s] retry_cap reached tool=%s cap=%d",
                             ctx.thread_id, tool, retry_cap)
+                think("orchestrator", "tool %s da thu lai du %d lan, khong cho thu them — "
+                      "tra quyen cho SM tinh huong khac", tool, retry_cap)
                 state["history"].append({"action": "retry_capped", "tool": tool})
                 state["step_count"] += 1
                 continue
@@ -106,6 +114,8 @@ async def run_session(ctx: TurnContext, *, llm_sm, llm_tool, deps: dict,
             log.info("[%s] resolved_require: %.120s", ctx.thread_id, decision.resolved_require)
         upstream = _build_upstream(state, decision.forward_data)
         log.info("[%s] step=%d dispatch tool=%s", ctx.thread_id, state["step_count"], tool)
+        think("orchestrator", "buoc %d/%d: giao viec cho tool %s",
+              state["step_count"] + 1, max_steps, tool)
         yield _event("tool_call", {"tool_name": tool, "reasoning": decision.reasoning})
         try:
             result = dispatch(tool, raw_require=require, upstream_data=upstream,
@@ -113,6 +123,7 @@ async def run_session(ctx: TurnContext, *, llm_sm, llm_tool, deps: dict,
                               memory_summary=(memory_context or {}).get("summary"))
         except DispatchError as exc:
             log.warning("[%s] dispatch error tool=%s: %s", ctx.thread_id, tool, exc)
+            think("orchestrator", "khong giao duoc viec cho %s (%s) — bao lai cho SM", tool, exc)
             state["history"].append({"action": "dispatch_error", "tool": tool, "error": str(exc)})
             state["step_count"] += 1
             continue
@@ -126,6 +137,8 @@ async def run_session(ctx: TurnContext, *, llm_sm, llm_tool, deps: dict,
         else:
             log.warning("[%s] tool=%s valid=False err=%s",
                         ctx.thread_id, tool, result["validation_error"])
+            think("orchestrator", "tool %s tu cham KHONG dat (%s) — dua ve SM quyet dinh",
+                  tool, result["validation_error"])
         yield _event("tool_result", {"tool_name": tool, "valid": result["valid"],
                                      "validation_error": result["validation_error"]})
 
@@ -143,12 +156,15 @@ async def run_session(ctx: TurnContext, *, llm_sm, llm_tool, deps: dict,
     if state["status"] == "running" and state["step_count"] >= max_steps:
         state["status"] = "aborted"
         log.warning("[%s] step limit reached max_steps=%d, aborting", ctx.thread_id, max_steps)
+        think("orchestrator", "=== cham tran %d buoc ma chua xong — dung an toan ===", max_steps)
         yield _event("error", {"message": "Da cham gioi han so buoc, dung an toan."})
         return
 
     if state["status"] == "finished":
         answer = state["final_answer"] or ""
         log.info("[%s] session finished answer_len=%d", ctx.thread_id, len(answer))
+        think("orchestrator", "=== hoan tat sau %d buoc, gui cau tra loi cho user ===",
+              state["step_count"] + 1)
         yield _event("answer", {"text": answer})
         yield _event("done", {"thread_id": ctx.thread_id,
                               "raw_require": state["raw_require"]})
