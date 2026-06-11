@@ -76,6 +76,7 @@ function statusLabel(s: string) {
 function statusDot(s: string) {
   if (s === "Pending") return "bg-amber-500"
   if (s === "Processing") return "bg-indigo-500"
+  if (s === "Shipped" || s === "Partial") return "bg-blue-500"
   if (s === "Delivered" || s === "Completed") return "bg-emerald-500"
   if (s === "Cancelled") return "bg-red-500"
   return "bg-slate-400"
@@ -517,7 +518,7 @@ export function DashboardPage() {
                     </div>
                     <p className="text-xs text-slate-500 mt-0.5 truncate">{order.customerName}</p>
                   </div>
-                  <div className="text-right shrink-0 ml-3">
+                  <div className="flex flex-col items-end shrink-0 ml-3">
                     <p className="text-sm font-semibold text-slate-900 tabular-nums">
                       {formatCurrency(Number(order.finalAmount))}
                     </p>
@@ -718,7 +719,7 @@ export function DashboardPage() {
             <Button
               variant="ghost"
               size="sm"
-              className="text-xs text-slate-500 h-7 px-2 hover:text-slate-900"
+              className="text-xs text-slate-400 h-7 px-2 hover:text-slate-700"
               onClick={() => navigate("/inventory/stock")}
             >
               Xem tất cả <ArrowRight className="h-3 w-3 ml-1" />
