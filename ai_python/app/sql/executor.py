@@ -1,6 +1,23 @@
 from __future__ import annotations
+import datetime
+import decimal
+import uuid
 from typing import Any, Callable, Protocol
 from app.sql.guard import assert_read_only
+
+
+def _jsonable(v: Any) -> Any:
+    """Moi consumer downstream (SM history, validator/composer prompt, HITL
+    snapshot) deu json.dumps ket qua query — chuan hoa 1 lan tai nguon."""
+    if isinstance(v, (datetime.datetime, datetime.date, datetime.time)):
+        return v.isoformat()
+    if isinstance(v, decimal.Decimal):
+        return float(v)
+    if isinstance(v, uuid.UUID):
+        return str(v)
+    if isinstance(v, (bytes, memoryview)):
+        return bytes(v).hex()
+    return v
 
 
 class SqlExecutor(Protocol):
@@ -25,8 +42,29 @@ class PostgresRoExecutor:
         with self._connect() as conn:
             result = conn.execute(sql)
             cols = list(result.keys())
-            rows = [dict(zip(cols, r)) for r in result.fetchall()[:limit]]
+            rows = [{c: _jsonable(v) for c, v in zip(cols, r)}
+                    for r in result.fetchall()[:limit]]
         return {"columns": cols, "rows": rows}
+
+
+class _TextWrapConn:
+    """SQLAlchemy 2.x khong nhan raw string ('Not an executable object') ->
+    boc text() o day de executor.run() giu interface execute(sql_str)
+    chung voi test fake. text_fn inject de test khong can engine that."""
+
+    def __init__(self, conn, text_fn):
+        self._conn = conn
+        self._text = text_fn
+
+    def execute(self, sql):
+        return self._conn.execute(self._text(sql) if isinstance(sql, str) else sql)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self._conn.close()
+        return False
 
 
 def make_pg_connect(database_url_ro: str):
@@ -39,6 +77,6 @@ def make_pg_connect(database_url_ro: str):
     def _connect():
         conn = engine.connect()
         conn.execute(text("SET TRANSACTION READ ONLY"))
-        return conn
+        return _TextWrapConn(conn, text)
 
     return _connect
