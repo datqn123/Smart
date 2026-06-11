@@ -93,6 +93,9 @@ WHERE status <> 'Archived';
 CREATE UNIQUE INDEX IF NOT EXISTS ux_custom_entity_permissions_action
 ON custom_entity_permissions(entity_key, action);
 
+CREATE UNIQUE INDEX IF NOT EXISTS ux_custom_entity_views_entity
+ON custom_entity_views(entity_key);
+
 CREATE INDEX IF NOT EXISTS idx_custom_entity_fields_entity_order
 ON custom_entity_fields(entity_key, order_index, id);
 
@@ -195,14 +198,28 @@ SELECT
     1
 FROM custom_entities e
 WHERE e.entity_key = 'damaged_stock_report'
+  AND e.archived_at IS NULL
 ON CONFLICT (entity_key, version) DO NOTHING;
 
 INSERT INTO custom_records(entity_key, published_version, values_json, state, created_by, updated_by)
-VALUES
+SELECT
+    seed.entity_key,
+    seed.published_version,
+    seed.values_json,
+    seed.state,
+    seed.created_by,
+    seed.updated_by
+FROM (VALUES
     ('damaged_stock_report', 1,
      '{"report_code":"KH-2026-0001","product_ref":"Áo khoác chống nước","location_ref":"Kho chính / Kệ A4","damaged_quantity":6,"handling_status":"Nháp"}'::jsonb,
      'Active', 1, 1),
     ('damaged_stock_report', 1,
      '{"report_code":"KH-2026-0002","product_ref":"Bình giữ nhiệt 500ml","location_ref":"Kho phụ / Kệ B1","damaged_quantity":2,"handling_status":"Nháp"}'::jsonb,
      'Active', 1, 1)
-ON CONFLICT DO NOTHING;
+) AS seed(entity_key, published_version, values_json, state, created_by, updated_by)
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM custom_records r
+    WHERE r.entity_key = seed.entity_key
+      AND r.values_json ->> 'report_code' = seed.values_json ->> 'report_code'
+);
