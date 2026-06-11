@@ -1,6 +1,8 @@
 from __future__ import annotations
 import json
 import logging
+from pydantic import BaseModel
+from app.config.llm_client import StructuredOutputError
 from app.graph.state import ToolState
 from app.harness.think_log import think
 from app.sql.guard import assert_read_only, SqlGuardError
@@ -8,8 +10,22 @@ from app.tools import memory_block
 
 log = logging.getLogger(__name__)
 
+
+class SqlDraft(BaseModel):
+    """Cau SQL SELECT read-only tra loi raw_require."""
+    sql: str
+
+
+class SemanticCheck(BaseModel):
+    """Ket qua tu kiem tra ngu nghia JOIN cua SQL vua sinh.
+    ok=false thi sql = ban viet lai."""
+    ok: bool
+    sql: str | None = None
+    reason: str | None = None
+
+
 _PROMPT = ("{skill}\n\n--- YEU CAU ---\nraw_require: {raw_require}\n"
-           "upstream_data: {upstream}\n{memory}\nTra ve JSON {{\"sql\": \"...\"}}.")
+           "upstream_data: {upstream}\n{memory}")
 
 _CHECK_PROMPT = (
     "Ban vua sinh cau SQL duoi day cho yeu cau cua user. Tu kiem tra NGU NGHIA JOIN "
@@ -21,43 +37,27 @@ _CHECK_PROMPT = (
     "stockreceipts...) thi cac dong 0-su-kien — chinh la doi tuong user hoi — bi loai mat. "
     "SQL SAI. Viet lai: FROM bang chu the, LEFT JOIN bang su kien, "
     "COALESCE(SUM(...), 0) / COUNT(x.id).\n"
-    "3. Neu cau hoi khong thuoc loai do, hoac SQL da dung ngu nghia, tra ve ok.\n\n"
-    "raw_require: {raw_require}\nsql: {sql}\n\n"
-    "Tra ve DUY NHAT JSON mot dong:\n"
-    '{{"ok": true}}\n'
-    'hoac {{"ok": false, "sql": "<SQL viet lai>", "reason": "<ly do ngan>"}}'
-)
-
-
-def _coerce_json(raw: str) -> dict:
-    raw = raw.strip()
-    if raw.startswith("```"):
-        raw = raw.strip("`")
-        raw = raw[raw.find("{"):]
-    return json.loads(raw)
-
-
-def _parse_sql(raw: str) -> str:
-    return _coerce_json(raw)["sql"]
+    "3. Neu cau hoi khong thuoc loai do, hoac SQL da dung ngu nghia, tra ok=true.\n\n"
+    "raw_require: {raw_require}\nsql: {sql}")
 
 
 def _semantic_check(*, llm, skill: str, raw_require: str, sql: str) -> str:
     """Self-check 1 lan sau khi sinh SQL: bat lop loi 'absence semantics'
     (INNER JOIN nuot mat dong 0-su-kien) ma guard/validator khong the thay
     — validator chi nhin rows tra ve, khong biet dong nao bi join loai.
-    Fail-open: check loi/khong parse duoc thi giu SQL goc."""
+    Fail-open: check loi thi giu SQL goc."""
     think("sql_execute", "tu kiem tra lai SQL vua sinh: cau hoi co ngu nghia "
           "vang mat (chua/khong co/e) ma minh lo dung INNER JOIN khong?")
     user = _CHECK_PROMPT.format(raw_require=raw_require, sql=sql)
     try:
-        raw = llm.complete(system=skill, user=user, role="default")
-        verdict = _coerce_json(raw)
-        if verdict.get("ok") is False and str(verdict.get("sql") or "").strip():
-            fixed = verdict["sql"].strip()
+        verdict = llm.complete_structured(system=skill, user=user,
+                                          output_model=SemanticCheck)
+        if verdict.ok is False and (verdict.sql or "").strip():
+            fixed = verdict.sql.strip()
             log.info("sql_execute semantic check REWROTE sql reason=%.150s\n  cu : %.200s\n  moi: %.200s",
-                     verdict.get("reason"), sql, fixed)
+                     verdict.reason, sql, fixed)
             think("sql_execute", "-> phat hien SQL sai ngu nghia: %s. Viet lai: %.200s",
-                  verdict.get("reason"), fixed)
+                  verdict.reason, fixed)
             return fixed
         log.debug("sql_execute semantic check ok")
         think("sql_execute", "-> SQL on, khong can sua")
@@ -78,12 +78,12 @@ def execute(state: ToolState, *, llm, executor, row_limit: int = 100, **_) -> di
     user = _PROMPT.format(skill=state["skill"], raw_require=state["raw_require"],
                           upstream=json.dumps(state["upstream_data"], ensure_ascii=False),
                           memory=memory_block(state))
-    raw = llm.complete(system=state["skill"], user=user, role="default")
-    log.debug("sql_execute LLM raw: %.300s", raw)
     try:
-        sql = _parse_sql(raw)
-    except (json.JSONDecodeError, KeyError, TypeError) as exc:
-        log.warning("sql_execute LLM output malformed: %s raw_preview=%.200s", exc, raw[:200])
+        draft = llm.complete_structured(system=state["skill"], user=user,
+                                        output_model=SqlDraft)
+        sql = draft.sql
+    except StructuredOutputError as exc:
+        log.warning("sql_execute structured draft failed: %s", exc)
         think("sql_execute", "-> LLM tra output khong doc duoc, bao loi de SM quyet dinh thu lai")
         return {"sql": "", "columns": [], "rows": [],
                 "error": f"LLM output khong hop le: {exc}"}

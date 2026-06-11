@@ -17,15 +17,14 @@ def test_sql_execute_emits_thinking_trace(stub_sql, caplog):
     # Moi buoc cua tool phai ke lai duoc: bat dau -> SQL nhap ->
     # tu kiem tra -> ket qua. Day la yeu cau "log nhu agent dang suy nghi".
     from app.tools.sql_execute import execute
+    from tests.conftest import FakeLLM
 
-    class _LLM:
-        def complete(self, *, system, user, role="default", temperature=None):
-            return json.dumps({"sql": "SELECT id, name FROM customers LIMIT 5"})
-
+    llm = FakeLLM(structured=[{"sql": "SELECT id, name FROM customers LIMIT 5"},
+                              {"ok": True}])
     st = new_tool_state(tool_name="sql_execute", raw_require="liet ke khach hang")
     st["skill"] = "SKILL"
     with caplog.at_level(logging.INFO, logger="think"):
-        execute(st, llm=_LLM(), executor=stub_sql)
+        execute(st, llm=llm, executor=stub_sql)
     msgs = [r.getMessage() for r in caplog.records if r.name == "think"]
     assert any(m.startswith("[sql_execute] bat dau dich yeu cau") for m in msgs)
     assert any("SQL nhap" in m for m in msgs)
