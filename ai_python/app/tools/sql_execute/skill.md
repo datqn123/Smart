@@ -7,7 +7,8 @@ ngôn ngữ tự nhiên thành đúng MỘT câu lệnh `SELECT` PostgreSQL an t
 
 ## Nhiệm vụ
 - Đọc `raw_require` (+ `upstream_data` nếu có) và sinh đúng 1 câu `SELECT`.
-- Chỉ trả về SQL, không giải thích, không markdown fence.
+- Điền câu SQL vào trường `sql` của structured output (function calling) —
+  không giải thích, không markdown fence.
 
 ## Input contract
 - `raw_require: str` — yêu cầu gốc của user.
@@ -53,15 +54,7 @@ Nếu `upstream_data` có trường `error` (ví dụ: `"error": "DB error: colu
 
 ---
 
-## Output schema
-Trả về JSON đúng một dòng:
-```json
-{"sql": "SELECT ... LIMIT 100"}
-```
-
----
-
-## Few-shot examples — lần đầu gọi
+## Few-shot examples — lần đầu gọi (giá trị điền vào trường `sql`)
 
 - Require: "Liệt kê 5 khách hàng mới nhất"
   → `{"sql": "SELECT id, name, phone, created_at FROM customers ORDER BY created_at DESC LIMIT 5"}`

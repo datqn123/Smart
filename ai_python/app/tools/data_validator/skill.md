@@ -51,14 +51,7 @@ trả lời đúng yêu cầu gốc của user hay không.
 
 ---
 
-## Output schema
-```json
-{"verdict": "pass" | "fail", "reason": "..."}
-```
-
----
-
-## Few-shot examples
+## Few-shot examples (giá trị điền vào `verdict` + `reason`)
 
 - Require "5 khách hàng mới nhất", data có 5 rows với cột `name`, `phone`, `created_at`
   → `{"verdict": "pass", "reason": "Đủ 5 khách hàng với thông tin họ tên, số điện thoại và ngày tạo."}`
