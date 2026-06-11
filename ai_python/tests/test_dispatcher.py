@@ -49,7 +49,28 @@ def test_dispatch_rejects_unregistered_tool():  # fact-registry-static
         dispatch("rm_rf", raw_require="R", upstream_data={}, llm=None, deps={})
 
 
-def test_dispatch_blocks_composer_before_validator_pass():  # fact-validator-before
+def test_dispatch_blocks_composer_before_validator_ran():  # fact-validator-before
     with pytest.raises(DispatchError):
         dispatch("answer_composer", raw_require="R", upstream_data={},
-                 llm=None, deps={}, validator_passed=False)
+                 llm=None, deps={}, validator_ran=False)
+
+
+def test_dispatch_blocks_composer_by_default():  # fact-validator-before
+    # Mac dinh validator_ran=False: ai quen truyen flag thi composer van bi chan.
+    with pytest.raises(DispatchError):
+        dispatch("answer_composer", raw_require="R", upstream_data={},
+                 llm=None, deps={})
+
+
+def test_dispatch_allows_composer_after_validator_ran(monkeypatch):
+    # Regression absence-case: validator verdict=fail van la "da chay" —
+    # composer phai duoc phep soan cau "khong tim thay".
+    def fake_invoke(tool_name, payload, *, llm, deps):
+        return {"output": {"answer": "Chua co don nao."}, "valid": True,
+                "validation_error": None}
+
+    monkeypatch.setattr("app.graph.dispatcher._invoke_subgraph", fake_invoke)
+    out = dispatch("answer_composer", raw_require="R",
+                   upstream_data={"verdict": "fail", "rows": []},
+                   llm=None, deps={}, validator_ran=True)
+    assert out["valid"] is True

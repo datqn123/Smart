@@ -32,15 +32,17 @@ def _invoke_subgraph(tool_name: str, payload: dict, *, llm, deps: dict) -> dict:
 
 
 def dispatch(tool_name: str, *, raw_require: str, upstream_data: dict[str, Any],
-             llm, deps: dict, validator_passed: bool = True,
+             llm, deps: dict, validator_ran: bool = False,
              memory_summary: str | None = None) -> dict:
     """Map tool_name -> subgraph; payload LUON {raw_require, upstream_data}
     (fact-dispatcher) + memory_summary (boi canh hoi thoai, co the None).
-    Chan answer_composer neu validator chua pass (fact-validator-before)."""
+    Chan answer_composer neu data_validator CHUA CHAY (fact-validator-before).
+    Verdict pass/fail la quyet dinh nghiep vu cua SM — verdict=fail van cho
+    compose (vd cau hoi absence: rows rong la cau tra loi dung)."""
     if not is_dispatchable(tool_name):
         raise DispatchError(f"tool chua dang ky: {tool_name}")
-    if tool_name == "answer_composer" and not validator_passed:
-        raise DispatchError("answer_composer khong duoc chay truoc data_validator pass")
+    if tool_name == "answer_composer" and not validator_ran:
+        raise DispatchError("answer_composer khong duoc chay truoc data_validator")
     payload = {"raw_require": raw_require, "upstream_data": upstream_data,
                "memory_summary": memory_summary}
     log.debug("dispatch tool=%s upstream_keys=%s", tool_name, list((upstream_data or {}).keys()))

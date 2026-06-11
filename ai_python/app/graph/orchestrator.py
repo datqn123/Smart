@@ -32,7 +32,7 @@ async def run_session(ctx: TurnContext, *, llm_sm, llm_tool, deps: dict,
                       memory_context: dict | None = None
                       ) -> AsyncGenerator[dict, None]:
     state = new_session_state(raw_require=ctx.raw_require, thread_id=ctx.thread_id)
-    validator_passed = False
+    validator_ran = False
     log.info("[%s] session start user=%s raw_require=%.120s resume=%s",
              ctx.thread_id, ctx.user_id, ctx.raw_require, resume_snapshot is not None)
     think("orchestrator", '=== phien moi cho "%.120s" (toi da %d buoc) ===',
@@ -45,7 +45,7 @@ async def run_session(ctx: TurnContext, *, llm_sm, llm_tool, deps: dict,
         state["tool_results"] = resume_snapshot.get("tool_results", {})
         state["history"] = resume_snapshot.get("history", [])
         state["retry_counts"] = resume_snapshot.get("retry_counts", {})
-        validator_passed = False  # re-validate sau clarify
+        validator_ran = False  # re-validate sau clarify
         log.info("[%s] HITL resume history_len=%d", ctx.thread_id, len(state["history"]))
         think("orchestrator", "user da tra loi cau hoi lam ro — khoi phuc phien cu "
               "(%d buoc truoc do) va chay tiep", len(state["history"]))
@@ -106,7 +106,7 @@ async def run_session(ctx: TurnContext, *, llm_sm, llm_tool, deps: dict,
         yield _event("tool_call", {"tool_name": tool, "reasoning": decision.reasoning})
         try:
             result = dispatch(tool, raw_require=require, upstream_data=upstream,
-                              llm=llm_tool, deps=deps, validator_passed=validator_passed,
+                              llm=llm_tool, deps=deps, validator_ran=validator_ran,
                               memory_summary=(memory_context or {}).get("summary"))
         except DispatchError as exc:
             log.warning("[%s] dispatch error tool=%s: %s", ctx.thread_id, tool, exc)
@@ -130,7 +130,10 @@ async def run_session(ctx: TurnContext, *, llm_sm, llm_tool, deps: dict,
                                      "validation_error": result["validation_error"]})
 
         if tool == "data_validator":
-            validator_passed = (output.get("verdict") == "pass")
+            # "Da chay" = tool tra output dung cau truc (self_validate pass),
+            # KHONG phu thuoc verdict: verdict=fail van la phan quyet hop le
+            # (vd absence: rows rong la cau tra loi dung) — SM quyet buoc tiep.
+            validator_ran = result["valid"]
             log.info("[%s] data_validator verdict=%s reason=%.100s",
                      ctx.thread_id, output.get("verdict"), output.get("reason", ""))
         if tool == "answer_composer" and result["valid"]:

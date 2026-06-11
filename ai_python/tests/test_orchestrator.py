@@ -11,7 +11,7 @@ async def _collect(gen):
 def _deps_with_fake_dispatch(monkeypatch, results_by_tool):
     calls = []
     def fake_dispatch(tool_name, *, raw_require, upstream_data, llm, deps,
-                      validator_passed=True, memory_summary=None):
+                      validator_ran=False, memory_summary=None):
         calls.append(tool_name)
         return results_by_tool[tool_name]
     monkeypatch.setattr("app.graph.orchestrator.dispatch", fake_dispatch)
@@ -127,7 +127,7 @@ async def test_dispatch_uses_resolved_require_and_memory_summary(monkeypatch):
     captured = {}
 
     def fake_dispatch(tool_name, *, raw_require, upstream_data, llm, deps,
-                      validator_passed=True, memory_summary=None):
+                      validator_ran=False, memory_summary=None):
         captured["raw_require"] = raw_require
         captured["memory_summary"] = memory_summary
         return {"output": {"rows": [{"x": 1}]}, "valid": True,
@@ -166,3 +166,36 @@ async def test_resume_restores_raw_require_from_snapshot():
     done = [e for e in events if e["type"] == "done"][0]
     assert done["data"]["raw_require"].startswith("doanh thu")
     assert "[Bo sung tu user]: thang 4" in done["data"]["raw_require"]
+
+
+@pytest.mark.asyncio
+async def test_validator_fail_still_allows_composer(monkeypatch):
+    # Regression absence-case ("gao te 5kg da ban duoc don nao chua"):
+    # rows=[] -> verdict=fail la cau tra loi dung — SM phai compose duoc
+    # cau "chua co don nao", khong bi guard chan den het budget.
+    flags = {}
+
+    def fake_dispatch(tool_name, *, raw_require, upstream_data, llm, deps,
+                      validator_ran=False, memory_summary=None):
+        flags[tool_name] = validator_ran
+        results = {
+            "sql_execute": {"output": {"rows": [], "columns": ["id"], "error": None},
+                            "valid": True, "validation_error": None},
+            "data_validator": {"output": {"verdict": "fail", "reason": "rong"},
+                               "valid": True, "validation_error": None},
+            "answer_composer": {"output": {"answer": "Chua co don nao.\nGợi ý: xem ton kho?"},
+                                "valid": True, "validation_error": None},
+        }
+        return results[tool_name]
+
+    monkeypatch.setattr("app.graph.orchestrator.dispatch", fake_dispatch)
+    llm = _sm(("sql_execute", {"reasoning": "r", "require": "don hang gao te 5kg"}),
+              ("data_validator", {"reasoning": "r"}),
+              ("answer_composer", {"reasoning": "rows rong la ket qua hop le"}))
+    ctx = TurnContext(raw_require="gao te 5kg da ban duoc don nao chua",
+                      user_id="u", thread_id="t")
+    events = await _collect(run_session(ctx, llm_sm=llm, llm_tool=llm, deps={},
+                                        max_steps=6, retry_cap=2))
+    assert flags["answer_composer"] is True   # validator da chay -> duoc phep
+    answer = [e for e in events if e["type"] == "answer"]
+    assert answer and "Chua co don nao" in answer[0]["data"]["text"]
