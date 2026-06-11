@@ -40,12 +40,23 @@ class _LLM:
             return self._sm.pop(0)
         if "Skill: sql_execute" in system:
             return json.dumps({"sql": "SELECT SUM(final_amount) AS doanh_thu FROM orders"})
-        if "Skill: data_validator" in system:
-            return json.dumps({"verdict": "pass", "reason": "du data"})
         if "Skill: answer_composer" in system:
             return json.dumps(
                 {"answer": "Doanh thu thang 5/2026 la 15 trieu.\nGợi ý: xem theo kenh?"})
         raise AssertionError(f"LLM call khong mong doi: {system[:80]}")
+
+    def complete_structured(self, *, system, user, output_model,
+                            role="default", temperature=None):
+        # Route theo output model — on dinh khi cac tool lan luot chuyen sang
+        # structured channel (Task 4-6 plan native tool-calling).
+        payloads = {
+            "SqlDraft": {"sql": "SELECT SUM(final_amount) AS doanh_thu FROM orders"},
+            "SemanticCheck": {"ok": True},
+            "ValidatorVerdict": {"verdict": "pass", "reason": "du data"},
+            "ComposerAnswer": {"answer": "Doanh thu thang 5/2026 la 15 trieu."
+                                         "\nGợi ý: xem theo kenh?"},
+        }
+        return output_model.model_validate(payloads[output_model.__name__])
 
 
 class _StubExecutor:

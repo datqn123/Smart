@@ -35,10 +35,10 @@ def test_sql_execute_emits_thinking_trace(stub_sql, caplog):
 
 def test_validator_emits_verdict_thinking(caplog):
     from app.tools.data_validator import execute
+    from tests.conftest import FakeLLM
 
-    class _LLM:
-        def complete(self, *, system, user, role="default", temperature=None):
-            return json.dumps({"verdict": "pass", "reason": "du lieu day du"})
+    _LLM = lambda: FakeLLM(  # noqa: E731
+        structured=[{"verdict": "pass", "reason": "du lieu day du"}])
 
     st = new_tool_state(tool_name="data_validator", raw_require="x",
                         upstream_data={"rows": [{"a": 1}, {"a": 2}]})

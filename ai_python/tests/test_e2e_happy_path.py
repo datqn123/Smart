@@ -15,11 +15,19 @@ class RoutingLLM:
             return self._sm.pop(0)
         if "Skill: sql_execute" in system:
             return json.dumps({"sql": "SELECT id, name FROM customers LIMIT 5"})
-        if "Skill: data_validator" in system:
-            return json.dumps({"verdict": "pass", "reason": "du data"})
         if "Skill: answer_composer" in system:
             return json.dumps({"answer": "Day la 5 khach hang.\nGợi ý: xem don hang?"})
         raise AssertionError(f"role/tool khong nhan dien duoc:\n{system[:80]}")
+
+    def complete_structured(self, *, system, user, output_model,
+                            role="default", temperature=None):
+        payloads = {
+            "SqlDraft": {"sql": "SELECT id, name FROM customers LIMIT 5"},
+            "SemanticCheck": {"ok": True},
+            "ValidatorVerdict": {"verdict": "pass", "reason": "du data"},
+            "ComposerAnswer": {"answer": "Day la 5 khach hang.\nGợi ý: xem don hang?"},
+        }
+        return output_model.model_validate(payloads[output_model.__name__])
 
 
 @pytest.mark.asyncio
