@@ -217,10 +217,10 @@ export function DashboardPage() {
   ].filter((k) => k.show)
 
   const shortcuts = [
-    { label: "Bán lẻ (POS)", icon: ShoppingBag, to: "/orders/retail" },
-    { label: "Nhập kho", icon: Warehouse, to: "/inventory/inbound" },
-    { label: "Tồn kho", icon: Package, to: "/inventory/stock" },
-    { label: "Báo cáo", icon: BarChart3, to: "/analytics/revenue" },
+    { label: "Bán lẻ (POS)", icon: ShoppingBag, to: "/orders/retail", chip: "bg-sky-50 text-sky-600" },
+    { label: "Nhập kho", icon: Warehouse, to: "/inventory/inbound", chip: "bg-violet-50 text-violet-600" },
+    { label: "Tồn kho", icon: Package, to: "/inventory/stock", chip: "bg-amber-50 text-amber-600" },
+    { label: "Báo cáo", icon: BarChart3, to: "/analytics/revenue", chip: "bg-indigo-50 text-indigo-600" },
   ]
 
   const ordersLoading = dashboardLoading
@@ -806,7 +806,9 @@ export function DashboardPage() {
                 onClick={() => navigate(s.to)}
                 className="flex items-center gap-3 bg-white border border-slate-200 rounded-lg p-4 hover:bg-slate-50 hover:border-slate-300 transition-colors duration-150 text-left"
               >
-                <s.icon className="h-5 w-5 text-slate-600 shrink-0" />
+                <div className={`h-9 w-9 rounded-md flex items-center justify-center shrink-0 ${s.chip}`}>
+                  <s.icon className="h-[18px] w-[18px]" />
+                </div>
                 <span className="text-sm font-medium text-slate-700">
                   {s.label}
                 </span>
