@@ -152,12 +152,12 @@ class CustomBuilderServiceTest {
 
 	@Test
 	void saveBundle_blankPageLabelThrowsBadRequestAndSkipsPersist() {
-		assertBadRequestDoesNotPersist(requestWithMenuPage(menuPageWithLabel("   ")));
+		assertBadRequestDoesNotPersistAfterKnownParent(requestWithMenuPage(menuPageWithLabel("   ")));
 	}
 
 	@Test
 	void saveBundle_routeOutsideCustomPrefixThrowsBadRequestAndSkipsPersist() {
-		assertBadRequestDoesNotPersist(requestWithMenuPage(menuPageWithRoute("/inventory/checks")));
+		assertBadRequestDoesNotPersistAfterKnownParent(requestWithMenuPage(menuPageWithRoute("/inventory/checks")));
 	}
 
 	@Test
@@ -182,7 +182,7 @@ class CustomBuilderServiceTest {
 
 	@Test
 	void saveBundle_invalidPageTypeThrowsBadRequestAndSkipsPersist() {
-		assertBadRequestDoesNotPersist(requestWithMenuPage(menuPageWithPageType("chart")));
+		assertBadRequestDoesNotPersistAfterKnownRoute(requestWithMenuPage(menuPageWithPageType("chart")));
 	}
 
 	@Test
@@ -206,7 +206,8 @@ class CustomBuilderServiceTest {
 
 	@Test
 	void saveBundle_invalidVisibilityRoleThrowsBadRequestAndSkipsPersist() {
-		assertBadRequestDoesNotPersist(requestWithMenuPage(menuPageWithVisibilityRoles(List.of("Admin", "Guest"))));
+		assertBadRequestDoesNotPersistAfterKnownRoute(
+				requestWithMenuPage(menuPageWithVisibilityRoles(List.of("Admin", "Guest"))));
 	}
 
 	@Test
@@ -300,6 +301,8 @@ class CustomBuilderServiceTest {
 		var publishedEntity = entityRow(1, 1, "Published", "entity-kiem_hang_entity-draft-1");
 
 		when(menuRepository.findPage(PAGE_KEY)).thenReturn(Optional.of(page), Optional.of(publishedPage));
+		when(menuRepository.findFolder("kiem_hang")).thenReturn(Optional.of(folderRow("kiem_hang")));
+		when(menuRepository.routeExists("/custom/kiem_hang_page", page.id())).thenReturn(false);
 		when(entityRepository.findEntity(ENTITY_KEY)).thenReturn(Optional.of(entity), Optional.of(publishedEntity));
 		when(entityRepository.findFields(ENTITY_KEY)).thenReturn(fieldRows());
 		when(entityRepository.findView(ENTITY_KEY)).thenReturn(Optional.of(viewRow(validRequest(PAGE_ETAG).views())));
@@ -318,6 +321,8 @@ class CustomBuilderServiceTest {
 		var entity = entityRow(1, null, "NeedsConfig", "entity-kiem_hang_entity-draft-1");
 
 		when(menuRepository.findPage(PAGE_KEY)).thenReturn(Optional.of(page));
+		when(menuRepository.findFolder("kiem_hang")).thenReturn(Optional.of(folderRow("kiem_hang")));
+		when(menuRepository.routeExists("/custom/kiem_hang_page", page.id())).thenReturn(false);
 		when(entityRepository.findEntity(ENTITY_KEY)).thenReturn(Optional.of(entity));
 		when(entityRepository.findFields(ENTITY_KEY)).thenReturn(fieldRows());
 		when(entityRepository.findView(ENTITY_KEY)).thenReturn(Optional.of(viewRow(validRequest(PAGE_ETAG).views())));
@@ -328,6 +333,21 @@ class CustomBuilderServiceTest {
 
 		assertThat(thrown).isInstanceOf(BusinessException.class);
 		assertThat(((BusinessException) thrown).getCode()).isEqualTo(ApiErrorCode.CONFLICT);
+	}
+
+	@Test
+	void publish_invalidCurrentPageRouteThrowsBadRequestAndSkipsSnapshots() {
+		var page = pageRowWithRoute("/inventory/checks");
+
+		when(menuRepository.findPage(PAGE_KEY)).thenReturn(Optional.of(page));
+		when(menuRepository.findFolder("kiem_hang")).thenReturn(Optional.of(folderRow("kiem_hang")));
+
+		Throwable thrown = catchThrowable(() -> service.publish(PAGE_KEY, PAGE_ETAG, jwt()));
+
+		assertThat(thrown).isInstanceOf(BusinessException.class);
+		assertThat(((BusinessException) thrown).getCode()).isEqualTo(ApiErrorCode.BAD_REQUEST);
+		verify(entityRepository, never()).publishSnapshot(any(), any(), anyInt());
+		verify(menuRepository, never()).publishPage(any(), anyInt());
 	}
 
 	private CustomBuilderBundleRequest validRequest(String etag) {
@@ -425,6 +445,11 @@ class CustomBuilderServiceTest {
 				null);
 	}
 
+	private PageRow pageRowWithRoute(String routePath) {
+		return new PageRow(1L, PAGE_KEY, "kiem_hang", "Kiểm hàng", null, null, routePath, ENTITY_KEY, "record_list",
+				"NeedsConfig", 0, "[\"Owner\"]", null, null, 1, null, PAGE_ETAG, null, null);
+	}
+
 	private PageRow builderPageRow() {
 		return new PageRow(1L, PAGE_KEY, "kiem_hang_moi", "Kiểm hàng mới", "package-check",
 				"Màn hình kiểm hàng mới", "/custom/kiem-hang-moi", ENTITY_KEY, "table_detail", "NeedsConfig", 12,
@@ -463,11 +488,30 @@ class CustomBuilderServiceTest {
 	}
 
 	private void assertBadRequestDoesNotPersist(CustomBuilderBundleRequest request) {
+		assertBadRequestDoesNotPersist(request, false, false);
+	}
+
+	private void assertBadRequestDoesNotPersistAfterKnownParent(CustomBuilderBundleRequest request) {
+		assertBadRequestDoesNotPersist(request, true, false);
+	}
+
+	private void assertBadRequestDoesNotPersistAfterKnownRoute(CustomBuilderBundleRequest request) {
+		assertBadRequestDoesNotPersist(request, true, true);
+	}
+
+	private void assertBadRequestDoesNotPersist(CustomBuilderBundleRequest request, boolean knownParent,
+			boolean uniqueRoute) {
 		var page = pageRow();
 		var entity = entityRow(1, null, "NeedsConfig", "entity-kiem_hang_entity-draft-1");
 
 		when(menuRepository.findPage(PAGE_KEY)).thenReturn(Optional.of(page));
 		when(entityRepository.findEntity(ENTITY_KEY)).thenReturn(Optional.of(entity));
+		if (knownParent) {
+			when(menuRepository.findFolder("kiem_hang")).thenReturn(Optional.of(folderRow("kiem_hang")));
+		}
+		if (uniqueRoute) {
+			when(menuRepository.routeExists("/custom/kiem_hang_page", page.id())).thenReturn(false);
+		}
 
 		Throwable thrown = catchThrowable(() -> service.saveBundle(PAGE_KEY, request, jwt()));
 

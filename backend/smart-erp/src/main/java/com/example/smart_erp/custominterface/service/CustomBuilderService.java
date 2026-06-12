@@ -123,6 +123,13 @@ public class CustomBuilderService {
 				clean(req.dataPermission()), req.sortOrder() == null ? page.sortOrder() : req.sortOrder());
 	}
 
+	private void validateCurrentPageMetadata(PageRow page) {
+		validatePageMetadata(new CustomPageRequest(page.parentKey(), page.key(), page.label(), page.icon(),
+				page.description(), page.routePath(), page.entityKey(), page.pageType(),
+				parseRolesForValidation(page.rolesJson()), page.entityPermission(), page.dataPermission(),
+				page.sortOrder(), page.etag()), page);
+	}
+
 	@Transactional(readOnly = true)
 	public ValidationSummaryData validatePage(String pageKey) {
 		PageRow page = findPage(pageKey);
@@ -133,8 +140,9 @@ public class CustomBuilderService {
 	@Transactional
 	public CustomBuilderBundleData publish(String pageKey, String etag, Jwt jwt) {
 		PageRow page = findPage(pageKey);
-		EntityRow entity = findEntity(page.entityKey());
 		assertEtag(page.etag(), etag);
+		validateCurrentPageMetadata(page);
+		EntityRow entity = findEntity(page.entityKey());
 		ValidationSummaryData summary = validate(page, entity);
 		if (!summary.valid()) {
 			throw new BusinessException(ApiErrorCode.UNPROCESSABLE_ENTITY, PUBLISH_INVALID);
@@ -234,6 +242,20 @@ public class CustomBuilderService {
 		}
 		catch (Exception ex) {
 			return List.of();
+		}
+	}
+
+	private List<String> parseRolesForValidation(String json) {
+		if (!StringUtils.hasText(json)) {
+			return List.of();
+		}
+		try {
+			List<String> parsed = objectMapper.readValue(json, LIST_OF_STRING);
+			return parsed == null ? List.of() : parsed;
+		}
+		catch (Exception ex) {
+			throw new BusinessException(ApiErrorCode.BAD_REQUEST, BAD_REQUEST,
+					Map.of("visibilityRoles", "Role không hợp lệ."));
 		}
 	}
 
