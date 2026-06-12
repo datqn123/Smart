@@ -40,7 +40,7 @@ public class CustomMetadataValidator {
 		validateKey("menu", "pageKey", pageKey, errors);
 		validateKey("data", "entityKey", entityKey, errors);
 		List<CustomFieldRequest> activeFields = fields == null ? List.of()
-				: fields.stream().filter(field -> !"Archived".equals(field.status())).toList();
+				: fields.stream().filter(field -> field != null && !"Archived".equals(field.status())).toList();
 		if (activeFields.isEmpty()) {
 			errors.add(new ValidationSummaryData.Item("data", "Entity cần tối thiểu một field."));
 		}

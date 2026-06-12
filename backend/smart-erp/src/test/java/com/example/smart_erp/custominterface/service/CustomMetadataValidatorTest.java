@@ -2,6 +2,7 @@ package com.example.smart_erp.custominterface.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.Arrays;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
@@ -42,6 +43,23 @@ class CustomMetadataValidatorTest {
 
 		var summary = validator.validateDraft("custom_page", "custom_entity", List.of(field("name", "Tên", "text", true)),
 				view, new CustomPermissionRequest(List.of("Owner"), List.of("Owner"), List.of("Owner"), List.of("Owner")));
+
+		assertThat(summary.valid()).isTrue();
+		assertThat(summary.errors()).isEmpty();
+	}
+
+	@Test
+	void validateDraft_ignoresNullFieldEntries() {
+		var columns = mapper.createArrayNode();
+		columns.addObject().put("fieldKey", "name").put("label", "Tên");
+		var sections = mapper.createArrayNode();
+		sections.addObject().put("id", "main").put("title", "Thông tin")
+				.set("fieldKeys", mapper.createArrayNode().add("name"));
+		var view = new CustomViewRequest(columns, mapper.createArrayNode().add("name"), "name asc", sections, "desktop");
+
+		var summary = validator.validateDraft("custom_page", "custom_entity",
+				Arrays.asList(field("name", "Tên", "text", true), null), view,
+				new CustomPermissionRequest(List.of("Owner"), List.of("Owner"), List.of("Owner"), List.of("Owner")));
 
 		assertThat(summary.valid()).isTrue();
 		assertThat(summary.errors()).isEmpty();
