@@ -63,7 +63,7 @@ public class CustomMetadataValidator {
 			errors.add(new ValidationSummaryData.Item("data", "Field key " + field.fieldKey() + " bị trùng.",
 					field.fieldKey()));
 		}
-		if (!FIELD_TYPES.contains(field.type())) {
+		if (!StringUtils.hasText(field.type()) || !FIELD_TYPES.contains(field.type())) {
 			errors.add(new ValidationSummaryData.Item("data", field.label() + " có loại field không hỗ trợ.",
 					field.fieldKey()));
 		}
@@ -190,8 +190,9 @@ public class CustomMetadataValidator {
 			return;
 		}
 		for (String role : roles) {
-			if (!ROLES.contains(role)) {
-				errors.add(new ValidationSummaryData.Item("permission", "Role " + role + " không hợp lệ."));
+			if (!StringUtils.hasText(role) || !ROLES.contains(role)) {
+				String roleLabel = StringUtils.hasText(role) ? role : "(trống)";
+				errors.add(new ValidationSummaryData.Item("permission", "Role " + roleLabel + " không hợp lệ."));
 			}
 		}
 	}

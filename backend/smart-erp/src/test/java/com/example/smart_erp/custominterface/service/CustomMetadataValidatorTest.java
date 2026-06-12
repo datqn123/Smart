@@ -1,6 +1,7 @@
 package com.example.smart_erp.custominterface.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 import java.util.Arrays;
 import java.util.List;
@@ -179,6 +180,15 @@ class CustomMetadataValidatorTest {
 	}
 
 	@Test
+	void validateDraft_rejectsNullFieldTypeWithoutThrowing() {
+		var summary = assertDoesNotThrow(() -> validator.validateDraft("custom_page", "custom_entity",
+				List.of(field("metadata", "Metadata", null, false)), validView("metadata"), permissions()));
+
+		assertThat(summary.valid()).isFalse();
+		assertThat(summary.errors()).anySatisfy(error -> assertThat(error.message()).contains("loại field không hỗ trợ"));
+	}
+
+	@Test
 	void validateDraft_rejectsSingleSelectWithoutNonEmptyArrayOptions() {
 		var objectOptionsField = field("status_object", "Trạng thái object", "single_select", false,
 				mapper.createObjectNode().put("value", "draft"), mapper.createObjectNode(), false, false, "Active");
@@ -298,6 +308,17 @@ class CustomMetadataValidatorTest {
 		assertThat(emptyActionSummary.errors()).anySatisfy(error -> assertThat(error.message()).contains("Action create"));
 		assertThat(invalidRoleSummary.valid()).isFalse();
 		assertThat(invalidRoleSummary.errors()).anySatisfy(error -> assertThat(error.message()).contains("Role Guest"));
+	}
+
+	@Test
+	void validateDraft_rejectsNullPermissionRoleWithoutThrowing() {
+		var summary = assertDoesNotThrow(() -> validator.validateDraft("custom_page", "custom_entity",
+				List.of(field("name", "Tên", "text", false)), validView("name"),
+				new CustomPermissionRequest(Arrays.asList("Owner", null), List.of("Owner"), List.of("Owner"),
+						List.of("Owner"))));
+
+		assertThat(summary.valid()).isFalse();
+		assertThat(summary.errors()).anySatisfy(error -> assertThat(error.message()).contains("Role").contains("không hợp lệ"));
 	}
 
 	@Test
