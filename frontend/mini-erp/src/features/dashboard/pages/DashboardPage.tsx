@@ -242,21 +242,21 @@ export function DashboardPage() {
             {/* Doanh thu hôm nay */}
             <div className="bg-white rounded-lg border border-slate-200 shadow-xs p-5">
               <div className="flex items-start justify-between">
-                <p className="text-[13px] font-medium text-slate-500">Doanh thu hôm nay</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Doanh thu hôm nay</p>
                 <div className="h-10 w-10 rounded-full bg-indigo-500 text-white flex items-center justify-center shrink-0">
                   <Banknote className="h-5 w-5" />
                 </div>
               </div>
-              <div className="h-9 mt-2 flex items-center">
+              <div className="h-10 mt-2 flex items-center">
                 {ordersLoading ? (
                   <Loader2 className="h-5 w-5 animate-spin text-slate-200" />
                 ) : (
-                  <p className="text-2xl font-semibold text-foreground tracking-tight tabular-nums truncate">
+                  <p className="text-3xl font-bold text-foreground tracking-tight tabular-nums truncate">
                     {formatCurrency(comparison?.todayRevenue ?? 0)}
                   </p>
                 )}
               </div>
-              <div className="h-5 mt-1.5 flex items-center gap-1">
+              <div className="h-6 mt-1.5 flex items-center gap-1.5">
                 {!ordersLoading && comparison && (
                   <>
                     {comparison.pctChange == null ? (
@@ -264,8 +264,10 @@ export function DashboardPage() {
                     ) : (
                       <>
                         <span
-                          className={`inline-flex items-center gap-0.5 text-xs font-medium tabular-nums ${
-                            comparison.pctChange >= 0 ? "text-emerald-600" : "text-red-600"
+                          className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${
+                            comparison.pctChange >= 0
+                              ? "bg-emerald-50 text-emerald-700"
+                              : "bg-red-50 text-red-700"
                           }`}
                         >
                           {comparison.pctChange >= 0 ? (
@@ -286,41 +288,41 @@ export function DashboardPage() {
             {/* Số đơn hôm nay */}
             <div className="bg-white rounded-lg border border-slate-200 shadow-xs p-5">
               <div className="flex items-start justify-between">
-                <p className="text-[13px] font-medium text-slate-500">Số đơn hôm nay</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Số đơn hôm nay</p>
                 <div className="h-10 w-10 rounded-full bg-sky-500 text-white flex items-center justify-center shrink-0">
                   <ShoppingCart className="h-5 w-5" />
                 </div>
               </div>
-              <div className="h-9 mt-2 flex items-center">
+              <div className="h-10 mt-2 flex items-center">
                 {ordersLoading ? (
                   <Loader2 className="h-5 w-5 animate-spin text-slate-200" />
                 ) : (
-                  <p className="text-2xl font-semibold text-foreground tracking-tight tabular-nums">
+                  <p className="text-3xl font-bold text-foreground tracking-tight tabular-nums">
                     {comparison?.todayOrders ?? 0}
                   </p>
                 )}
               </div>
-              <p className="h-5 mt-1.5 flex items-center text-xs text-slate-400">đơn đã tạo trong ngày</p>
+              <p className="h-6 mt-1.5 flex items-center text-xs text-slate-400">đơn đã tạo trong ngày</p>
             </div>
 
             {/* Giá trị đơn trung bình */}
             <div className="bg-white rounded-lg border border-slate-200 shadow-xs p-5">
               <div className="flex items-start justify-between">
-                <p className="text-[13px] font-medium text-slate-500">Giá trị đơn TB</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Giá trị đơn TB</p>
                 <div className="h-10 w-10 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0">
                   <Receipt className="h-5 w-5" />
                 </div>
               </div>
-              <div className="h-9 mt-2 flex items-center">
+              <div className="h-10 mt-2 flex items-center">
                 {ordersLoading ? (
                   <Loader2 className="h-5 w-5 animate-spin text-slate-200" />
                 ) : (
-                  <p className="text-2xl font-semibold text-foreground tracking-tight tabular-nums truncate">
+                  <p className="text-3xl font-bold text-foreground tracking-tight tabular-nums truncate">
                     {formatCurrency(comparison?.avgOrderValue ?? 0)}
                   </p>
                 )}
               </div>
-              <p className="h-5 mt-1.5 flex items-center text-xs text-slate-400">trên mỗi đơn hôm nay</p>
+              <p className="h-6 mt-1.5 flex items-center text-xs text-slate-400">trên mỗi đơn hôm nay</p>
             </div>
           </div>
         )}
@@ -338,7 +340,7 @@ export function DashboardPage() {
               className="bg-white rounded-lg border border-slate-200 shadow-xs p-5 cursor-pointer hover:border-slate-300 transition-colors duration-150 flex flex-col"
             >
               <div className="flex items-start justify-between">
-                <p className="text-[13px] font-medium text-slate-500">{kpi.title}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">{kpi.title}</p>
                 <div className={`h-10 w-10 rounded-full flex items-center justify-center shrink-0 ${kpi.chip}`}>
                   <kpi.icon className="h-5 w-5" />
                 </div>
@@ -347,23 +349,21 @@ export function DashboardPage() {
                 {kpi.loading ? (
                   <Loader2 className="h-5 w-5 animate-spin text-slate-200" />
                 ) : (
-                  <p className="text-2xl font-semibold text-foreground tracking-tight leading-none tabular-nums truncate">
+                  <p className="text-3xl font-bold text-foreground tracking-tight leading-none tabular-nums truncate">
                     {kpi.value ?? "—"}
                   </p>
                 )}
               </div>
-              <div className="h-5 mt-1.5 flex items-center">
+              <div className="h-6 mt-1.5 flex items-center">
                 {!kpi.loading && kpi.sub ? (
-                  <p
-                    className={`text-xs leading-none ${
-                      kpi.subWarn ? "text-amber-600 font-medium" : "text-slate-400"
-                    }`}
-                  >
-                    {kpi.subWarn && (
-                      <AlertTriangle className="h-3 w-3 inline mr-0.5 -mt-px shrink-0" />
-                    )}
-                    {kpi.sub}
-                  </p>
+                  kpi.subWarn ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700 min-w-0">
+                      <AlertTriangle className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{kpi.sub}</span>
+                    </span>
+                  ) : (
+                    <p className="text-xs text-slate-400 truncate">{kpi.sub}</p>
+                  )
                 ) : null}
               </div>
             </div>
