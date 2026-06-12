@@ -20,7 +20,8 @@
   require: "Sản phẩm nào đang ế nhất?"
   expect:
     sm_tool: sql_execute
-    sql_contains: ["left join orderdetails", "coalesce"]
+    sql_contains: ["left join orderdetails"]
+    sql_regex: 'coalesce|is null|having count'
     sql_not_regex: '(?<!left )join orderdetails'
 
 - id: products-chua-ai-mua
@@ -178,7 +179,7 @@
   require: "Doanh thu theo từng kênh bán hàng?"
   expect:
     sm_tool: sql_execute
-    sql_contains: ["financeledger", "order_channel"]
+    sql_contains: ["financeledger", "order_channel", "group by"]
 
 # ===== Quy tac nghiep vu khac =====
 
@@ -206,6 +207,7 @@
   expect:
     sm_tool: sql_execute
     sql_contains: ["stockdispatch_lines", "stockdispatches"]
+    sql_regex: 'order by .+ desc|max\('
     sql_not_regex: 'dispatch_id\s*=\s*(so|salesorders)\.id'
 
 # ===== Clarify (SM hoi lai) =====
@@ -234,6 +236,7 @@
     sm_tool: sql_execute
     sm_require_contains: ["neptuna"]
     sql_contains: ["neptuna"]
+    sql_regex: 'stockreceipt|inventorylogs'
 
 # ===== Control (finish khong qua tool) =====
 
