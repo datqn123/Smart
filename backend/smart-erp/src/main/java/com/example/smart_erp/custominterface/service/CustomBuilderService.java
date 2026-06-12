@@ -2,6 +2,7 @@ package com.example.smart_erp.custominterface.service;
 
 import java.util.List;
 
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -72,6 +73,8 @@ public class CustomBuilderService {
 		PageRow page = findPage(pageKey);
 		EntityRow entity = findEntity(page.entityKey());
 		assertEtag(page.etag(), suppliedEtag(request));
+		assertRequestIdentity(request, page);
+		String entityLabel = normalizedEntityLabel(request.entityLabel());
 
 		ValidationSummaryData draftSummary = validator.validateDraft(request.menuPage().key(), request.entityKey(),
 				request.fields(), request.views(), request.permissions());
@@ -80,9 +83,17 @@ public class CustomBuilderService {
 		}
 
 		int userId = StockReceiptAccessPolicy.parseUserId(jwt);
-		EntityRow updated = entityRepository.replaceBundle(entity, request.entityLabel(), request.entityDescription(),
-				request.fields(), request.views(), request.permissions(), userId);
-		return toBundle(page, updated, validate(page, updated));
+		try {
+			PageRow bumpedPage = menuRepository.bumpPageDraft(page, userId);
+			entityRepository.replaceBundle(entity, entityLabel, request.entityDescription(), request.fields(),
+					request.views(), request.permissions(), userId);
+			PageRow updatedPage = findPage(bumpedPage.key());
+			EntityRow updatedEntity = findEntity(entity.key());
+			return toBundle(updatedPage, updatedEntity, validate(updatedPage, updatedEntity));
+		}
+		catch (OptimisticLockingFailureException ex) {
+			throw staleConflict();
+		}
 	}
 
 	@Transactional(readOnly = true)
@@ -102,8 +113,13 @@ public class CustomBuilderService {
 			throw new BusinessException(ApiErrorCode.UNPROCESSABLE_ENTITY, PUBLISH_INVALID);
 		}
 		int userId = StockReceiptAccessPolicy.parseUserId(jwt);
-		entityRepository.publishSnapshot(page.key(), entity, userId);
-		menuRepository.publishPage(page.key(), userId);
+		try {
+			entityRepository.publishSnapshot(page.key(), entity, userId);
+			menuRepository.publishPage(page, userId);
+		}
+		catch (OptimisticLockingFailureException ex) {
+			throw staleConflict();
+		}
 
 		PageRow publishedPage = findPage(page.key());
 		EntityRow publishedEntity = findEntity(entity.key());
@@ -205,9 +221,27 @@ public class CustomBuilderService {
 		return request.menuPage().etag();
 	}
 
+	private static void assertRequestIdentity(CustomBuilderBundleRequest request, PageRow page) {
+		if (!page.key().equals(request.menuPage().key()) || !page.entityKey().equals(request.entityKey())
+				|| !page.entityKey().equals(request.menuPage().entityKey())) {
+			throw new BusinessException(ApiErrorCode.BAD_REQUEST, BAD_REQUEST);
+		}
+	}
+
+	private static String normalizedEntityLabel(String label) {
+		if (!StringUtils.hasText(label)) {
+			throw new BusinessException(ApiErrorCode.BAD_REQUEST, BAD_REQUEST);
+		}
+		return label.trim();
+	}
+
 	private static void assertEtag(String current, String supplied) {
 		if (!StringUtils.hasText(supplied) || !supplied.equals(current)) {
 			throw new BusinessException(ApiErrorCode.CONFLICT, STALE);
 		}
+	}
+
+	private static BusinessException staleConflict() {
+		return new BusinessException(ApiErrorCode.CONFLICT, STALE);
 	}
 }

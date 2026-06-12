@@ -1,7 +1,11 @@
 package com.example.smart_erp.custominterface.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -13,8 +17,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.security.oauth2.jwt.Jwt;
 
+import com.example.smart_erp.common.api.ApiErrorCode;
+import com.example.smart_erp.common.exception.BusinessException;
 import com.example.smart_erp.custominterface.dto.CustomBuilderBundleRequest;
 import com.example.smart_erp.custominterface.dto.CustomFieldRequest;
 import com.example.smart_erp.custominterface.dto.CustomPageRequest;
@@ -52,14 +59,16 @@ class CustomBuilderServiceTest {
 	}
 
 	@Test
-	void saveBundle_validatesAndPersistsMetadata() {
-		var request = validRequest(PAGE_ETAG);
+	void saveBundle_bumpsPageDraftAndReturnsBumpedEtag() {
+		var request = requestWithEntityLabel("  Kiểm hàng  ");
 		var page = pageRow();
+		var bumpedPage = pageRow(2, null, "NeedsConfig", "page-kiem_hang_page-draft-2");
 		var currentEntity = entityRow(1, null, "NeedsConfig", "entity-kiem_hang_entity-draft-1");
 		var savedEntity = entityRow(2, null, "NeedsConfig", "entity-kiem_hang_entity-draft-2");
 
-		when(menuRepository.findPage(PAGE_KEY)).thenReturn(Optional.of(page));
-		when(entityRepository.findEntity(ENTITY_KEY)).thenReturn(Optional.of(currentEntity));
+		when(menuRepository.findPage(PAGE_KEY)).thenReturn(Optional.of(page), Optional.of(bumpedPage));
+		when(entityRepository.findEntity(ENTITY_KEY)).thenReturn(Optional.of(currentEntity), Optional.of(savedEntity));
+		when(menuRepository.bumpPageDraft(page, 7)).thenReturn(bumpedPage);
 		when(entityRepository.replaceBundle(eq(currentEntity), eq("Kiểm hàng"), eq("Desc"), eq(request.fields()),
 				eq(request.views()), eq(request.permissions()), eq(7))).thenReturn(savedEntity);
 		when(entityRepository.findFields(ENTITY_KEY)).thenReturn(fieldRows());
@@ -69,13 +78,59 @@ class CustomBuilderServiceTest {
 		var saved = service.saveBundle(PAGE_KEY, request, jwt());
 
 		assertThat(saved.validationSummary().valid()).isTrue();
+		assertThat(saved.etag()).isEqualTo(bumpedPage.etag());
+		assertThat(saved.menuPage().etag()).isEqualTo(bumpedPage.etag());
 		assertThat(saved.entityDefinition().etag()).isEqualTo("entity-kiem_hang_entity-draft-2");
+		verify(menuRepository).bumpPageDraft(page, 7);
 		verify(entityRepository).replaceBundle(eq(currentEntity), eq("Kiểm hàng"), eq("Desc"), eq(request.fields()),
 				eq(request.views()), eq(request.permissions()), eq(7));
 	}
 
 	@Test
-	void publish_validatesAndPublishesSnapshots() {
+	void saveBundle_bumpConflictThrowsConflictAndSkipsEntityReplace() {
+		var request = validRequest(PAGE_ETAG);
+		var page = pageRow();
+		var entity = entityRow(1, null, "NeedsConfig", "entity-kiem_hang_entity-draft-1");
+
+		when(menuRepository.findPage(PAGE_KEY)).thenReturn(Optional.of(page));
+		when(entityRepository.findEntity(ENTITY_KEY)).thenReturn(Optional.of(entity));
+		when(menuRepository.bumpPageDraft(page, 7)).thenThrow(new OptimisticLockingFailureException("stale"));
+
+		Throwable thrown = catchThrowable(() -> service.saveBundle(PAGE_KEY, request, jwt()));
+
+		assertThat(thrown).isInstanceOf(BusinessException.class);
+		assertThat(((BusinessException) thrown).getCode()).isEqualTo(ApiErrorCode.CONFLICT);
+		verify(entityRepository, never()).replaceBundle(any(), any(), any(), any(), any(), any(), any());
+	}
+
+	@Test
+	void saveBundle_mismatchedRequestPageKeyThrowsBadRequestAndSkipsPersist() {
+		assertBadRequestDoesNotPersist(requestWithMenuPage(menuPageWithKey("other_page")));
+	}
+
+	@Test
+	void saveBundle_mismatchedRequestEntityKeyThrowsBadRequestAndSkipsPersist() {
+		assertBadRequestDoesNotPersist(requestWithEntityKey("other_entity"));
+	}
+
+	@Test
+	void saveBundle_mismatchedRequestMenuPageEntityKeyThrowsBadRequestAndSkipsPersist() {
+		assertBadRequestDoesNotPersist(requestWithMenuPage(menuPageWithEntityKey("other_entity")));
+	}
+
+	@Test
+	void saveBundle_nullEntityLabelThrowsBadRequestAndSkipsPersist() {
+		assertBadRequestDoesNotPersist(requestWithEntityLabel(null));
+	}
+
+	@Test
+	void saveBundle_blankEntityLabelThrowsBadRequestAndSkipsPersist() {
+		assertBadRequestDoesNotPersist(requestWithEntityLabel("   "));
+	}
+
+	@Test
+	void saveBundle_invalidDraftReturnsSummaryAndSkipsPersist() {
+		var request = requestWithFields(List.of());
 		var page = pageRow();
 		var entity = entityRow(1, null, "NeedsConfig", "entity-kiem_hang_entity-draft-1");
 
@@ -85,11 +140,50 @@ class CustomBuilderServiceTest {
 		when(entityRepository.findView(ENTITY_KEY)).thenReturn(Optional.of(viewRow(validRequest(PAGE_ETAG).views())));
 		when(entityRepository.findPermissions(ENTITY_KEY)).thenReturn(permissionRow());
 
+		var saved = service.saveBundle(PAGE_KEY, request, jwt());
+
+		assertThat(saved.validationSummary().valid()).isFalse();
+		assertThat(saved.validationSummary().errors()).isNotEmpty();
+		verify(menuRepository, never()).bumpPageDraft(any(), eq(7));
+		verify(entityRepository, never()).replaceBundle(any(), any(), any(), any(), any(), any(), any());
+	}
+
+	@Test
+	void publish_validatesAndPublishesSnapshots() {
+		var page = pageRow();
+		var publishedPage = pageRow(1, 1, "Published", PAGE_ETAG);
+		var entity = entityRow(1, null, "NeedsConfig", "entity-kiem_hang_entity-draft-1");
+		var publishedEntity = entityRow(1, 1, "Published", "entity-kiem_hang_entity-draft-1");
+
+		when(menuRepository.findPage(PAGE_KEY)).thenReturn(Optional.of(page), Optional.of(publishedPage));
+		when(entityRepository.findEntity(ENTITY_KEY)).thenReturn(Optional.of(entity), Optional.of(publishedEntity));
+		when(entityRepository.findFields(ENTITY_KEY)).thenReturn(fieldRows());
+		when(entityRepository.findView(ENTITY_KEY)).thenReturn(Optional.of(viewRow(validRequest(PAGE_ETAG).views())));
+		when(entityRepository.findPermissions(ENTITY_KEY)).thenReturn(permissionRow());
+
 		var published = service.publish(PAGE_KEY, PAGE_ETAG, jwt());
 
 		assertThat(published.validationSummary().valid()).isTrue();
 		verify(entityRepository).publishSnapshot(PAGE_KEY, entity, 7);
-		verify(menuRepository).publishPage(PAGE_KEY, 7);
+		verify(menuRepository).publishPage(page, 7);
+	}
+
+	@Test
+	void publish_repositoryConflictThrowsBusinessConflict() {
+		var page = pageRow();
+		var entity = entityRow(1, null, "NeedsConfig", "entity-kiem_hang_entity-draft-1");
+
+		when(menuRepository.findPage(PAGE_KEY)).thenReturn(Optional.of(page));
+		when(entityRepository.findEntity(ENTITY_KEY)).thenReturn(Optional.of(entity));
+		when(entityRepository.findFields(ENTITY_KEY)).thenReturn(fieldRows());
+		when(entityRepository.findView(ENTITY_KEY)).thenReturn(Optional.of(viewRow(validRequest(PAGE_ETAG).views())));
+		when(entityRepository.findPermissions(ENTITY_KEY)).thenReturn(permissionRow());
+		doThrow(new OptimisticLockingFailureException("stale")).when(menuRepository).publishPage(page, 7);
+
+		Throwable thrown = catchThrowable(() -> service.publish(PAGE_KEY, PAGE_ETAG, jwt()));
+
+		assertThat(thrown).isInstanceOf(BusinessException.class);
+		assertThat(((BusinessException) thrown).getCode()).isEqualTo(ApiErrorCode.CONFLICT);
 	}
 
 	private CustomBuilderBundleRequest validRequest(String etag) {
@@ -97,9 +191,39 @@ class CustomBuilderServiceTest {
 				view(), permissionsRequest(), etag);
 	}
 
+	private CustomBuilderBundleRequest requestWithMenuPage(CustomPageRequest menuPage) {
+		return new CustomBuilderBundleRequest(menuPage, ENTITY_KEY, "Kiểm hàng", "Desc", List.of(textField()), view(),
+				permissionsRequest(), PAGE_ETAG);
+	}
+
+	private CustomBuilderBundleRequest requestWithEntityKey(String entityKey) {
+		return new CustomBuilderBundleRequest(menuPage(PAGE_ETAG), entityKey, "Kiểm hàng", "Desc", List.of(textField()),
+				view(), permissionsRequest(), PAGE_ETAG);
+	}
+
+	private CustomBuilderBundleRequest requestWithEntityLabel(String label) {
+		return new CustomBuilderBundleRequest(menuPage(PAGE_ETAG), ENTITY_KEY, label, "Desc", List.of(textField()),
+				view(), permissionsRequest(), PAGE_ETAG);
+	}
+
+	private CustomBuilderBundleRequest requestWithFields(List<CustomFieldRequest> fields) {
+		return new CustomBuilderBundleRequest(menuPage(PAGE_ETAG), ENTITY_KEY, "Kiểm hàng", "Desc", fields, view(),
+				permissionsRequest(), PAGE_ETAG);
+	}
+
 	private CustomPageRequest menuPage(String etag) {
 		return new CustomPageRequest("kiem_hang", PAGE_KEY, "Kiểm hàng", null, null, "/custom/" + PAGE_KEY,
 				ENTITY_KEY, "record_list", List.of("Owner"), null, null, 0, etag);
+	}
+
+	private CustomPageRequest menuPageWithKey(String key) {
+		return new CustomPageRequest("kiem_hang", key, "Kiểm hàng", null, null, "/custom/" + key, ENTITY_KEY,
+				"record_list", List.of("Owner"), null, null, 0, PAGE_ETAG);
+	}
+
+	private CustomPageRequest menuPageWithEntityKey(String entityKey) {
+		return new CustomPageRequest("kiem_hang", PAGE_KEY, "Kiểm hàng", null, null, "/custom/" + PAGE_KEY,
+				entityKey, "record_list", List.of("Owner"), null, null, 0, PAGE_ETAG);
 	}
 
 	private CustomFieldRequest textField() {
@@ -118,8 +242,13 @@ class CustomBuilderServiceTest {
 	}
 
 	private PageRow pageRow() {
+		return pageRow(1, null, "NeedsConfig", PAGE_ETAG);
+	}
+
+	private PageRow pageRow(int draftVersion, Integer publishedVersion, String status, String etag) {
 		return new PageRow(1L, PAGE_KEY, "kiem_hang", "Kiểm hàng", null, null, "/custom/" + PAGE_KEY, ENTITY_KEY,
-				"record_list", "NeedsConfig", 0, "[\"Owner\"]", null, null, 1, null, PAGE_ETAG, null, null);
+				"record_list", status, 0, "[\"Owner\"]", null, null, draftVersion, publishedVersion, etag, null,
+				null);
 	}
 
 	private EntityRow entityRow(int draftVersion, Integer publishedVersion, String status, String etag) {
@@ -145,5 +274,20 @@ class CustomBuilderServiceTest {
 
 	private Jwt jwt() {
 		return Jwt.withTokenValue("token").header("alg", "none").subject("7").claim("role", "Owner").build();
+	}
+
+	private void assertBadRequestDoesNotPersist(CustomBuilderBundleRequest request) {
+		var page = pageRow();
+		var entity = entityRow(1, null, "NeedsConfig", "entity-kiem_hang_entity-draft-1");
+
+		when(menuRepository.findPage(PAGE_KEY)).thenReturn(Optional.of(page));
+		when(entityRepository.findEntity(ENTITY_KEY)).thenReturn(Optional.of(entity));
+
+		Throwable thrown = catchThrowable(() -> service.saveBundle(PAGE_KEY, request, jwt()));
+
+		assertThat(thrown).isInstanceOf(BusinessException.class);
+		assertThat(((BusinessException) thrown).getCode()).isEqualTo(ApiErrorCode.BAD_REQUEST);
+		verify(menuRepository, never()).bumpPageDraft(any(), eq(7));
+		verify(entityRepository, never()).replaceBundle(any(), any(), any(), any(), any(), any(), any());
 	}
 }

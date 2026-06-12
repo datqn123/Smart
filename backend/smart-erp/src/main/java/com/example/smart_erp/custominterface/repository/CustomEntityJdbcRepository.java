@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
@@ -76,11 +77,15 @@ public class CustomEntityJdbcRepository {
 	public EntityRow replaceBundle(EntityRow current, String label, String description, List<CustomFieldRequest> fields,
 			CustomViewRequest view, CustomPermissionRequest permissions, Integer userId) {
 		int nextVersion = current.draftVersion() + 1;
-		jdbcTemplate.update("""
+		int updated = jdbcTemplate.update("""
 				UPDATE custom_entities
 				SET label = ?, description = ?, draft_version = ?, etag = ?, updated_by = ?, updated_at = now()
-				WHERE entity_key = ? AND archived_at IS NULL
-				""", label, description, nextVersion, entityEtag(current.key(), nextVersion), userId, current.key());
+				WHERE entity_key = ? AND draft_version = ? AND etag = ? AND archived_at IS NULL
+				""", label, description, nextVersion, entityEtag(current.key(), nextVersion), userId, current.key(),
+				current.draftVersion(), current.etag());
+		if (updated != 1) {
+			throw new OptimisticLockingFailureException("Stale custom entity draft: " + current.key());
+		}
 
 		jdbcTemplate.update("DELETE FROM custom_entity_fields WHERE entity_key = ?", current.key());
 		List<CustomFieldRequest> safeFields = fields == null ? List.of() : fields;
@@ -121,6 +126,15 @@ public class CustomEntityJdbcRepository {
 	}
 
 	public void publishSnapshot(String pageKey, EntityRow entity, int userId) {
+		int updated = jdbcTemplate.update("""
+				UPDATE custom_entities
+				SET status = 'Published', published_version = ?, published_at = now(),
+				    updated_by = ?, updated_at = now()
+				WHERE entity_key = ? AND draft_version = ? AND etag = ? AND archived_at IS NULL
+				""", entity.draftVersion(), userId, entity.key(), entity.draftVersion(), entity.etag());
+		if (updated != 1) {
+			throw new OptimisticLockingFailureException("Stale custom entity publish: " + entity.key());
+		}
 		jdbcTemplate.update("""
 				INSERT INTO custom_entity_versions (
 					entity_key, version, page_key, entity_snapshot_json, fields_snapshot_json,
@@ -151,15 +165,9 @@ public class CustomEntityJdbcRepository {
 				       ), '[]'::jsonb),
 				       ?
 				FROM custom_entities e
-				WHERE e.entity_key = ? AND e.archived_at IS NULL
+				WHERE e.entity_key = ? AND e.draft_version = ? AND e.etag = ? AND e.archived_at IS NULL
 				ON CONFLICT (entity_key, version) DO NOTHING
-				""", pageKey, userId, entity.key());
-		jdbcTemplate.update("""
-				UPDATE custom_entities
-				SET status = 'Published', published_version = draft_version, published_at = now(),
-				    updated_by = ?, updated_at = now()
-				WHERE entity_key = ? AND archived_at IS NULL
-				""", userId, entity.key());
+				""", pageKey, userId, entity.key(), entity.draftVersion(), entity.etag());
 	}
 
 	public static String entityEtag(String key, int version) {

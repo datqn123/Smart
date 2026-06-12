@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -210,6 +211,20 @@ public class CustomInterfaceJdbcRepository {
 				""", sortOrder, userId, key);
 	}
 
+	public PageRow bumpPageDraft(PageRow current, int userId) {
+		int nextVersion = current.draftVersion() + 1;
+		int updated = jdbcTemplate.update("""
+				UPDATE custom_menu_pages
+				SET draft_version = ?, etag = ?, updated_by = ?, updated_at = now()
+				WHERE page_key = ? AND draft_version = ? AND etag = ? AND archived_at IS NULL
+				""", nextVersion, pageEtag(current.key(), nextVersion), userId, current.key(),
+				current.draftVersion(), current.etag());
+		if (updated != 1) {
+			throw new OptimisticLockingFailureException("Stale custom menu page draft: " + current.key());
+		}
+		return findPage(current.key()).orElseThrow();
+	}
+
 	public void publishAll(int userId) {
 		jdbcTemplate.update("""
 				UPDATE custom_menu_folders
@@ -245,13 +260,16 @@ public class CustomInterfaceJdbcRepository {
 				""", userId);
 	}
 
-	public void publishPage(String pageKey, int userId) {
-		jdbcTemplate.update("""
+	public void publishPage(PageRow page, int userId) {
+		int updated = jdbcTemplate.update("""
 				UPDATE custom_menu_pages
-				SET status = 'Published', published_version = draft_version, published_at = now(),
+				SET status = 'Published', published_version = ?, published_at = now(),
 				    updated_by = ?, updated_at = now()
-				WHERE page_key = ? AND archived_at IS NULL
-				""", userId, pageKey);
+				WHERE page_key = ? AND draft_version = ? AND etag = ? AND archived_at IS NULL
+				""", page.draftVersion(), userId, page.key(), page.draftVersion(), page.etag());
+		if (updated != 1) {
+			throw new OptimisticLockingFailureException("Stale custom menu page publish: " + page.key());
+		}
 		jdbcTemplate.update("""
 				INSERT INTO custom_menu_page_versions (
 					page_key, version, parent_folder_key, label, icon, description, route_path, entity_key, page_type,
@@ -260,9 +278,9 @@ public class CustomInterfaceJdbcRepository {
 				SELECT page_key, draft_version, parent_folder_key, label, icon, description, route_path, entity_key,
 				       page_type, sort_order, visibility_roles, entity_permission, data_permission, ?
 				FROM custom_menu_pages
-				WHERE page_key = ? AND archived_at IS NULL
+				WHERE page_key = ? AND draft_version = ? AND etag = ? AND archived_at IS NULL
 				ON CONFLICT (page_key, version) DO NOTHING
-				""", userId, pageKey);
+				""", userId, page.key(), page.draftVersion(), page.etag());
 	}
 
 	public int countPublishedPagesInFolder(String folderKey) {
