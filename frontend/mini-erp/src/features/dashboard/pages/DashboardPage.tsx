@@ -387,7 +387,7 @@ export function DashboardPage() {
                       onClick={() => setTrendDays(d)}
                       className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
                         trendDays === d
-                          ? "bg-white border border-slate-200 shadow-xs text-slate-900"
+                          ? "bg-white border border-slate-200 shadow-xs text-indigo-600"
                           : "border border-transparent text-slate-500 hover:text-slate-900"
                       }`}
                     >
@@ -406,7 +406,7 @@ export function DashboardPage() {
                     <AreaChart data={revenueTrend} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
                       <defs>
                         <linearGradient id="dashRevenue" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.08} />
+                          <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.15} />
                           <stop offset="95%" stopColor="#4f46e5" stopOpacity={0} />
                         </linearGradient>
                       </defs>
@@ -441,7 +441,7 @@ export function DashboardPage() {
                         type="monotone"
                         dataKey="revenue"
                         stroke="#4f46e5"
-                        strokeWidth={1.5}
+                        strokeWidth={2}
                         fill="url(#dashRevenue)"
                       />
                     </AreaChart>
