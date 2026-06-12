@@ -3,6 +3,7 @@ package com.example.smart_erp.custominterface.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
@@ -59,16 +60,18 @@ class CustomBuilderServiceTest {
 	}
 
 	@Test
-	void saveBundle_bumpsPageDraftAndReturnsBumpedEtag() {
-		var request = requestWithEntityLabel("  Kiểm hàng  ");
+	void saveBundle_updatesPageDraftMetadataAndReturnsUpdatedEtag() {
+		var request = requestWithMenuPage(builderMenuPage(PAGE_ETAG), "  Kiểm hàng  ");
 		var page = pageRow();
-		var bumpedPage = pageRow(2, null, "NeedsConfig", "page-kiem_hang_page-draft-2");
+		var updatedPage = builderPageRow();
 		var currentEntity = entityRow(1, null, "NeedsConfig", "entity-kiem_hang_entity-draft-1");
 		var savedEntity = entityRow(2, null, "NeedsConfig", "entity-kiem_hang_entity-draft-2");
 
-		when(menuRepository.findPage(PAGE_KEY)).thenReturn(Optional.of(page), Optional.of(bumpedPage));
+		when(menuRepository.findPage(PAGE_KEY)).thenReturn(Optional.of(page));
 		when(entityRepository.findEntity(ENTITY_KEY)).thenReturn(Optional.of(currentEntity), Optional.of(savedEntity));
-		when(menuRepository.bumpPageDraft(page, 7)).thenReturn(bumpedPage);
+		when(menuRepository.updateBuilderPageDraft(page, "kiem_hang_moi", "Kiểm hàng mới", "package-check",
+				"Màn hình kiểm hàng mới", "/custom/kiem-hang-moi", "table_detail", "[\"Admin\",\"Staff\"]",
+				"can_manage_custom_builder", "can_view_inventory", 12, 7)).thenReturn(updatedPage);
 		when(entityRepository.replaceBundle(eq(currentEntity), eq("Kiểm hàng"), eq("Desc"), eq(request.fields()),
 				eq(request.views()), eq(request.permissions()), eq(7))).thenReturn(savedEntity);
 		when(entityRepository.findFields(ENTITY_KEY)).thenReturn(fieldRows());
@@ -78,23 +81,37 @@ class CustomBuilderServiceTest {
 		var saved = service.saveBundle(PAGE_KEY, request, jwt());
 
 		assertThat(saved.validationSummary().valid()).isTrue();
-		assertThat(saved.etag()).isEqualTo(bumpedPage.etag());
-		assertThat(saved.menuPage().etag()).isEqualTo(bumpedPage.etag());
+		assertThat(saved.etag()).isEqualTo(updatedPage.etag());
+		assertThat(saved.menuPage().etag()).isEqualTo(updatedPage.etag());
+		assertThat(saved.menuPage().parentKey()).isEqualTo("kiem_hang_moi");
+		assertThat(saved.menuPage().label()).isEqualTo("Kiểm hàng mới");
+		assertThat(saved.menuPage().icon()).isEqualTo("package-check");
+		assertThat(saved.menuPage().description()).isEqualTo("Màn hình kiểm hàng mới");
+		assertThat(saved.menuPage().routePath()).isEqualTo("/custom/kiem-hang-moi");
+		assertThat(saved.menuPage().pageType()).isEqualTo("table_detail");
+		assertThat(saved.menuPage().roles()).containsExactly("Admin", "Staff");
+		assertThat(saved.menuPage().entityPermission()).isEqualTo("can_manage_custom_builder");
+		assertThat(saved.menuPage().dataPermission()).isEqualTo("can_view_inventory");
+		assertThat(saved.menuPage().sortOrder()).isEqualTo(12);
 		assertThat(saved.entityDefinition().etag()).isEqualTo("entity-kiem_hang_entity-draft-2");
-		verify(menuRepository).bumpPageDraft(page, 7);
+		verify(menuRepository).updateBuilderPageDraft(page, "kiem_hang_moi", "Kiểm hàng mới", "package-check",
+				"Màn hình kiểm hàng mới", "/custom/kiem-hang-moi", "table_detail", "[\"Admin\",\"Staff\"]",
+				"can_manage_custom_builder", "can_view_inventory", 12, 7);
 		verify(entityRepository).replaceBundle(eq(currentEntity), eq("Kiểm hàng"), eq("Desc"), eq(request.fields()),
 				eq(request.views()), eq(request.permissions()), eq(7));
 	}
 
 	@Test
-	void saveBundle_bumpConflictThrowsConflictAndSkipsEntityReplace() {
+	void saveBundle_pageMetadataConflictThrowsConflictAndSkipsEntityReplace() {
 		var request = validRequest(PAGE_ETAG);
 		var page = pageRow();
 		var entity = entityRow(1, null, "NeedsConfig", "entity-kiem_hang_entity-draft-1");
 
 		when(menuRepository.findPage(PAGE_KEY)).thenReturn(Optional.of(page));
 		when(entityRepository.findEntity(ENTITY_KEY)).thenReturn(Optional.of(entity));
-		when(menuRepository.bumpPageDraft(page, 7)).thenThrow(new OptimisticLockingFailureException("stale"));
+		when(menuRepository.updateBuilderPageDraft(page, "kiem_hang", "Kiểm hàng", null, null,
+				"/custom/kiem_hang_page", "record_list", "[\"Owner\"]", null, null, 0, 7))
+				.thenThrow(new OptimisticLockingFailureException("stale"));
 
 		Throwable thrown = catchThrowable(() -> service.saveBundle(PAGE_KEY, request, jwt()));
 
@@ -144,7 +161,8 @@ class CustomBuilderServiceTest {
 
 		assertThat(saved.validationSummary().valid()).isFalse();
 		assertThat(saved.validationSummary().errors()).isNotEmpty();
-		verify(menuRepository, never()).bumpPageDraft(any(), eq(7));
+		verify(menuRepository, never()).updateBuilderPageDraft(any(), any(), any(), any(), any(), any(), any(), any(),
+				any(), any(), anyInt(), eq(7));
 		verify(entityRepository, never()).replaceBundle(any(), any(), any(), any(), any(), any(), any());
 	}
 
@@ -192,7 +210,11 @@ class CustomBuilderServiceTest {
 	}
 
 	private CustomBuilderBundleRequest requestWithMenuPage(CustomPageRequest menuPage) {
-		return new CustomBuilderBundleRequest(menuPage, ENTITY_KEY, "Kiểm hàng", "Desc", List.of(textField()), view(),
+		return requestWithMenuPage(menuPage, "Kiểm hàng");
+	}
+
+	private CustomBuilderBundleRequest requestWithMenuPage(CustomPageRequest menuPage, String entityLabel) {
+		return new CustomBuilderBundleRequest(menuPage, ENTITY_KEY, entityLabel, "Desc", List.of(textField()), view(),
 				permissionsRequest(), PAGE_ETAG);
 	}
 
@@ -226,6 +248,12 @@ class CustomBuilderServiceTest {
 				entityKey, "record_list", List.of("Owner"), null, null, 0, PAGE_ETAG);
 	}
 
+	private CustomPageRequest builderMenuPage(String etag) {
+		return new CustomPageRequest("  kiem_hang_moi  ", PAGE_KEY, "  Kiểm hàng mới  ", "  package-check  ",
+				"  Màn hình kiểm hàng mới  ", "  /custom/kiem-hang-moi  ", ENTITY_KEY, "  table_detail  ",
+				List.of("Admin", " Staff "), "  can_manage_custom_builder  ", "  can_view_inventory  ", 12, etag);
+	}
+
 	private CustomFieldRequest textField() {
 		return new CustomFieldRequest(null, "Tên", "name", "text", true, true, true, true, 0, null,
 				mapper.createArrayNode(), mapper.createObjectNode(), mapper.createObjectNode(), null, false, false,
@@ -249,6 +277,13 @@ class CustomBuilderServiceTest {
 		return new PageRow(1L, PAGE_KEY, "kiem_hang", "Kiểm hàng", null, null, "/custom/" + PAGE_KEY, ENTITY_KEY,
 				"record_list", status, 0, "[\"Owner\"]", null, null, draftVersion, publishedVersion, etag, null,
 				null);
+	}
+
+	private PageRow builderPageRow() {
+		return new PageRow(1L, PAGE_KEY, "kiem_hang_moi", "Kiểm hàng mới", "package-check",
+				"Màn hình kiểm hàng mới", "/custom/kiem-hang-moi", ENTITY_KEY, "table_detail", "NeedsConfig", 12,
+				"[\"Admin\",\"Staff\"]", "can_manage_custom_builder", "can_view_inventory", 2, null,
+				"page-kiem_hang_page-draft-2", null, null);
 	}
 
 	private EntityRow entityRow(int draftVersion, Integer publishedVersion, String status, String etag) {
@@ -287,7 +322,8 @@ class CustomBuilderServiceTest {
 
 		assertThat(thrown).isInstanceOf(BusinessException.class);
 		assertThat(((BusinessException) thrown).getCode()).isEqualTo(ApiErrorCode.BAD_REQUEST);
-		verify(menuRepository, never()).bumpPageDraft(any(), eq(7));
+		verify(menuRepository, never()).updateBuilderPageDraft(any(), any(), any(), any(), any(), any(), any(), any(),
+				any(), any(), anyInt(), eq(7));
 		verify(entityRepository, never()).replaceBundle(any(), any(), any(), any(), any(), any(), any());
 	}
 }

@@ -225,6 +225,26 @@ public class CustomInterfaceJdbcRepository {
 		return findPage(current.key()).orElseThrow();
 	}
 
+	public PageRow updateBuilderPageDraft(PageRow current, String parentKey, String label, String icon,
+			String description, String routePath, String pageType, String rolesJson, String entityPermission,
+			String dataPermission, int sortOrder, int userId) {
+		int nextVersion = current.draftVersion() + 1;
+		int updated = jdbcTemplate.update("""
+				UPDATE custom_menu_pages
+				SET parent_folder_key = ?, label = ?, icon = ?, description = ?, route_path = ?,
+				    page_type = ?, sort_order = ?, visibility_roles = ?::jsonb, entity_permission = ?,
+				    data_permission = ?, draft_version = ?, etag = ?, updated_by = ?, updated_at = now()
+				WHERE id = ? AND page_key = ? AND entity_key = ? AND draft_version = ? AND etag = ?
+				    AND archived_at IS NULL
+				""", parentKey, label, icon, description, routePath, pageType, sortOrder, rolesJson,
+				entityPermission, dataPermission, nextVersion, pageEtag(current.key(), nextVersion), userId,
+				current.id(), current.key(), current.entityKey(), current.draftVersion(), current.etag());
+		if (updated != 1) {
+			throw new OptimisticLockingFailureException("Stale custom menu page builder draft: " + current.key());
+		}
+		return findPage(current.key()).orElseThrow();
+	}
+
 	public void publishAll(int userId) {
 		jdbcTemplate.update("""
 				UPDATE custom_menu_folders

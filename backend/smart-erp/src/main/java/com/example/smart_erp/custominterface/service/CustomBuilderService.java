@@ -12,6 +12,7 @@ import com.example.smart_erp.common.api.ApiErrorCode;
 import com.example.smart_erp.common.exception.BusinessException;
 import com.example.smart_erp.custominterface.dto.CustomBuilderBundleRequest;
 import com.example.smart_erp.custominterface.dto.CustomFieldRequest;
+import com.example.smart_erp.custominterface.dto.CustomPageRequest;
 import com.example.smart_erp.custominterface.dto.CustomPermissionRequest;
 import com.example.smart_erp.custominterface.dto.CustomViewRequest;
 import com.example.smart_erp.custominterface.repository.CustomEntityJdbcRepository;
@@ -84,10 +85,14 @@ public class CustomBuilderService {
 
 		int userId = StockReceiptAccessPolicy.parseUserId(jwt);
 		try {
-			PageRow bumpedPage = menuRepository.bumpPageDraft(page, userId);
+			CustomPageRequest menuPage = request.menuPage();
+			PageRow updatedPage = menuRepository.updateBuilderPageDraft(page, trim(menuPage.parentKey()),
+					trim(menuPage.label()), clean(menuPage.icon()), clean(menuPage.description()),
+					trim(menuPage.routePath()), trim(menuPage.pageType()), rolesJson(menuPage.visibilityRoles()),
+					clean(menuPage.entityPermission()), clean(menuPage.dataPermission()),
+					menuPage.sortOrder() == null ? page.sortOrder() : menuPage.sortOrder(), userId);
 			entityRepository.replaceBundle(entity, entityLabel, request.entityDescription(), request.fields(),
 					request.views(), request.permissions(), userId);
-			PageRow updatedPage = findPage(bumpedPage.key());
 			EntityRow updatedEntity = findEntity(entity.key());
 			return toBundle(updatedPage, updatedEntity, validate(updatedPage, updatedEntity));
 		}
@@ -210,6 +215,19 @@ public class CustomBuilderService {
 		}
 	}
 
+	private String rolesJson(List<String> roles) {
+		List<String> normalized = roles == null ? List.of() : roles.stream()
+				.map(CustomBuilderService::clean)
+				.filter(StringUtils::hasText)
+				.toList();
+		try {
+			return objectMapper.writeValueAsString(normalized);
+		}
+		catch (Exception ex) {
+			throw new BusinessException(ApiErrorCode.BAD_REQUEST, BAD_REQUEST);
+		}
+	}
+
 	private static boolean hasDraft(int draftVersion, Integer publishedVersion) {
 		return publishedVersion == null || draftVersion > publishedVersion;
 	}
@@ -233,6 +251,15 @@ public class CustomBuilderService {
 			throw new BusinessException(ApiErrorCode.BAD_REQUEST, BAD_REQUEST);
 		}
 		return label.trim();
+	}
+
+	private static String trim(String raw) {
+		return raw == null ? null : raw.trim();
+	}
+
+	private static String clean(String raw) {
+		String value = trim(raw);
+		return StringUtils.hasText(value) ? value : null;
 	}
 
 	private static void assertEtag(String current, String supplied) {
