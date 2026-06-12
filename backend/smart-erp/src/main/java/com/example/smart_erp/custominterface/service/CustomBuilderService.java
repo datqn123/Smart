@@ -1,6 +1,10 @@
 package com.example.smart_erp.custominterface.service;
 
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -36,10 +40,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 @Service
 public class CustomBuilderService {
 
+	private static final Pattern KEY_PATTERN = Pattern.compile("^[a-z0-9_]+$");
+	private static final Set<String> PAGE_TYPES = Set.of("record_list", "form", "table_detail");
+	private static final Set<String> ROLES = Set.of("Owner", "Admin", "Staff", "Warehouse");
 	private static final TypeReference<List<String>> LIST_OF_STRING = new TypeReference<>() {
 	};
 
 	private static final String BAD_REQUEST = "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại các trường được đánh dấu.";
+	private static final String CONFLICT = "Mã hoặc route đã được sử dụng. Vui lòng chọn giá trị khác.";
 	private static final String NOT_FOUND_PAGE = "Không tìm thấy giao diện tùy chỉnh.";
 	private static final String NOT_FOUND_ENTITY = "Không tìm thấy entity tùy chỉnh.";
 	private static final String STALE = "Cấu hình đã được cập nhật bởi người khác. Vui lòng tải lại trước khi lưu.";
@@ -76,6 +84,7 @@ public class CustomBuilderService {
 		assertEtag(page.etag(), suppliedEtag(request));
 		assertRequestIdentity(request, page);
 		String entityLabel = normalizedEntityLabel(request.entityLabel());
+		PageDraftMetadata menuPage = validatePageMetadata(request.menuPage(), page);
 
 		ValidationSummaryData draftSummary = validator.validateDraft(request.menuPage().key(), request.entityKey(),
 				request.fields(), request.views(), request.permissions());
@@ -85,12 +94,10 @@ public class CustomBuilderService {
 
 		int userId = StockReceiptAccessPolicy.parseUserId(jwt);
 		try {
-			CustomPageRequest menuPage = request.menuPage();
-			PageRow updatedPage = menuRepository.updateBuilderPageDraft(page, trim(menuPage.parentKey()),
-					trim(menuPage.label()), clean(menuPage.icon()), clean(menuPage.description()),
-					trim(menuPage.routePath()), trim(menuPage.pageType()), rolesJson(menuPage.visibilityRoles()),
-					clean(menuPage.entityPermission()), clean(menuPage.dataPermission()),
-					menuPage.sortOrder() == null ? page.sortOrder() : menuPage.sortOrder(), userId);
+			PageRow updatedPage = menuRepository.updateBuilderPageDraft(page, menuPage.parentKey(), menuPage.label(),
+					menuPage.icon(), menuPage.description(), menuPage.routePath(), menuPage.pageType(),
+					menuPage.rolesJson(), menuPage.entityPermission(), menuPage.dataPermission(), menuPage.sortOrder(),
+					userId);
 			entityRepository.replaceBundle(entity, entityLabel, request.entityDescription(), request.fields(),
 					request.views(), request.permissions(), userId);
 			EntityRow updatedEntity = findEntity(entity.key());
@@ -99,6 +106,21 @@ public class CustomBuilderService {
 		catch (OptimisticLockingFailureException ex) {
 			throw staleConflict();
 		}
+	}
+
+	private PageDraftMetadata validatePageMetadata(CustomPageRequest req, PageRow page) {
+		String parentKey = requireKey(req.parentKey(), "parentKey");
+		menuRepository.findFolder(parentKey)
+				.orElseThrow(() -> new BusinessException(ApiErrorCode.BAD_REQUEST, BAD_REQUEST,
+						Map.of("parentKey", "Danh mục menu cha không tồn tại.")));
+		String label = requireText(req.label(), "label", "Tên giao diện không được để trống.");
+		String routePath = requireRoute(req.routePath());
+		if (menuRepository.routeExists(routePath, page.id())) {
+			throw new BusinessException(ApiErrorCode.CONFLICT, CONFLICT, Map.of("routePath", "Route đã được sử dụng."));
+		}
+		return new PageDraftMetadata(parentKey, label, clean(req.icon()), clean(req.description()), routePath,
+				requirePageType(req.pageType()), rolesJson(req.visibilityRoles()), clean(req.entityPermission()),
+				clean(req.dataPermission()), req.sortOrder() == null ? page.sortOrder() : req.sortOrder());
 	}
 
 	@Transactional(readOnly = true)
@@ -216,16 +238,71 @@ public class CustomBuilderService {
 	}
 
 	private String rolesJson(List<String> roles) {
-		List<String> normalized = roles == null ? List.of() : roles.stream()
-				.map(CustomBuilderService::clean)
-				.filter(StringUtils::hasText)
-				.toList();
+		List<String> normalized = normalizeRoles(roles);
 		try {
 			return objectMapper.writeValueAsString(normalized);
 		}
 		catch (Exception ex) {
 			throw new BusinessException(ApiErrorCode.BAD_REQUEST, BAD_REQUEST);
 		}
+	}
+
+	private static List<String> normalizeRoles(List<String> roles) {
+		if (roles == null || roles.isEmpty()) {
+			return List.of("Owner", "Admin");
+		}
+		Set<String> out = new LinkedHashSet<>();
+		for (String role : roles) {
+			String value = clean(role);
+			if (!StringUtils.hasText(value) || !ROLES.contains(value)) {
+				throw new BusinessException(ApiErrorCode.BAD_REQUEST, BAD_REQUEST,
+						Map.of("visibilityRoles", "Role không hợp lệ."));
+			}
+			out.add(value);
+		}
+		return List.copyOf(out);
+	}
+
+	private static String requireKey(String raw, String field) {
+		String key = clean(raw);
+		if (!StringUtils.hasText(key)) {
+			throw new BusinessException(ApiErrorCode.BAD_REQUEST, BAD_REQUEST, Map.of(field, "Bắt buộc"));
+		}
+		if (!KEY_PATTERN.matcher(key).matches()) {
+			throw new BusinessException(ApiErrorCode.BAD_REQUEST, BAD_REQUEST,
+					Map.of(field, "Mã chỉ gồm chữ thường, số và dấu gạch dưới."));
+		}
+		return key;
+	}
+
+	private static String requireText(String raw, String field, String message) {
+		String value = clean(raw);
+		if (!StringUtils.hasText(value)) {
+			throw new BusinessException(ApiErrorCode.BAD_REQUEST, BAD_REQUEST, Map.of(field, message));
+		}
+		return value;
+	}
+
+	private static String requireRoute(String raw) {
+		String route = clean(raw);
+		if (!StringUtils.hasText(route)) {
+			throw new BusinessException(ApiErrorCode.BAD_REQUEST, BAD_REQUEST,
+					Map.of("routePath", "Route không được để trống."));
+		}
+		if (!route.startsWith("/custom/")) {
+			throw new BusinessException(ApiErrorCode.BAD_REQUEST, BAD_REQUEST,
+					Map.of("routePath", "Route phải bắt đầu bằng /custom/."));
+		}
+		return route;
+	}
+
+	private static String requirePageType(String raw) {
+		String value = clean(raw);
+		if (!PAGE_TYPES.contains(value)) {
+			throw new BusinessException(ApiErrorCode.BAD_REQUEST, BAD_REQUEST,
+					Map.of("pageType", "Loại giao diện không hợp lệ."));
+		}
+		return value;
 	}
 
 	private static boolean hasDraft(int draftVersion, Integer publishedVersion) {
@@ -270,5 +347,9 @@ public class CustomBuilderService {
 
 	private static BusinessException staleConflict() {
 		return new BusinessException(ApiErrorCode.CONFLICT, STALE);
+	}
+
+	private record PageDraftMetadata(String parentKey, String label, String icon, String description, String routePath,
+			String pageType, String rolesJson, String entityPermission, String dataPermission, int sortOrder) {
 	}
 }

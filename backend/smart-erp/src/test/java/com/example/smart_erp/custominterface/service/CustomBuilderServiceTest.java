@@ -34,6 +34,7 @@ import com.example.smart_erp.custominterface.repository.CustomEntityJdbcReposito
 import com.example.smart_erp.custominterface.repository.CustomEntityJdbcRepository.PermissionRow;
 import com.example.smart_erp.custominterface.repository.CustomEntityJdbcRepository.ViewRow;
 import com.example.smart_erp.custominterface.repository.CustomInterfaceJdbcRepository;
+import com.example.smart_erp.custominterface.repository.CustomInterfaceJdbcRepository.FolderRow;
 import com.example.smart_erp.custominterface.repository.CustomInterfaceJdbcRepository.PageRow;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -68,6 +69,8 @@ class CustomBuilderServiceTest {
 		var savedEntity = entityRow(2, null, "NeedsConfig", "entity-kiem_hang_entity-draft-2");
 
 		when(menuRepository.findPage(PAGE_KEY)).thenReturn(Optional.of(page));
+		when(menuRepository.findFolder("kiem_hang_moi")).thenReturn(Optional.of(folderRow("kiem_hang_moi")));
+		when(menuRepository.routeExists("/custom/kiem-hang-moi", page.id())).thenReturn(false);
 		when(entityRepository.findEntity(ENTITY_KEY)).thenReturn(Optional.of(currentEntity), Optional.of(savedEntity));
 		when(menuRepository.updateBuilderPageDraft(page, "kiem_hang_moi", "Kiểm hàng mới", "package-check",
 				"Màn hình kiểm hàng mới", "/custom/kiem-hang-moi", "table_detail", "[\"Admin\",\"Staff\"]",
@@ -108,6 +111,8 @@ class CustomBuilderServiceTest {
 		var entity = entityRow(1, null, "NeedsConfig", "entity-kiem_hang_entity-draft-1");
 
 		when(menuRepository.findPage(PAGE_KEY)).thenReturn(Optional.of(page));
+		when(menuRepository.findFolder("kiem_hang")).thenReturn(Optional.of(folderRow("kiem_hang")));
+		when(menuRepository.routeExists("/custom/kiem_hang_page", page.id())).thenReturn(false);
 		when(entityRepository.findEntity(ENTITY_KEY)).thenReturn(Optional.of(entity));
 		when(menuRepository.updateBuilderPageDraft(page, "kiem_hang", "Kiểm hàng", null, null,
 				"/custom/kiem_hang_page", "record_list", "[\"Owner\"]", null, null, 0, 7))
@@ -146,6 +151,125 @@ class CustomBuilderServiceTest {
 	}
 
 	@Test
+	void saveBundle_blankPageLabelThrowsBadRequestAndSkipsPersist() {
+		assertBadRequestDoesNotPersist(requestWithMenuPage(menuPageWithLabel("   ")));
+	}
+
+	@Test
+	void saveBundle_routeOutsideCustomPrefixThrowsBadRequestAndSkipsPersist() {
+		assertBadRequestDoesNotPersist(requestWithMenuPage(menuPageWithRoute("/inventory/checks")));
+	}
+
+	@Test
+	void saveBundle_duplicateRouteThrowsConflictAndSkipsPersist() {
+		var request = validRequest(PAGE_ETAG);
+		var page = pageRow();
+		var entity = entityRow(1, null, "NeedsConfig", "entity-kiem_hang_entity-draft-1");
+
+		when(menuRepository.findPage(PAGE_KEY)).thenReturn(Optional.of(page));
+		when(entityRepository.findEntity(ENTITY_KEY)).thenReturn(Optional.of(entity));
+		when(menuRepository.findFolder("kiem_hang")).thenReturn(Optional.of(folderRow("kiem_hang")));
+		when(menuRepository.routeExists("/custom/kiem_hang_page", page.id())).thenReturn(true);
+
+		Throwable thrown = catchThrowable(() -> service.saveBundle(PAGE_KEY, request, jwt()));
+
+		assertThat(thrown).isInstanceOf(BusinessException.class);
+		assertThat(((BusinessException) thrown).getCode()).isEqualTo(ApiErrorCode.CONFLICT);
+		verify(menuRepository, never()).updateBuilderPageDraft(any(), any(), any(), any(), any(), any(), any(), any(),
+				any(), any(), anyInt(), eq(7));
+		verify(entityRepository, never()).replaceBundle(any(), any(), any(), any(), any(), any(), any());
+	}
+
+	@Test
+	void saveBundle_invalidPageTypeThrowsBadRequestAndSkipsPersist() {
+		assertBadRequestDoesNotPersist(requestWithMenuPage(menuPageWithPageType("chart")));
+	}
+
+	@Test
+	void saveBundle_missingParentFolderThrowsBadRequestAndSkipsPersist() {
+		var request = validRequest(PAGE_ETAG);
+		var page = pageRow();
+		var entity = entityRow(1, null, "NeedsConfig", "entity-kiem_hang_entity-draft-1");
+
+		when(menuRepository.findPage(PAGE_KEY)).thenReturn(Optional.of(page));
+		when(entityRepository.findEntity(ENTITY_KEY)).thenReturn(Optional.of(entity));
+		when(menuRepository.findFolder("kiem_hang")).thenReturn(Optional.empty());
+
+		Throwable thrown = catchThrowable(() -> service.saveBundle(PAGE_KEY, request, jwt()));
+
+		assertThat(thrown).isInstanceOf(BusinessException.class);
+		assertThat(((BusinessException) thrown).getCode()).isEqualTo(ApiErrorCode.BAD_REQUEST);
+		verify(menuRepository, never()).updateBuilderPageDraft(any(), any(), any(), any(), any(), any(), any(), any(),
+				any(), any(), anyInt(), eq(7));
+		verify(entityRepository, never()).replaceBundle(any(), any(), any(), any(), any(), any(), any());
+	}
+
+	@Test
+	void saveBundle_invalidVisibilityRoleThrowsBadRequestAndSkipsPersist() {
+		assertBadRequestDoesNotPersist(requestWithMenuPage(menuPageWithVisibilityRoles(List.of("Admin", "Guest"))));
+	}
+
+	@Test
+	void saveBundle_emptyVisibilityRolesDefaultToOwnerAdminWhenSaving() {
+		var request = requestWithMenuPage(menuPageWithVisibilityRoles(List.of()));
+		var page = pageRow();
+		var updatedPage = new PageRow(1L, PAGE_KEY, "kiem_hang", "Kiểm hàng", null, null, "/custom/" + PAGE_KEY,
+				ENTITY_KEY, "record_list", "NeedsConfig", 0, "[\"Owner\",\"Admin\"]", null, null, 2, null,
+				"page-kiem_hang_page-draft-2", null, null);
+		var currentEntity = entityRow(1, null, "NeedsConfig", "entity-kiem_hang_entity-draft-1");
+		var savedEntity = entityRow(2, null, "NeedsConfig", "entity-kiem_hang_entity-draft-2");
+
+		when(menuRepository.findPage(PAGE_KEY)).thenReturn(Optional.of(page));
+		when(menuRepository.findFolder("kiem_hang")).thenReturn(Optional.of(folderRow("kiem_hang")));
+		when(menuRepository.routeExists("/custom/kiem_hang_page", page.id())).thenReturn(false);
+		when(entityRepository.findEntity(ENTITY_KEY)).thenReturn(Optional.of(currentEntity), Optional.of(savedEntity));
+		when(menuRepository.updateBuilderPageDraft(page, "kiem_hang", "Kiểm hàng", null, null,
+				"/custom/kiem_hang_page", "record_list", "[\"Owner\",\"Admin\"]", null, null, 0, 7))
+				.thenReturn(updatedPage);
+		when(entityRepository.replaceBundle(eq(currentEntity), eq("Kiểm hàng"), eq("Desc"), eq(request.fields()),
+				eq(request.views()), eq(request.permissions()), eq(7))).thenReturn(savedEntity);
+		when(entityRepository.findFields(ENTITY_KEY)).thenReturn(fieldRows());
+		when(entityRepository.findView(ENTITY_KEY)).thenReturn(Optional.of(viewRow(request.views())));
+		when(entityRepository.findPermissions(ENTITY_KEY)).thenReturn(permissionRow());
+
+		var saved = service.saveBundle(PAGE_KEY, request, jwt());
+
+		assertThat(saved.menuPage().roles()).containsExactly("Owner", "Admin");
+		verify(menuRepository).updateBuilderPageDraft(page, "kiem_hang", "Kiểm hàng", null, null,
+				"/custom/kiem_hang_page", "record_list", "[\"Owner\",\"Admin\"]", null, null, 0, 7);
+	}
+
+	@Test
+	void saveBundle_nullVisibilityRolesDefaultToOwnerAdminWhenSaving() {
+		var request = requestWithMenuPage(menuPageWithVisibilityRoles(null));
+		var page = pageRow();
+		var updatedPage = new PageRow(1L, PAGE_KEY, "kiem_hang", "Kiểm hàng", null, null, "/custom/" + PAGE_KEY,
+				ENTITY_KEY, "record_list", "NeedsConfig", 0, "[\"Owner\",\"Admin\"]", null, null, 2, null,
+				"page-kiem_hang_page-draft-2", null, null);
+		var currentEntity = entityRow(1, null, "NeedsConfig", "entity-kiem_hang_entity-draft-1");
+		var savedEntity = entityRow(2, null, "NeedsConfig", "entity-kiem_hang_entity-draft-2");
+
+		when(menuRepository.findPage(PAGE_KEY)).thenReturn(Optional.of(page));
+		when(menuRepository.findFolder("kiem_hang")).thenReturn(Optional.of(folderRow("kiem_hang")));
+		when(menuRepository.routeExists("/custom/kiem_hang_page", page.id())).thenReturn(false);
+		when(entityRepository.findEntity(ENTITY_KEY)).thenReturn(Optional.of(currentEntity), Optional.of(savedEntity));
+		when(menuRepository.updateBuilderPageDraft(page, "kiem_hang", "Kiểm hàng", null, null,
+				"/custom/kiem_hang_page", "record_list", "[\"Owner\",\"Admin\"]", null, null, 0, 7))
+				.thenReturn(updatedPage);
+		when(entityRepository.replaceBundle(eq(currentEntity), eq("Kiểm hàng"), eq("Desc"), eq(request.fields()),
+				eq(request.views()), eq(request.permissions()), eq(7))).thenReturn(savedEntity);
+		when(entityRepository.findFields(ENTITY_KEY)).thenReturn(fieldRows());
+		when(entityRepository.findView(ENTITY_KEY)).thenReturn(Optional.of(viewRow(request.views())));
+		when(entityRepository.findPermissions(ENTITY_KEY)).thenReturn(permissionRow());
+
+		var saved = service.saveBundle(PAGE_KEY, request, jwt());
+
+		assertThat(saved.menuPage().roles()).containsExactly("Owner", "Admin");
+		verify(menuRepository).updateBuilderPageDraft(page, "kiem_hang", "Kiểm hàng", null, null,
+				"/custom/kiem_hang_page", "record_list", "[\"Owner\",\"Admin\"]", null, null, 0, 7);
+	}
+
+	@Test
 	void saveBundle_invalidDraftReturnsSummaryAndSkipsPersist() {
 		var request = requestWithFields(List.of());
 		var page = pageRow();
@@ -153,6 +277,8 @@ class CustomBuilderServiceTest {
 
 		when(menuRepository.findPage(PAGE_KEY)).thenReturn(Optional.of(page));
 		when(entityRepository.findEntity(ENTITY_KEY)).thenReturn(Optional.of(entity));
+		when(menuRepository.findFolder("kiem_hang")).thenReturn(Optional.of(folderRow("kiem_hang")));
+		when(menuRepository.routeExists("/custom/kiem_hang_page", page.id())).thenReturn(false);
 		when(entityRepository.findFields(ENTITY_KEY)).thenReturn(fieldRows());
 		when(entityRepository.findView(ENTITY_KEY)).thenReturn(Optional.of(viewRow(validRequest(PAGE_ETAG).views())));
 		when(entityRepository.findPermissions(ENTITY_KEY)).thenReturn(permissionRow());
@@ -248,6 +374,26 @@ class CustomBuilderServiceTest {
 				entityKey, "record_list", List.of("Owner"), null, null, 0, PAGE_ETAG);
 	}
 
+	private CustomPageRequest menuPageWithLabel(String label) {
+		return new CustomPageRequest("kiem_hang", PAGE_KEY, label, null, null, "/custom/" + PAGE_KEY, ENTITY_KEY,
+				"record_list", List.of("Owner"), null, null, 0, PAGE_ETAG);
+	}
+
+	private CustomPageRequest menuPageWithRoute(String routePath) {
+		return new CustomPageRequest("kiem_hang", PAGE_KEY, "Kiểm hàng", null, null, routePath, ENTITY_KEY,
+				"record_list", List.of("Owner"), null, null, 0, PAGE_ETAG);
+	}
+
+	private CustomPageRequest menuPageWithPageType(String pageType) {
+		return new CustomPageRequest("kiem_hang", PAGE_KEY, "Kiểm hàng", null, null, "/custom/" + PAGE_KEY,
+				ENTITY_KEY, pageType, List.of("Owner"), null, null, 0, PAGE_ETAG);
+	}
+
+	private CustomPageRequest menuPageWithVisibilityRoles(List<String> roles) {
+		return new CustomPageRequest("kiem_hang", PAGE_KEY, "Kiểm hàng", null, null, "/custom/" + PAGE_KEY,
+				ENTITY_KEY, "record_list", roles, null, null, 0, PAGE_ETAG);
+	}
+
 	private CustomPageRequest builderMenuPage(String etag) {
 		return new CustomPageRequest("  kiem_hang_moi  ", PAGE_KEY, "  Kiểm hàng mới  ", "  package-check  ",
 				"  Màn hình kiểm hàng mới  ", "  /custom/kiem-hang-moi  ", ENTITY_KEY, "  table_detail  ",
@@ -284,6 +430,11 @@ class CustomBuilderServiceTest {
 				"Màn hình kiểm hàng mới", "/custom/kiem-hang-moi", ENTITY_KEY, "table_detail", "NeedsConfig", 12,
 				"[\"Admin\",\"Staff\"]", "can_manage_custom_builder", "can_view_inventory", 2, null,
 				"page-kiem_hang_page-draft-2", null, null);
+	}
+
+	private FolderRow folderRow(String key) {
+		return new FolderRow(2L, key, "Kiểm hàng", null, null, "Draft", 0, "[\"Owner\"]", 1, null,
+				"folder-" + key + "-draft-1", null, null);
 	}
 
 	private EntityRow entityRow(int draftVersion, Integer publishedVersion, String status, String etag) {
