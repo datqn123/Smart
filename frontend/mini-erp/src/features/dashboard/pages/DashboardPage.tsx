@@ -74,20 +74,27 @@ function statusLabel(s: string) {
   return map[s] ?? s
 }
 
-/** Màu chấm trạng thái cho style dot + text (Linear-style). */
-function statusDot(s: string) {
-  if (s === "Pending") return "bg-amber-500"
-  if (s === "Processing") return "bg-indigo-500"
-  if (s === "Shipped" || s === "Partial") return "bg-blue-500"
-  if (s === "Delivered" || s === "Completed") return "bg-emerald-500"
-  if (s === "Cancelled") return "bg-red-500"
-  return "bg-slate-400"
+/** Cặp class nền + chữ cho pill trạng thái (tint 50/700). */
+function statusBadge(s: string) {
+  if (s === "Pending") return "bg-amber-50 text-amber-700"
+  if (s === "Processing") return "bg-indigo-50 text-indigo-700"
+  if (s === "Shipped" || s === "Partial") return "bg-sky-50 text-sky-700"
+  if (s === "Delivered" || s === "Completed") return "bg-emerald-50 text-emerald-700"
+  if (s === "Cancelled") return "bg-red-50 text-red-700"
+  return "bg-slate-100 text-slate-600"
 }
 
 function channelLabel(c: string) {
   if (c === "Retail") return "Lẻ"
   if (c === "Wholesale") return "Sỉ"
   return "Trả hàng"
+}
+
+/** Tint tag kênh — khớp màu channel bars (Lẻ indigo, Sỉ emerald). */
+function channelTag(c: string) {
+  if (c === "Retail") return "bg-indigo-50 text-indigo-700"
+  if (c === "Wholesale") return "bg-emerald-50 text-emerald-700"
+  return "bg-red-50 text-red-700"
 }
 
 /** Roles được xem dữ liệu tài chính (doanh thu, giá trị kho). */
@@ -536,7 +543,9 @@ export function DashboardPage() {
                         <span className="text-sm font-mono font-semibold text-slate-900">
                           {order.orderCode}
                         </span>
-                        <span className="text-[10px] text-slate-500 bg-slate-100 rounded px-1.5 shrink-0">
+                        <span
+                          className={`text-[10px] font-medium rounded px-1.5 shrink-0 ${channelTag(order.orderChannel)}`}
+                        >
                           {channelLabel(order.orderChannel)}
                         </span>
                       </div>
@@ -546,8 +555,9 @@ export function DashboardPage() {
                       <p className="text-sm font-semibold text-slate-900 tabular-nums">
                         {formatCurrency(Number(order.finalAmount))}
                       </p>
-                      <span className="inline-flex items-center gap-1.5 text-xs text-slate-600">
-                        <span className={`h-1.5 w-1.5 rounded-full ${statusDot(order.status)}`} />
+                      <span
+                        className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full ${statusBadge(order.status)}`}
+                      >
                         {statusLabel(order.status)}
                       </span>
                     </div>
