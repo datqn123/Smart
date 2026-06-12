@@ -28,6 +28,8 @@ import {
   ArrowDownLeft,
   ArrowUpLeft,
   Crown,
+  Banknote,
+  Receipt,
 } from "lucide-react"
 import { usePageTitle } from "@/context/PageTitleContext"
 import { useAuthStore } from "@/features/auth/store/useAuthStore"
@@ -227,7 +229,12 @@ export function DashboardPage() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {/* Doanh thu hôm nay */}
             <div className="bg-white rounded-lg border border-slate-200 shadow-xs p-5">
-              <p className="text-[13px] font-medium text-slate-500">Doanh thu hôm nay</p>
+              <div className="flex items-start justify-between">
+                <p className="text-[13px] font-medium text-slate-500">Doanh thu hôm nay</p>
+                <div className="h-8 w-8 rounded-md bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <Banknote className="h-4 w-4" />
+                </div>
+              </div>
               <div className="h-9 mt-2 flex items-center">
                 {ordersLoading ? (
                   <Loader2 className="h-5 w-5 animate-spin text-slate-200" />
@@ -266,7 +273,12 @@ export function DashboardPage() {
 
             {/* Số đơn hôm nay */}
             <div className="bg-white rounded-lg border border-slate-200 shadow-xs p-5">
-              <p className="text-[13px] font-medium text-slate-500">Số đơn hôm nay</p>
+              <div className="flex items-start justify-between">
+                <p className="text-[13px] font-medium text-slate-500">Số đơn hôm nay</p>
+                <div className="h-8 w-8 rounded-md bg-sky-50 text-sky-600 flex items-center justify-center">
+                  <ShoppingCart className="h-4 w-4" />
+                </div>
+              </div>
               <div className="h-9 mt-2 flex items-center">
                 {ordersLoading ? (
                   <Loader2 className="h-5 w-5 animate-spin text-slate-200" />
@@ -281,7 +293,12 @@ export function DashboardPage() {
 
             {/* Giá trị đơn trung bình */}
             <div className="bg-white rounded-lg border border-slate-200 shadow-xs p-5">
-              <p className="text-[13px] font-medium text-slate-500">Giá trị đơn TB</p>
+              <div className="flex items-start justify-between">
+                <p className="text-[13px] font-medium text-slate-500">Giá trị đơn TB</p>
+                <div className="h-8 w-8 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                  <Receipt className="h-4 w-4" />
+                </div>
+              </div>
               <div className="h-9 mt-2 flex items-center">
                 {ordersLoading ? (
                   <Loader2 className="h-5 w-5 animate-spin text-slate-200" />
