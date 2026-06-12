@@ -74,10 +74,25 @@ public class CustomMetadataValidator {
 		}
 		if ("reference".equals(field.type())) {
 			JsonNode reference = field.reference();
-			String refTarget = reference == null ? null : reference.path("refEntityKey").asText(null);
-			if (!REF_TARGETS.contains(refTarget)) {
-				errors.add(new ValidationSummaryData.Item("data", field.label() + " có reference target không hợp lệ.",
+			if (reference == null || !reference.isObject()) {
+				errors.add(new ValidationSummaryData.Item("data", field.label() + " cần reference dạng object.",
 						field.fieldKey()));
+			} else {
+				JsonNode refTypeNode = reference.get("refType");
+				JsonNode refTargetNode = reference.get("refEntityKey");
+				String refType = refTypeNode == null ? null : refTypeNode.asText();
+				String refTarget = refTargetNode == null ? null : refTargetNode.asText();
+				if (!isTextualNonBlank(refTypeNode) || !"core".equals(refType)) {
+					errors.add(new ValidationSummaryData.Item("data", field.label() + " có refType không hợp lệ.",
+							field.fieldKey()));
+				}
+				if (!isTextualNonBlank(refTargetNode)) {
+					errors.add(new ValidationSummaryData.Item("data", field.label() + " có refEntityKey không hợp lệ.",
+							field.fieldKey()));
+				} else if ("core".equals(refType) && !REF_TARGETS.contains(refTarget)) {
+					errors.add(new ValidationSummaryData.Item("data",
+							field.label() + " có reference target không hợp lệ.", field.fieldKey()));
+				}
 			}
 		}
 		if ((field.filterable() || field.sortable()) && !"Archived".equals(field.status())) {
@@ -102,7 +117,7 @@ public class CustomMetadataValidator {
 		}
 		if (view != null && view.formSections() != null && view.formSections().isArray()) {
 			for (JsonNode section : view.formSections()) {
-				collectFormFieldKeys(section, formFieldKeys);
+				validateFormSection(section, formFieldKeys, fieldKeys, errors);
 			}
 		}
 		for (CustomFieldRequest field : activeFields) {
@@ -114,17 +129,47 @@ public class CustomMetadataValidator {
 	}
 
 	private void validateListColumn(JsonNode column, Set<String> fieldKeys, List<ValidationSummaryData.Item> errors) {
-		String fieldKey = column.path("fieldKey").asText(null);
+		if (column == null || !column.isObject()) {
+			errors.add(new ValidationSummaryData.Item("view", "Cột trong list view cần cấu hình dạng object."));
+			return;
+		}
+		JsonNode fieldKeyNode = column.get("fieldKey");
+		if (!isTextualNonBlank(fieldKeyNode)) {
+			errors.add(new ValidationSummaryData.Item("view",
+					"Cột trong list view cần fieldKey dạng text không rỗng."));
+			return;
+		}
+		String fieldKey = fieldKeyNode.asText();
 		if (!fieldKeys.contains(fieldKey)) {
 			errors.add(new ValidationSummaryData.Item("view",
 					"Cột " + fieldKey + " đang tham chiếu field không tồn tại.", fieldKey));
 		}
 	}
 
-	private void collectFormFieldKeys(JsonNode section, Set<String> formFieldKeys) {
-		JsonNode keys = section.path("fieldKeys");
-		if (keys.isArray()) {
-			keys.forEach(key -> formFieldKeys.add(key.asText()));
+	private void validateFormSection(JsonNode section, Set<String> formFieldKeys, Set<String> fieldKeys,
+			List<ValidationSummaryData.Item> errors) {
+		if (section == null || !section.isObject()) {
+			errors.add(new ValidationSummaryData.Item("view", "Form section cần cấu hình dạng object."));
+			return;
+		}
+		JsonNode keys = section.get("fieldKeys");
+		if (keys == null || !keys.isArray()) {
+			errors.add(new ValidationSummaryData.Item("view", "Form section cần fieldKeys dạng array."));
+			return;
+		}
+		for (JsonNode key : keys) {
+			if (!isTextualNonBlank(key)) {
+				errors.add(new ValidationSummaryData.Item("view",
+						"Field trong form section cần fieldKey dạng text không rỗng."));
+				continue;
+			}
+			String fieldKey = key.asText();
+			if (!fieldKeys.contains(fieldKey)) {
+				errors.add(new ValidationSummaryData.Item("view",
+						"Field " + fieldKey + " trong form không tồn tại.", fieldKey));
+				continue;
+			}
+			formFieldKeys.add(fieldKey);
 		}
 	}
 
@@ -155,5 +200,9 @@ public class CustomMetadataValidator {
 		if (!StringUtils.hasText(value) || !KEY_PATTERN.matcher(value).matches()) {
 			errors.add(new ValidationSummaryData.Item(section, label + " chỉ gồm chữ thường, số và underscore.", value));
 		}
+	}
+
+	private boolean isTextualNonBlank(JsonNode node) {
+		return node != null && node.isTextual() && StringUtils.hasText(node.asText());
 	}
 }

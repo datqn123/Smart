@@ -87,6 +87,46 @@ class CustomMetadataValidatorTest {
 	}
 
 	@Test
+	void validateDraft_acceptsAllowedCoreReference() {
+		var summary = validator.validateDraft("custom_page", "custom_entity",
+				List.of(referenceField(mapper.createObjectNode().put("refType", "core").put("refEntityKey", "products"))),
+				validView("ref_key"), permissions());
+
+		assertThat(summary.valid()).isTrue();
+		assertThat(summary.errors()).isEmpty();
+	}
+
+	@Test
+	void validateDraft_rejectsReferenceMissingRefType() {
+		var summary = validator.validateDraft("custom_page", "custom_entity",
+				List.of(referenceField(mapper.createObjectNode().put("refEntityKey", "products"))), validView("ref_key"),
+				permissions());
+
+		assertThat(summary.valid()).isFalse();
+		assertThat(summary.errors()).anySatisfy(error -> assertThat(error.message()).contains("refType"));
+	}
+
+	@Test
+	void validateDraft_rejectsReferenceWrongRefType() {
+		var summary = validator.validateDraft("custom_page", "custom_entity",
+				List.of(referenceField(mapper.createObjectNode().put("refType", "custom").put("refEntityKey", "products"))),
+				validView("ref_key"), permissions());
+
+		assertThat(summary.valid()).isFalse();
+		assertThat(summary.errors()).anySatisfy(error -> assertThat(error.message()).contains("refType"));
+	}
+
+	@Test
+	void validateDraft_rejectsNonObjectReference() {
+		var summary = validator.validateDraft("custom_page", "custom_entity",
+				List.of(referenceField(mapper.getNodeFactory().textNode("products"))), validView("ref_key"),
+				permissions());
+
+		assertThat(summary.valid()).isFalse();
+		assertThat(summary.errors()).anySatisfy(error -> assertThat(error.message()).contains("object"));
+	}
+
+	@Test
 	void validateDraft_rejectsObjectShapedListColumns() {
 		var columns = mapper.createObjectNode().put("fieldKey", "name").put("label", "Tên");
 		var sections = mapper.createArrayNode();
@@ -178,6 +218,59 @@ class CustomMetadataValidatorTest {
 	}
 
 	@Test
+	void validateDraft_rejectsMalformedListColumnEntry() {
+		var columns = mapper.createArrayNode();
+		columns.add("name");
+
+		var summary = validator.validateDraft("custom_page", "custom_entity",
+				List.of(field("name", "Tên", "text", false)),
+				new CustomViewRequest(columns, mapper.createArrayNode(), "name asc", formSections("name"), "desktop"),
+				permissions());
+
+		assertThat(summary.valid()).isFalse();
+		assertThat(summary.errors()).anySatisfy(error -> assertThat(error.message()).contains("list view").contains("object"));
+	}
+
+	@Test
+	void validateDraft_rejectsMalformedFormSectionAndNonArrayFieldKeys() {
+		var malformedSections = mapper.createArrayNode();
+		malformedSections.add("main");
+		var malformedSectionSummary = validator.validateDraft("custom_page", "custom_entity",
+				List.of(field("name", "Tên", "text", false)),
+				new CustomViewRequest(listColumns("name"), mapper.createArrayNode(), "name asc", malformedSections,
+						"desktop"),
+				permissions());
+
+		var nonArrayFieldKeysSections = mapper.createArrayNode();
+		nonArrayFieldKeysSections.addObject().put("id", "main").put("fieldKeys", "name");
+		var nonArrayFieldKeysSummary = validator.validateDraft("custom_page", "custom_entity",
+				List.of(field("name", "Tên", "text", false)),
+				new CustomViewRequest(listColumns("name"), mapper.createArrayNode(), "name asc", nonArrayFieldKeysSections,
+						"desktop"),
+				permissions());
+
+		assertThat(malformedSectionSummary.valid()).isFalse();
+		assertThat(malformedSectionSummary.errors())
+				.anySatisfy(error -> assertThat(error.message()).contains("Form section").contains("object"));
+		assertThat(nonArrayFieldKeysSummary.valid()).isFalse();
+		assertThat(nonArrayFieldKeysSummary.errors())
+				.anySatisfy(error -> assertThat(error.message()).contains("fieldKeys").contains("array"));
+	}
+
+	@Test
+	void validateDraft_rejectsUnknownFormFieldKey() {
+		var summary = validator.validateDraft("custom_page", "custom_entity",
+				List.of(field("name", "Tên", "text", false)),
+				new CustomViewRequest(listColumns("name"), mapper.createArrayNode(), "name asc",
+						formSections("missing_field"), "desktop"),
+				permissions());
+
+		assertThat(summary.valid()).isFalse();
+		assertThat(summary.errors())
+				.anySatisfy(error -> assertThat(error.message()).contains("missing_field").contains("form"));
+	}
+
+	@Test
 	void validateDraft_rejectsRequiredActiveFieldMissingFromForm() {
 		var summary = validator.validateDraft("custom_page", "custom_entity",
 				List.of(field("name", "Tên", "text", true), field("note", "Ghi chú", "text", false)),
@@ -233,6 +326,10 @@ class CustomMetadataValidatorTest {
 			JsonNode reference, boolean filterable, boolean sortable, String status) {
 		return new CustomFieldRequest(null, label, key, type, required, filterable, sortable, true, 0, null, options,
 				reference, mapper.createObjectNode(), null, false, false, status);
+	}
+
+	private CustomFieldRequest referenceField(JsonNode reference) {
+		return field("ref_key", "Ref", "reference", false, mapper.createArrayNode(), reference, false, false, "Active");
 	}
 
 	private CustomViewRequest validView(String... fieldKeys) {
