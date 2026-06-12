@@ -6,17 +6,24 @@ tang I/O cuoi la vat the than. Khong sua dong code production nao.
 Doi model = doi LLM_BASE_URL/LLM_API_KEY/LLM_MODEL (env de len .env);
 dieu kien: endpoint ho tro native tool-calling (tool_choice ep buoc).
 """
+from pathlib import Path
+
 import pytest
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_AI_PYTHON_DIR = Path(__file__).resolve().parent.parent.parent  # tests/eval -> ai_python
 
 
 class EvalSettings(BaseSettings):
     """Chi cac truong LLM — KHONG dung app Settings vi no bat buoc
-    database_url_ro (eval khong cham DB). Default trung voi Settings."""
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8",
+    database_url_ro (eval khong cham DB). Default trung voi Settings.
+    env_file neo theo vi tri file nay de chay duoc tu bat ky CWD nao."""
+    model_config = SettingsConfigDict(env_file=str(_AI_PYTHON_DIR / ".env"),
+                                      env_file_encoding="utf-8",
                                       extra="ignore", case_sensitive=False)
     llm_base_url: str = ""
     llm_api_key: str = ""
+    # SYNC: default 3 truong duoi giu trung app/config/settings.py Settings
     llm_model: str = "Qwen3.6-27B"
     llm_temperature: float = 0.2          # tool thuong (nhu make_llm)
     llm_sm_temperature: float = 0.0       # SM deterministic (nhu make_llm)
@@ -33,6 +40,8 @@ class FakeExecutor:
         self.captured_sql: str | None = None
 
     def run(self, sql: str, *, row_limit: int = 100):
+        if not sql.strip().lower().startswith("select"):
+            raise AssertionError("FakeExecutor nhan non-SELECT — guard da khong chan")
         self.captured_sql = sql
         return {"columns": ["name", "total"],
                 "rows": [{"name": "X", "total": 1}]}
