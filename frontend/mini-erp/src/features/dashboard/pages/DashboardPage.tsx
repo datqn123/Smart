@@ -153,6 +153,7 @@ export function DashboardPage() {
     sub: string | null
     subWarn: boolean
     icon: React.ElementType
+    chip: string
     onClick: () => void
     loading: boolean
     show: boolean
@@ -163,6 +164,7 @@ export function DashboardPage() {
       sub: invData ? `${invData.lowStockCount} mặt hàng tồn thấp` : null,
       subWarn: (invData?.lowStockCount ?? 0) > 0,
       icon: Package,
+      chip: "bg-amber-50 text-amber-600",
       onClick: () => navigate("/inventory/stock"),
       loading: dashboardLoading,
       show: true,
@@ -173,6 +175,7 @@ export function DashboardPage() {
       sub: invData ? `/ ${invData.allOrdersTotal} tổng đơn hàng` : null,
       subWarn: false,
       icon: ShoppingCart,
+      chip: "bg-sky-50 text-sky-600",
       onClick: () => navigate("/orders/wholesale"),
       loading: dashboardLoading,
       show: true,
@@ -188,6 +191,7 @@ export function DashboardPage() {
         : null,
       subWarn: (approvalData?.summary.totalPending ?? 0) > 0,
       icon: ClipboardCheck,
+      chip: "bg-violet-50 text-violet-600",
       onClick: () => navigate("/approvals/pending"),
       loading: dashboardLoading,
       show: true,
@@ -198,6 +202,7 @@ export function DashboardPage() {
       sub: invData ? `${invData.expiringSoonCount} sản phẩm sắp hết hạn` : null,
       subWarn: (invData?.expiringSoonCount ?? 0) > 0,
       icon: TrendingUp,
+      chip: "bg-emerald-50 text-emerald-600",
       onClick: () => navigate("/inventory/stock"),
       loading: dashboardLoading,
       show: canSeeFinancials,
@@ -325,9 +330,11 @@ export function DashboardPage() {
               onClick={kpi.onClick}
               className="bg-white rounded-lg border border-slate-200 shadow-xs p-5 cursor-pointer hover:border-slate-300 transition-colors duration-150 flex flex-col"
             >
-              <div className="flex items-center gap-2">
-                <kpi.icon className="h-4 w-4 text-slate-400" />
+              <div className="flex items-start justify-between">
                 <p className="text-[13px] font-medium text-slate-500">{kpi.title}</p>
+                <div className={`h-8 w-8 rounded-md flex items-center justify-center shrink-0 ${kpi.chip}`}>
+                  <kpi.icon className="h-4 w-4" />
+                </div>
               </div>
               <div className="h-10 mt-3 flex items-center">
                 {kpi.loading ? (
