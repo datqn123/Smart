@@ -121,7 +121,11 @@ Nút giữ trắng + border slate; hover giữ nguyên.
 - Không quay lại gradient/corner accent của bản Enterprise Classic.
 - Không đụng trang khác.
 
-## 11. Kiểm chứng
+## 11. Amendment (2026-06-12, sau visual QA): badge tròn màu đặc
+
+Mức `-50` quá nhạt với user. Card giữ nền trắng; icon chip trên 7 card đầu (3 tài chính + 4 KPI) đổi thành badge tròn màu đặc: `h-10 w-10 rounded-full bg-{hue}-500 text-white`, icon `h-5 w-5`.
+
+## 12. Kiểm chứng
 
 - `tsc --noEmit` và `npm run build` pass.
 - Xem trực quan: 7 card có chip màu đúng hue; status pill đúng map; tag kênh khớp màu channel bars; crown vàng; chart line dày hơn + fill đậm hơn.
