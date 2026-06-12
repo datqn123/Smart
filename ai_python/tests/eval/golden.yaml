@@ -1,0 +1,252 @@
+# Golden set — cau hoi vang + barem cham bang may.
+# QUY UOC BAREM:
+# - Moi phep so (sql_contains/sql_not_contains/sql_regex/sql_not_regex) chay tren SQL
+#   DA CHUAN HOA: lowercase + moi run whitespace thanh 1 dau cach.
+#   => barem viet toan chu thuong, khong xuong dong.
+# - sm_tool: tool SM phai chon; voi control action (finish/request_clarification)
+#   so voi decision.action.
+# - sm_require_contains: substring phai co trong require SM gui tool
+#   (= resolved_require hoac raw_require), so lowercase.
+# - history: cac luot truoc [{user, answer}] — dua thang vao memory_context["turns"].
+# - Moi bug production moi = mot case vinh vien moi (luat trong spec).
+# - Entity trong cau hoi/history da kiem chung ton tai tren DB that 2026-06-13
+#   (Neptuna chu khong phai Neptune; khach Bui Thi Huong).
+
+# ===== Absence (LEFT JOIN / NOT EXISTS) =====
+
+- id: products-e-left-join          # ★ bug goc: 6 few-shot INNER JOIN keo nguoc rule
+  tags: [absence, products]
+  history: []
+  require: "Sản phẩm nào đang ế nhất?"
+  expect:
+    sm_tool: sql_execute
+    sql_contains: ["left join orderdetails", "coalesce"]
+    sql_not_regex: '(?<!left )join orderdetails'
+
+- id: products-chua-ai-mua
+  tags: [absence, products]
+  history: []
+  require: "Liệt kê các sản phẩm chưa ai mua"
+  expect:
+    sm_tool: sql_execute
+    sql_contains: ["orderdetails"]
+    sql_regex: 'left join|not exists|not in'
+    sql_not_regex: '(?<!left )join orderdetails'
+
+- id: khach-chua-mua-thang-nay
+  tags: [absence, sales]
+  history: []
+  require: "Khách hàng nào chưa mua hàng trong tháng này?"
+  expect:
+    sm_tool: sql_execute
+    sql_contains: ["customers"]
+    sql_regex: 'left join|not exists|not in'
+
+- id: ncc-chua-nhap-thang-nay
+  tags: [absence, receiving]
+  history: []
+  require: "Nhà cung cấp nào chưa có phiếu nhập kho nào trong tháng này?"
+  expect:
+    sm_tool: sql_execute
+    sql_contains: ["suppliers"]
+    sql_regex: 'left join|not exists|not in'
+
+- id: khach-chua-quay-lai
+  tags: [absence, customers]
+  history: []
+  require: "Khách nào 3 tháng nay chưa quay lại mua hàng?"
+  expect:
+    sm_tool: sql_execute
+    sql_contains: ["customers"]
+    sql_regex: 'left join|not exists|not in'
+
+# ===== Diacritics / so khop ten tieng Viet =====
+
+- id: dau-an-tong-nhap              # ★ bug goc: ILIKE '%dau an%' khop 0 dong
+  tags: [diacritics, receiving]
+  history: []
+  require: "Tổng nhập kho dầu ăn là bao nhiêu?"
+  expect:
+    sm_tool: sql_execute
+    sql_contains: ["dầu ăn", "stockreceiptdetails"]
+    sql_not_contains: ["%dau an%"]
+
+- id: tim-sp-nuoc-mam
+  tags: [diacritics, products]
+  history: []
+  require: "Tìm các sản phẩm nước mắm"
+  expect:
+    sm_tool: sql_execute
+    sql_contains: ["products", "nước mắm"]
+    sql_not_contains: ["%nuoc mam%"]
+
+- id: khach-ten-co-dau
+  tags: [diacritics, customers]
+  history: []
+  require: "Khách hàng tên Hương đã mua bao nhiêu đơn hàng?"
+  expect:
+    sm_tool: sql_execute
+    sql_contains: ["hương"]
+    sql_not_contains: ["%huong%"]
+
+# ===== Chu the theo ngu canh (history) =====
+
+- id: dau-an-follow-up              # ★ bug goc: SM khong gan chu the "dau an" cho cau noi tiep
+  tags: [context, receiving]
+  history:
+    - user: "Tổng nhập kho dầu ăn tháng này là bao nhiêu?"
+      answer: "Tháng này đã nhập tổng cộng 120 thùng dầu ăn (Dầu ăn Neptuna 1L: 80, Dầu ăn Simply 1L: 40)."
+  require: "Thế còn xuất bán thì sao?"
+  expect:
+    sm_tool: sql_execute
+    sm_require_contains: ["dầu ăn"]
+    sql_contains: ["dầu ăn"]
+    sql_regex: 'orderdetails|stockdispatch'
+
+- id: doanh-thu-thang-truoc-follow-up
+  tags: [context, sales]
+  history:
+    - user: "Doanh thu tháng này bao nhiêu?"
+      answer: "Doanh thu tháng này đạt 1,2 tỷ đồng (theo sổ cái SalesRevenue)."
+  require: "Còn tháng trước?"
+  expect:
+    sm_tool: sql_execute
+    sm_require_contains: ["doanh thu"]
+    sql_contains: ["financeledger", "salesrevenue"]
+
+- id: sp-vua-liet-ke-follow-up
+  tags: [context, products]
+  history:
+    - user: "Top 3 sản phẩm bán chạy nhất là gì?"
+      answer: "Top 3: 1. Mì Hảo Hảo tôm chua cay, 2. Dầu ăn Neptuna 1L, 3. Nước mắm Nam Ngư 500ml."
+  require: "Cái thứ hai còn tồn kho bao nhiêu?"
+  expect:
+    sm_tool: sql_execute
+    sm_require_contains: ["neptuna"]
+    sql_contains: ["inventory", "neptuna"]
+
+# ===== Aggregate =====
+
+- id: doanh-thu-theo-thang
+  tags: [aggregate, finance]
+  history: []
+  require: "Doanh thu theo từng tháng trong năm nay?"
+  expect:
+    sm_tool: sql_execute
+    sql_contains: ["financeledger", "salesrevenue", "group by"]
+    sql_not_contains: ["final_amount"]
+
+- id: top-khach-mua-nhieu
+  tags: [aggregate, customers]
+  history: []
+  require: "Top 5 khách hàng mua nhiều nhất?"
+  expect:
+    sm_tool: sql_execute
+    sql_contains: ["customers", "group by", "limit 5"]
+    sql_regex: 'order by .+ desc'
+
+- id: tong-nhap-theo-ncc
+  tags: [aggregate, receiving]
+  history: []
+  require: "Tổng giá trị nhập kho theo từng nhà cung cấp?"
+  expect:
+    sm_tool: sql_execute
+    sql_contains: ["suppliers", "group by"]
+    sql_regex: 'stockreceipt'
+
+- id: top-ban-chay
+  tags: [aggregate, products]
+  history: []
+  require: "Top 10 sản phẩm bán chạy nhất?"
+  expect:
+    sm_tool: sql_execute
+    sql_contains: ["orderdetails", "group by"]
+    sql_regex: 'order by .+ desc'
+
+- id: ton-kho-nhieu-nhat
+  tags: [aggregate, inventory]
+  history: []
+  require: "Sản phẩm nào đang tồn kho nhiều nhất?"
+  expect:
+    sm_tool: sql_execute
+    sql_contains: ["inventory"]
+    sql_regex: 'order by .+ desc'
+
+- id: doanh-thu-theo-kenh
+  tags: [aggregate, finance]
+  history: []
+  require: "Doanh thu theo từng kênh bán hàng?"
+  expect:
+    sm_tool: sql_execute
+    sql_contains: ["financeledger", "order_channel"]
+
+# ===== Quy tac nghiep vu khac =====
+
+- id: sap-het-hang
+  tags: [business-rule, inventory]
+  history: []
+  require: "Sản phẩm nào sắp hết hàng?"
+  expect:
+    sm_tool: sql_execute
+    sql_contains: ["min_quantity"]
+
+- id: cong-no-khach
+  tags: [business-rule, customers]
+  history: []
+  require: "Khách nào đang nợ nhiều nhất?"
+  expect:
+    sm_tool: sql_execute
+    sql_contains: ["partnerdebts"]
+    sql_regex: 'total_amount\s*-\s*paid_amount'
+
+- id: dong-phieu-xuat-gan-nhat
+  tags: [business-rule, dispatch]
+  history: []
+  require: "Phiếu xuất kho gần nhất gồm những dòng hàng nào?"
+  expect:
+    sm_tool: sql_execute
+    sql_contains: ["stockdispatch_lines", "stockdispatches"]
+    sql_not_regex: 'dispatch_id\s*=\s*(so|salesorders)\.id'
+
+# ===== Clarify (SM hoi lai) =====
+
+- id: clarify-cai-do-gia
+  tags: [clarify, products]
+  history: []
+  require: "Cái đó giá bao nhiêu?"
+  expect:
+    sm_tool: request_clarification
+
+- id: clarify-xem-chi-tiet
+  tags: [clarify, products]
+  history: []
+  require: "Xem chi tiết"
+  expect:
+    sm_tool: request_clarification
+
+- id: khong-clarify-khi-ngu-canh-ro   # case dao chieu: co history thi KHONG duoc hoi lai
+  tags: [clarify, context, receiving]
+  history:
+    - user: "Có sản phẩm dầu ăn Neptuna 1L không?"
+      answer: "Có, Dầu ăn Neptuna 1L đang ở trạng thái Active."
+  require: "Cái đó đã nhập kho tổng cộng bao nhiêu?"
+  expect:
+    sm_tool: sql_execute
+    sm_require_contains: ["neptuna"]
+    sql_contains: ["neptuna"]
+
+# ===== Control (finish khong qua tool) =====
+
+- id: greeting-finish
+  tags: [control]
+  history: []
+  require: "Chào bạn!"
+  expect:
+    sm_tool: finish
+
+- id: ngoai-pham-vi
+  tags: [control]
+  history: []
+  require: "Thời tiết Hà Nội hôm nay thế nào?"
+  expect:
+    sm_tool: finish
