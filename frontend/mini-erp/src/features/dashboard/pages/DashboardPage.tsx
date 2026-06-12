@@ -236,7 +236,7 @@ export function DashboardPage() {
             <div className="bg-white rounded-lg border border-slate-200 shadow-xs p-5">
               <div className="flex items-start justify-between">
                 <p className="text-[13px] font-medium text-slate-500">Doanh thu hôm nay</p>
-                <div className="h-8 w-8 rounded-md bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                <div className="h-8 w-8 rounded-md bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
                   <Banknote className="h-4 w-4" />
                 </div>
               </div>
@@ -280,7 +280,7 @@ export function DashboardPage() {
             <div className="bg-white rounded-lg border border-slate-200 shadow-xs p-5">
               <div className="flex items-start justify-between">
                 <p className="text-[13px] font-medium text-slate-500">Số đơn hôm nay</p>
-                <div className="h-8 w-8 rounded-md bg-sky-50 text-sky-600 flex items-center justify-center">
+                <div className="h-8 w-8 rounded-md bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
                   <ShoppingCart className="h-4 w-4" />
                 </div>
               </div>
@@ -300,7 +300,7 @@ export function DashboardPage() {
             <div className="bg-white rounded-lg border border-slate-200 shadow-xs p-5">
               <div className="flex items-start justify-between">
                 <p className="text-[13px] font-medium text-slate-500">Giá trị đơn TB</p>
-                <div className="h-8 w-8 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                <div className="h-8 w-8 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
                   <Receipt className="h-4 w-4" />
                 </div>
               </div>
