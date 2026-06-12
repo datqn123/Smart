@@ -20,8 +20,10 @@ import com.example.smart_erp.custominterface.dto.CustomFolderRequest;
 import com.example.smart_erp.custominterface.dto.CustomPageRequest;
 import com.example.smart_erp.custominterface.dto.CustomPublishRequest;
 import com.example.smart_erp.custominterface.dto.CustomReorderRequest;
+import com.example.smart_erp.custominterface.response.CustomBuilderBundleData;
 import com.example.smart_erp.custominterface.response.CustomMenuTreeData;
 import com.example.smart_erp.custominterface.response.ValidationSummaryData;
+import com.example.smart_erp.custominterface.service.CustomBuilderService;
 import com.example.smart_erp.custominterface.service.CustomInterfaceService;
 
 @RestController
@@ -31,9 +33,11 @@ public class CustomInterfaceController {
 	private static final String UNAUTHORIZED = "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
 
 	private final CustomInterfaceService service;
+	private final CustomBuilderService builderService;
 
-	public CustomInterfaceController(CustomInterfaceService service) {
+	public CustomInterfaceController(CustomInterfaceService service, CustomBuilderService builderService) {
 		this.service = service;
+		this.builderService = builderService;
 	}
 
 	@GetMapping("/menu-tree")
@@ -119,9 +123,10 @@ public class CustomInterfaceController {
 	}
 
 	@GetMapping("/pages/{pageKey}/runtime")
-	public ResponseEntity<ApiSuccessResponse<CustomMenuTreeData>> runtimePage(Authentication authentication,
+	public ResponseEntity<ApiSuccessResponse<CustomBuilderBundleData>> runtimePage(Authentication authentication,
 			@PathVariable String pageKey) {
-		return ResponseEntity.ok(ApiSuccessResponse.of(service.runtimePage(pageKey, authentication, requireJwt(authentication)),
+		return ResponseEntity.ok(ApiSuccessResponse.of(
+				builderService.runtimeBundle(pageKey, authentication, requireJwt(authentication)),
 				"Thành công"));
 	}
 

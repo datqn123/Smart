@@ -7,6 +7,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,7 +50,10 @@ public class CustomBuilderService {
 	private static final String BAD_REQUEST = "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại các trường được đánh dấu.";
 	private static final String CONFLICT = "Mã hoặc route đã được sử dụng. Vui lòng chọn giá trị khác.";
 	private static final String NOT_FOUND_PAGE = "Không tìm thấy giao diện tùy chỉnh.";
+	private static final String NOT_FOUND_PUBLISHED_PAGE =
+			"Không tìm thấy giao diện tùy chỉnh hoặc giao diện chưa được publish.";
 	private static final String NOT_FOUND_ENTITY = "Không tìm thấy entity tùy chỉnh.";
+	private static final String FORBIDDEN = "Bạn không có quyền thực hiện thao tác này.";
 	private static final String STALE = "Cấu hình đã được cập nhật bởi người khác. Vui lòng tải lại trước khi lưu.";
 	private static final String PUBLISH_INVALID =
 			"Cấu hình chưa hợp lệ để publish. Vui lòng kiểm tra các cảnh báo.";
@@ -72,6 +76,19 @@ public class CustomBuilderService {
 		PageRow page = findPage(pageKey);
 		EntityRow entity = findEntity(page.entityKey());
 		return toBundle(page, entity, validate(page, entity));
+	}
+
+	@Transactional(readOnly = true)
+	public CustomBuilderBundleData runtimeBundle(String pageKey, Authentication authentication, Jwt jwt) {
+		PageRow page = menuRepository.findPublishedPage(pageKey)
+				.orElseThrow(() -> new BusinessException(ApiErrorCode.NOT_FOUND, NOT_FOUND_PUBLISHED_PAGE));
+		String role = jwt.getClaimAsString("role");
+		if (!roleAllowed(parseRoles(page.rolesJson()), role) || !permissionAllowed(page.entityPermission(), authentication)
+				|| !permissionAllowed(page.dataPermission(), authentication)) {
+			throw new BusinessException(ApiErrorCode.FORBIDDEN, FORBIDDEN);
+		}
+		EntityRow entity = findEntity(page.entityKey());
+		return toBundle(page, entity, ValidationSummaryData.ok());
 	}
 
 	@Transactional
@@ -329,6 +346,24 @@ public class CustomBuilderService {
 
 	private static boolean hasDraft(int draftVersion, Integer publishedVersion) {
 		return publishedVersion == null || draftVersion > publishedVersion;
+	}
+
+	private static boolean roleAllowed(List<String> roles, String role) {
+		if (roles == null || roles.isEmpty() || !StringUtils.hasText(role)) {
+			return true;
+		}
+		return roles.stream().anyMatch(r -> r.equalsIgnoreCase(role.trim()));
+	}
+
+	private static boolean permissionAllowed(String permission, Authentication authentication) {
+		return !StringUtils.hasText(permission) || hasAuthority(authentication, permission);
+	}
+
+	private static boolean hasAuthority(Authentication authentication, String permission) {
+		if (authentication == null || !StringUtils.hasText(permission)) {
+			return false;
+		}
+		return authentication.getAuthorities().stream().anyMatch(ga -> permission.equals(ga.getAuthority()));
 	}
 
 	private static String suppliedEtag(CustomBuilderBundleRequest request) {
