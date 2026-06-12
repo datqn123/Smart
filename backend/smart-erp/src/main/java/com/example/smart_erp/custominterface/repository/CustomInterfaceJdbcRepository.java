@@ -245,6 +245,26 @@ public class CustomInterfaceJdbcRepository {
 				""", userId);
 	}
 
+	public void publishPage(String pageKey, int userId) {
+		jdbcTemplate.update("""
+				UPDATE custom_menu_pages
+				SET status = 'Published', published_version = draft_version, published_at = now(),
+				    updated_by = ?, updated_at = now()
+				WHERE page_key = ? AND archived_at IS NULL
+				""", userId, pageKey);
+		jdbcTemplate.update("""
+				INSERT INTO custom_menu_page_versions (
+					page_key, version, parent_folder_key, label, icon, description, route_path, entity_key, page_type,
+					sort_order, visibility_roles, entity_permission, data_permission, published_by
+				)
+				SELECT page_key, draft_version, parent_folder_key, label, icon, description, route_path, entity_key,
+				       page_type, sort_order, visibility_roles, entity_permission, data_permission, ?
+				FROM custom_menu_pages
+				WHERE page_key = ? AND archived_at IS NULL
+				ON CONFLICT (page_key, version) DO NOTHING
+				""", userId, pageKey);
+	}
+
 	public int countPublishedPagesInFolder(String folderKey) {
 		Integer count = jdbcTemplate.queryForObject("""
 				SELECT COUNT(*) FROM custom_menu_pages
