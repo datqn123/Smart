@@ -605,7 +605,7 @@ export function DashboardPage() {
                         <span className="text-sm font-mono font-semibold text-slate-900">
                           {item.transactionCode}
                         </span>
-                        <span className="text-[10px] text-slate-500 bg-slate-100 rounded px-1.5 shrink-0">
+                        <span className="text-[10px] font-medium text-violet-700 bg-violet-50 rounded px-1.5 shrink-0">
                           {item.type}
                         </span>
                       </div>
@@ -632,7 +632,7 @@ export function DashboardPage() {
           <div className="bg-white rounded-lg border border-slate-200 shadow-xs overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
-                <Users className="h-4 w-4 text-slate-400" />
+                <Users className="h-4 w-4 text-teal-500" />
                 <h2 className="text-sm font-semibold text-slate-900">Khách hàng hàng đầu</h2>
               </div>
               <Button
@@ -659,8 +659,8 @@ export function DashboardPage() {
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <div
-                        className={`h-7 w-7 rounded-full bg-slate-100 flex items-center justify-center text-xs font-medium shrink-0 ${
-                          idx === 0 ? "text-slate-900" : "text-slate-500"
+                        className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-medium shrink-0 ${
+                          idx === 0 ? "bg-amber-50 text-amber-600" : "bg-slate-100 text-slate-500"
                         }`}
                       >
                         {idx === 0 ? <Crown className="h-3.5 w-3.5" /> : idx + 1}
@@ -684,7 +684,7 @@ export function DashboardPage() {
             <div className="bg-white rounded-lg border border-slate-200 shadow-xs p-5 flex flex-col">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Wallet className="h-4 w-4 text-slate-400" />
+                  <Wallet className="h-4 w-4 text-emerald-500" />
                   <h2 className="text-sm font-semibold text-slate-900">Dòng tiền tháng này</h2>
                 </div>
                 <Button
