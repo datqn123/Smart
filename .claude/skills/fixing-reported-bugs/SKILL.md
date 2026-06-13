@@ -52,8 +52,12 @@ gốc, phương án sửa + trade-off. **Chờ user đồng ý rồi mới sửa
 
 - Thay đổi **code**: TDD — viết test fail trước, rồi implement.
 - Thay đổi **prompt** (skill.md/schema.md): kiểm chứng mẫu SQL đích chạy đúng
-  trên DB thật TRƯỚC khi đưa vào rule/few-shot. Sau khi sửa, chạy lại đúng câu
-  hỏi gốc và câu nghịch đảo (positive case) để chắc không phá happy path.
+  trên DB thật TRƯỚC khi đưa vào rule/few-shot. Sau khi sửa, chạy golden set
+  `python -m pytest -m llm -v` (~5–8 phút, cần LLM_API_KEY) — **LUẬT SẮT:
+  không commit thay đổi skill.md/schema.md khi golden set chưa xanh.** Case đỏ
+  nghĩa là rule mới phá hành vi cũ. Gặp bug production mới: thêm case vào
+  `ai_python/tests/eval/golden.yaml` TRƯỚC, sửa prompt sau, eval xanh rồi mới
+  đóng bug.
 
 ### 7. Chạy toàn bộ test suite trước khi commit
 
