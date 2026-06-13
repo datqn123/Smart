@@ -154,8 +154,10 @@ luật *mỗi bug mới = một case vĩnh viễn mới*. Tags cho phép soi ô 
 
 ## 6. Luật sắt & quy trình vận hành
 
-- **Luật sắt** (ghi vào AGENTS.md): không commit thay đổi `skill.md`/`schema.md`
-  nếu `pytest -m llm` chưa xanh.
+- **Luật sắt**: không commit thay đổi `skill.md`/`schema.md` nếu `pytest -m llm`
+  chưa xanh. (Ghi tại `.claude/skills/fixing-reported-bugs/SKILL.md` mục 6 —
+  AGENTS.md không còn tồn tại tại thời điểm triển khai 2026-06-13; khi tái tạo
+  AGENTS.md thì chuyển luật sang đó.)
 - Vòng đời: sửa prompt → `pytest -m llm` (~5–8 phút) → xanh hết mới commit;
   có case đỏ nghĩa là rule mới phá hành vi cũ.
 - Gặp bug production mới: thêm case YAML trước, sửa prompt sau, eval xanh
@@ -169,4 +171,5 @@ luật *mỗi bug mới = một case vĩnh viễn mới*. Tags cho phép soi ô 
 3. Thiếu `LLM_API_KEY` → skip sạch với message, không fail.
 4. 3 case ★ (sản phẩm ế, dầu ăn độc lập, dầu ăn follow-up) tái hiện đúng
    barem của bug gốc.
-5. Luật sắt được ghi vào AGENTS.md.
+5. Luật sắt được ghi vào quy trình vận hành — `.claude/skills/fixing-reported-bugs/SKILL.md`
+   mục 6 (thay AGENTS.md đã không còn tồn tại; xem ghi chú mục 6).
