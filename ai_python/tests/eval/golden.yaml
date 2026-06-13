@@ -31,7 +31,7 @@
   expect:
     sm_tool: sql_execute
     sql_contains: ["orderdetails"]
-    sql_regex: 'left join|not exists|not in'
+    sql_regex: 'left join|not exists|not in|except'
     sql_not_regex: '(?<!left )join orderdetails'
 
 - id: khach-chua-mua-thang-nay
@@ -41,7 +41,7 @@
   expect:
     sm_tool: sql_execute
     sql_contains: ["customers"]
-    sql_regex: 'left join|not exists|not in'
+    sql_regex: 'left join|not exists|not in|except'
 
 - id: ncc-chua-nhap-thang-nay
   tags: [absence, receiving]
@@ -50,7 +50,7 @@
   expect:
     sm_tool: sql_execute
     sql_contains: ["suppliers"]
-    sql_regex: 'left join|not exists|not in'
+    sql_regex: 'left join|not exists|not in|except'
 
 - id: khach-chua-quay-lai
   tags: [absence, customers]
@@ -59,7 +59,9 @@
   expect:
     sm_tool: sql_execute
     sql_contains: ["customers"]
-    sql_regex: 'left join|not exists|not in'
+    # chap nhan 2 cach doc: (a) rong — left join/not exists/not in/except (gom ca khach chua tung mua);
+    # (b) lapsed — inner join + having max(ngay_mua) < nguong ("quay lai" ngu y da tung mua).
+    sql_regex: 'left join|not exists|not in|except|having\s+max\([^)]*\)\s*<'
 
 # ===== Diacritics / so khop ten tieng Viet =====
 
@@ -198,7 +200,7 @@
   expect:
     sm_tool: sql_execute
     sql_contains: ["partnerdebts"]
-    sql_regex: 'total_amount\s*-\s*paid_amount'
+    sql_regex: 'total_amount\s*-\s*(?:\w+\.)?paid_amount'   # cho phep qualifier <alias>. trc paid_amount
 
 - id: dong-phieu-xuat-gan-nhat
   tags: [business-rule, dispatch]
