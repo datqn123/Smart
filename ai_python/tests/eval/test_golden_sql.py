@@ -64,7 +64,12 @@ def test_golden(case, llm_sm, llm_tool, fake_executor):
 
     n = _norm(sql)
     for sub in expect.get("sql_contains") or []:
-        assert _norm(sub) in n, f"SQL thieu {sub!r}:\n{sql}"
+        # So khop NGUYEN TU (whole-word) tren chuoi da norm: tranh substring lot,
+        # vd 'inventory' (ton kho snapshot) khong duoc thoa man boi 'inventorylogs'
+        # (so chuyen dong), 'limit 5' khong khop 'limit 50'. Cac token sql_contains
+        # deu bat dau/ket thuc bang ky tu \w nen \b dat sat la hop le.
+        assert re.search(rf"\b{re.escape(_norm(sub))}\b", n), (
+            f"SQL thieu (nguyen tu) {sub!r}:\n{sql}")
     for sub in expect.get("sql_not_contains") or []:
         assert _norm(sub) not in n, f"SQL chua chuoi cam {sub!r}:\n{sql}"
     if expect.get("sql_regex"):

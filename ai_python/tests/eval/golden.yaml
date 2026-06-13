@@ -163,7 +163,7 @@
   require: "Top 10 sản phẩm bán chạy nhất?"
   expect:
     sm_tool: sql_execute
-    sql_contains: ["orderdetails", "group by"]
+    sql_contains: ["orderdetails", "group by", "limit 10"]   # doi xung voi top-khach (limit 5)
     sql_regex: 'order by .+ desc'
 
 - id: ton-kho-nhieu-nhat
